@@ -1,0 +1,61 @@
+{
+  "results": [
+    {
+      "hits": [
+        {
+          "EventGuid": "f4fbba8d-7582-40fb-b5e5-4f0aedab965f",
+          "EventName": "TIME",
+          "SpecialGuests": "THE AUSTRALIAN PINK FLOYD TRIBUTE",
+          "EventDescription": "<p>Immersive Pink Floyd tribute show.</p>",
+          "DateStart": "2026-04-10T11:30:00",
+          "DateEnd": null,
+          "EventUrl": "https://tickets.avclive.com.au/outlet/event/f4fbba8d-7582-40fb-b5e5-4f0aedab965f",
+          "IsCancelled": false,
+          "IsPostponed": false,
+          "IsRescheduled": false,
+          "Bands": ["Time"],
+          "Venue": {
+            "Name": "Milk Bar",
+            "Address": "981 Beaufort Street",
+            "Locality": "Inglewood",
+            "WebsiteUrl": "www.milkbarperth.com.au",
+            "Timezone": "Australia/Perth"
+          }
+        },
+        {
+          "EventGuid": "319bc90e-b8b5-4d98-b79f-c3317150658b",
+          "EventName": "CANCELLED - Ultimate Fleetwood Mac Experience + Very Best of the Eagles",
+          "SpecialGuests": "PERFORMED BY THE CHAIN",
+          "EventDescription": "<p>Fleetwood Mac and Eagles tribute show.</p>",
+          "DateStart": "2026-04-11T11:00:00",
+          "DateEnd": null,
+          "EventUrl": "https://tickets.avclive.com.au/outlet/event/319bc90e-b8b5-4d98-b79f-c3317150658b",
+          "IsCancelled": true,
+          "IsPostponed": false,
+          "IsRescheduled": false,
+          "AffectedBy": "Cancelled",
+          "Bands": ["THE CHAIN"],
+          "Venue": {
+            "Name": "Milk Bar",
+            "Address": "981 Beaufort Street",
+            "Locality": "Inglewood",
+            "WebsiteUrl": "www.milkbarperth.com.au",
+            "Timezone": "Australia/Perth"
+          }
+        },
+        {
+          "EventGuid": "missing-title",
+          "DateStart": "2026-04-10T11:30:00",
+          "EventUrl": "https://tickets.avclive.com.au/outlet/event/missing-title",
+          "Venue": {
+            "Name": "Milk Bar",
+            "Address": "981 Beaufort Street",
+            "Locality": "Inglewood",
+            "WebsiteUrl": "www.milkbarperth.com.au",
+            "Timezone": "Australia/Perth"
+          }
+        }
+      ]
+    }
+  ]
+}

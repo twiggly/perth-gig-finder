@@ -1,0 +1,16 @@
+node_modules
+.next
+coverage
+dist
+.turbo
+.DS_Store
+
+.env
+.env.local
+.env.*.local
+
+apps/web/.env.local
+apps/scraper/.env
+
+.supabase
+

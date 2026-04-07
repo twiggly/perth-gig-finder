@@ -1,0 +1,197 @@
+{
+  "results": [
+    {
+      "hits": [
+        {
+          "EventId": 235803,
+          "EventGuid": "3d742027-9b7e-4a45-9fcf-08888b3cbc93",
+          "EventName": "Doctor Jazz",
+          "SpecialGuests": "",
+          "EventDescription": "<blockquote type=\"cite\">Doctor Jazz have been playing at the Jazz Club for many years.</blockquote><b>Time:</b>&nbsp;7:30PM - 10:00PM (Doors open at 6:30PM)",
+          "DateStart": "2026-04-07T10:30:00",
+          "DateEnd": null,
+          "EventUrl": "https://tickets.oztix.com.au/outlet/event/3d742027-9b7e-4a45-9fcf-08888b3cbc93?utm_source=Oztix&utm_medium=Website",
+          "Categories": ["Music"],
+          "_geoloc": {
+            "lat": -31.917430877686,
+            "lng": 115.89052581787
+          },
+          "Venue": {
+            "Name": "Milk Bar",
+            "Address": "981 Beaufort Street",
+            "Locality": "Inglewood",
+            "State": "WA",
+            "WebsiteUrl": "www.milkbarperth.com.au",
+            "Timezone": "Australia/Perth"
+          },
+          "Bands": ["Doctor Jazz"],
+          "Performances": [{ "Name": "Doctor Jazz" }],
+          "TourName": null,
+          "IsCancelled": false,
+          "IsPostponed": false,
+          "IsRescheduled": false,
+          "AffectedBy": null,
+          "HasEventDatePassed": false
+        },
+        {
+          "EventId": 237512,
+          "EventGuid": "6eaad95a-f5f1-4853-a0d9-ef03f1d73130",
+          "EventName": "TIGHTARSE TUESDAY: TRAFFIC LIGHT PARTY?? ?? ??",
+          "SpecialGuests": "",
+          "EventDescription": "<p>Perth's cheapest uni night is back and this week we're turning it into the biggest Traffic Light Party of the year.</p>",
+          "DateStart": "2026-04-07T11:00:00",
+          "DateEnd": null,
+          "EventUrl": "https://tickets.oztix.com.au/outlet/event/6eaad95a-f5f1-4853-a0d9-ef03f1d73130?utm_source=Oztix&utm_medium=Website",
+          "Categories": ["POP", "Dance", "Electronic", "Hip Hop", "House", "Tech House", "Techno"],
+          "_geoloc": {
+            "lat": -31.949516296387,
+            "lng": 115.855445861816
+          },
+          "Venue": {
+            "Name": "Market Grounds",
+            "Address": "10 Telethon Ave",
+            "Locality": "Perth",
+            "State": "WA",
+            "WebsiteUrl": "https://marketgrounds.com.au/contact-us/",
+            "Timezone": "Australia/Perth"
+          },
+          "Bands": [],
+          "Performances": [],
+          "TourName": null,
+          "IsCancelled": false,
+          "IsPostponed": false,
+          "IsRescheduled": false,
+          "AffectedBy": null,
+          "HasEventDatePassed": false
+        },
+        {
+          "EventId": 233536,
+          "EventGuid": "319bc90e-b8b5-4d98-b79f-c3317150658b",
+          "EventName": "CANCELLED - Ultimate Fleetwood Mac Experience + Very Best of the Eagles",
+          "SpecialGuests": "PERFORMED BY THE CHAIN",
+          "EventDescription": "<p>The Chain bring their high-energy show to the Milk Bar (Civic Hotel) on 11 April 2026.</p>",
+          "DateStart": "2026-04-11T11:00:00",
+          "DateEnd": null,
+          "EventUrl": "https://tickets.oztix.com.au/outlet/event/319bc90e-b8b5-4d98-b79f-c3317150658b?utm_source=Oztix&utm_medium=Website",
+          "Categories": ["Music"],
+          "_geoloc": {
+            "lat": -31.917430877686,
+            "lng": 115.89052581787
+          },
+          "Venue": {
+            "Name": "Milk Bar",
+            "Address": "981 Beaufort Street",
+            "Locality": "Inglewood",
+            "State": "WA",
+            "WebsiteUrl": "www.milkbarperth.com.au",
+            "Timezone": "Australia/Perth"
+          },
+          "Bands": ["THE CHAIN"],
+          "Performances": [{ "Name": "THE CHAIN" }],
+          "TourName": null,
+          "IsCancelled": true,
+          "IsPostponed": false,
+          "IsRescheduled": false,
+          "AffectedBy": "Cancelled",
+          "HasEventDatePassed": false
+        },
+        {
+          "EventId": 235633,
+          "EventGuid": "673ee067-f075-446f-975b-dbb7e9e923ce",
+          "EventName": "Sugar Blue Burlesque Fresh Faced Follies Academy Grad Show",
+          "SpecialGuests": "",
+          "EventDescription": "Sugar Blue Burlesque proudly presents Fresh Faced Follies at the Rosemount Hotel.",
+          "DateStart": "2026-04-08T10:00:00",
+          "DateEnd": null,
+          "EventUrl": "https://tickets.oztix.com.au/outlet/event/673ee067-f075-446f-975b-dbb7e9e923ce?utm_source=Oztix&utm_medium=Website",
+          "Categories": ["Cabaret", "Burlesque"],
+          "_geoloc": {
+            "lat": -31.930763244629,
+            "lng": 115.85925292969
+          },
+          "Venue": {
+            "Name": "Rosemount Hotel",
+            "Address": "459 Fitzgerald Street (cnr Angove Street)",
+            "Locality": "North Perth",
+            "State": "WA",
+            "WebsiteUrl": "https://www.rosemounthotel.com.au",
+            "Timezone": "Australia/Perth"
+          },
+          "Bands": ["Fresh Faced Follies", "Sugar Blue Burlesque"],
+          "Performances": [
+            { "Name": "Fresh Faced Follies" },
+            { "Name": "Sugar Blue Burlesque" }
+          ],
+          "TourName": null,
+          "IsCancelled": false,
+          "IsPostponed": false,
+          "IsRescheduled": false,
+          "AffectedBy": null,
+          "HasEventDatePassed": false
+        },
+        {
+          "EventId": 226350,
+          "EventGuid": "3cbdd45e-7dd8-4b4b-898c-8ec8252b9e95",
+          "EventName": "The Quizzical Mr Jeff",
+          "SpecialGuests": "",
+          "EventDescription": "<p>Step into the extraordinary, where the impossible becomes reality in a mesmerizing fusion of circus, magic &amp; illusion.</p>",
+          "DateStart": "2026-04-18T05:00:00",
+          "DateEnd": null,
+          "EventUrl": "https://tickets.oztix.com.au/outlet/event/3cbdd45e-7dd8-4b4b-898c-8ec8252b9e95?utm_source=Oztix&utm_medium=Website",
+          "Categories": ["Arts", "Attractions", "Comedy"],
+          "_geoloc": {
+            "lat": -32.24063873291,
+            "lng": 115.81484985352
+          },
+          "Venue": {
+            "Name": "Koorliny Arts Centre",
+            "Address": "10 Hutchins Way (Entry via Sulphur Road)",
+            "Locality": "Kwinana Town Centre",
+            "State": "WA",
+            "WebsiteUrl": "https://koorliny.com.au/",
+            "Timezone": "Australia/Perth"
+          },
+          "Bands": [],
+          "Performances": [],
+          "TourName": null,
+          "IsCancelled": false,
+          "IsPostponed": false,
+          "IsRescheduled": false,
+          "AffectedBy": null,
+          "HasEventDatePassed": false
+        },
+        {
+          "EventId": 999999,
+          "EventGuid": "broken-hit",
+          "EventName": "",
+          "SpecialGuests": "",
+          "EventDescription": "",
+          "DateStart": "",
+          "DateEnd": null,
+          "EventUrl": "https://tickets.oztix.com.au/outlet/event/broken-hit?utm_source=Oztix&utm_medium=Website",
+          "Categories": ["Music"],
+          "_geoloc": {
+            "lat": -31.9523,
+            "lng": 115.8613
+          },
+          "Venue": {
+            "Name": "Unknown Venue",
+            "Address": "",
+            "Locality": "Perth",
+            "State": "WA",
+            "WebsiteUrl": "",
+            "Timezone": "Australia/Perth"
+          },
+          "Bands": ["Broken"],
+          "Performances": [],
+          "TourName": null,
+          "IsCancelled": false,
+          "IsPostponed": false,
+          "IsRescheduled": false,
+          "AffectedBy": null,
+          "HasEventDatePassed": false
+        }
+      ]
+    }
+  ]
+}
