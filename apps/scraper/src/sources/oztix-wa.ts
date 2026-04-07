@@ -190,6 +190,54 @@ function normalizeUrl(value: string | null | undefined): string | null {
   }
 }
 
+function parseImageArea(urlValue: string): number | null {
+  try {
+    const url = new URL(urlValue);
+    const width = Number(url.searchParams.get("width") ?? "");
+    const height = Number(url.searchParams.get("height") ?? "");
+
+    if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
+      return width * height;
+    }
+  } catch {
+    // Ignore malformed URLs and fall back to the candidate ordering.
+  }
+
+  return null;
+}
+
+function selectPreferredImageUrl(hit: OztixHit): string | null {
+  const candidates = [
+    normalizeUrl(hit.EventImage1),
+    normalizeUrl(hit.HomepageImage)
+  ].filter((value): value is string => Boolean(value));
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const [preferred] = candidates.sort((left, right) => {
+    const leftArea = parseImageArea(left);
+    const rightArea = parseImageArea(right);
+
+    if (leftArea !== null && rightArea !== null && leftArea !== rightArea) {
+      return rightArea - leftArea;
+    }
+
+    if (leftArea !== null) {
+      return -1;
+    }
+
+    if (rightArea !== null) {
+      return 1;
+    }
+
+    return 0;
+  });
+
+  return preferred;
+}
+
 function collectNamedArtists(hit: OztixHit): string[] {
   const fromBands = Array.isArray(hit.Bands) ? hit.Bands : [];
   const fromPerformances = Array.isArray(hit.Performances)
@@ -317,7 +365,7 @@ export function normalizeOztixHit(hit: OztixHit): NormalizedGig {
     sourceSlug: "oztix-wa",
     externalId: hit.EventGuid?.trim() || null,
     sourceUrl,
-    imageUrl: normalizeUrl(hit.HomepageImage) ?? normalizeUrl(hit.EventImage1),
+    imageUrl: selectPreferredImageUrl(hit),
     title,
     description,
     status: normalizeGigStatus(hit, title),

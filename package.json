@@ -12,7 +12,7 @@
     "local:web:dev": "pnpm --filter @perth-gig-finder/web exec next dev --webpack --hostname 127.0.0.1 --port 3001",
     "local:web:lan": "pnpm --filter @perth-gig-finder/web exec next dev --webpack --hostname 0.0.0.0 --port 3002",
     "local:web:phone-proxy": "node scripts/phone-proxy.mjs",
-    "local:web:preview": "pnpm build && pnpm --filter @perth-gig-finder/web exec next start --hostname 0.0.0.0 --port 3003",
+    "local:web:preview": "node scripts/run-local-preview.mjs",
     "mirror-images": "pnpm --filter @perth-gig-finder/scraper mirror-images",
     "preinstall": "node scripts/check-node-version.mjs",
     "scrape": "pnpm --filter @perth-gig-finder/scraper scrape",

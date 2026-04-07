@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import sharp from "sharp";
 
 import {
   buildMirroredImagePath,
@@ -16,8 +17,23 @@ function createSourceGig(overrides: Partial<SourceGigRecord> = {}): SourceGigRec
     mirroredImagePath: null,
     imageMirrorStatus: "pending",
     imageMirroredAt: null,
+    mirroredImageWidth: null,
+    mirroredImageHeight: null,
     ...overrides
   };
+}
+
+async function createPngBuffer(width: number, height: number): Promise<Buffer> {
+  return sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: { r: 249, g: 90, b: 55, alpha: 1 }
+    }
+  })
+    .png()
+    .toBuffer();
 }
 
 describe("image mirroring", () => {
@@ -76,9 +92,10 @@ describe("image mirroring", () => {
   });
 
   it("uploads supported source images and returns a ready state", async () => {
+    const imageBuffer = await createPngBuffer(4, 2);
     const upload = vi.fn().mockResolvedValue({ error: null });
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
-      new Response("png", {
+      new Response(new Uint8Array(imageBuffer), {
         status: 200,
         headers: { "content-type": "image/png" }
       })
@@ -95,7 +112,9 @@ describe("image mirroring", () => {
       status: "ready",
       mirroredImagePath: "oztix-wa/doctor-jazz/5943d2e0e12f27d05a36af1afca56326645f0dfe.png",
       errorMessage: null,
-      mirroredAt: "2026-04-06T08:00:00.000Z"
+      mirroredAt: "2026-04-06T08:00:00.000Z",
+      mirroredImageWidth: 4,
+      mirroredImageHeight: 2
     });
     expect(upload).toHaveBeenCalledWith(
       "oztix-wa/doctor-jazz/5943d2e0e12f27d05a36af1afca56326645f0dfe.png",

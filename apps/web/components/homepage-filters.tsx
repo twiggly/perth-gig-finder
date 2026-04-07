@@ -19,6 +19,8 @@ const DATE_FILTER_OPTIONS: Array<{
   { label: "This weekend", value: "weekend" },
   { label: "Next 7 days", value: "next7days" }
 ];
+const LOCAL_PREVIEW_ASSET_REVISION =
+  process.env.NEXT_PUBLIC_LOCAL_PREVIEW_ASSET_REVISION ?? "0";
 
 interface HomepageFiltersProps {
   currentQuery: string;
@@ -37,6 +39,7 @@ export function HomepageFilters({
   resultCount,
   selectedVenues
 }: HomepageFiltersProps) {
+  const previewAssetRevision = LOCAL_PREVIEW_ASSET_REVISION;
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -151,7 +154,10 @@ export function HomepageFilters({
   }
 
   return (
-    <section className="filter-panel">
+    <section
+      className="filter-panel"
+      data-preview-revision={previewAssetRevision}
+    >
       <div className="filter-panel__header">
         <div>
           <h2>Find your next Perth gig</h2>

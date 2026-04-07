@@ -55,6 +55,8 @@ interface SourceGigRow {
   mirrored_image_path: string | null;
   image_mirror_status: ImageMirrorStatus;
   image_mirrored_at: string | null;
+  mirrored_image_width: number | null;
+  mirrored_image_height: number | null;
 }
 
 interface SourceGigSourceRow {
@@ -74,7 +76,9 @@ function toSourceGigRecord(
     sourceImageUrl: row.source_image_url,
     mirroredImagePath: row.mirrored_image_path,
     imageMirrorStatus: row.image_mirror_status,
-    imageMirroredAt: row.image_mirrored_at
+    imageMirroredAt: row.image_mirrored_at,
+    mirroredImageWidth: row.mirrored_image_width,
+    mirroredImageHeight: row.mirrored_image_height
   };
 }
 
@@ -224,7 +228,7 @@ export class SupabaseGigStore implements GigStore {
     let query = this.client
       .from("source_gigs")
       .select(
-        "id, source_id, gig_id, identity_key, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at"
+        "id, source_id, gig_id, identity_key, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height"
       )
       .eq("source_id", sourceId)
       .limit(1);
@@ -357,7 +361,9 @@ export class SupabaseGigStore implements GigStore {
       Boolean(sourceImageUrl) &&
       existing?.sourceImageUrl === sourceImageUrl &&
       existing.imageMirrorStatus === "ready" &&
-      Boolean(existing.mirroredImagePath);
+      Boolean(existing.mirroredImagePath) &&
+      Boolean(existing.mirroredImageWidth) &&
+      Boolean(existing.mirroredImageHeight);
 
     const imageMirrorStatus: ImageMirrorStatus = !sourceImageUrl
       ? "missing"
@@ -377,6 +383,12 @@ export class SupabaseGigStore implements GigStore {
         mirrored_image_path: unchangedReadyImage
           ? existing?.mirroredImagePath ?? null
           : null,
+        mirrored_image_width: unchangedReadyImage
+          ? existing?.mirroredImageWidth ?? null
+          : null,
+        mirrored_image_height: unchangedReadyImage
+          ? existing?.mirroredImageHeight ?? null
+          : null,
         image_mirror_status: imageMirrorStatus,
         image_mirror_error: null,
         image_mirrored_at: unchangedReadyImage
@@ -391,7 +403,7 @@ export class SupabaseGigStore implements GigStore {
       }
     )
       .select(
-        "id, source_id, gig_id, identity_key, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at"
+        "id, source_id, gig_id, identity_key, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height"
       )
       .single<SourceGigRow>();
 
@@ -439,12 +451,16 @@ export class SupabaseGigStore implements GigStore {
       result.status === "ready"
         ? {
             mirrored_image_path: result.mirroredImagePath,
+            mirrored_image_width: result.mirroredImageWidth,
+            mirrored_image_height: result.mirroredImageHeight,
             image_mirror_status: "ready",
             image_mirror_error: null,
             image_mirrored_at: result.mirroredAt
           }
         : {
             mirrored_image_path: null,
+            mirrored_image_width: null,
+            mirrored_image_height: null,
             image_mirror_status: nextStatus,
             image_mirror_error: result.errorMessage,
             image_mirrored_at: null
@@ -469,7 +485,7 @@ export class SupabaseGigStore implements GigStore {
     const { data, error } = await this.client
       .from("source_gigs")
       .select(
-        "id, source_id, gig_id, identity_key, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at"
+        "id, source_id, gig_id, identity_key, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height"
       )
       .not("source_image_url", "is", null)
       .order("last_seen_at", { ascending: false });

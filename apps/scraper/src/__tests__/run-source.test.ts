@@ -235,7 +235,9 @@ class MemoryGigStore implements GigStore {
       Boolean(sourceImageUrl) &&
       existing?.sourceImageUrl === sourceImageUrl &&
       existing.imageMirrorStatus === "ready" &&
-      Boolean(existing.mirroredImagePath);
+      Boolean(existing.mirroredImagePath) &&
+      Boolean(existing.mirroredImageWidth) &&
+      Boolean(existing.mirroredImageHeight);
 
     const nextRecord: SourceGigRecord & {
       sourceId: string;
@@ -251,6 +253,8 @@ class MemoryGigStore implements GigStore {
       identityKey: input.gig.externalId ?? input.gig.checksum,
       sourceImageUrl,
       mirroredImagePath: unchangedReadyImage ? existing?.mirroredImagePath ?? null : null,
+      mirroredImageWidth: unchangedReadyImage ? existing?.mirroredImageWidth ?? null : null,
+      mirroredImageHeight: unchangedReadyImage ? existing?.mirroredImageHeight ?? null : null,
       imageMirrorStatus: !sourceImageUrl
         ? "missing"
         : unchangedReadyImage
@@ -282,7 +286,9 @@ class MemoryGigStore implements GigStore {
         status: "missing",
         mirroredImagePath: null,
         errorMessage: null,
-        mirroredAt: null
+        mirroredAt: null,
+        mirroredImageWidth: null,
+        mirroredImageHeight: null
       };
     }
 
@@ -293,14 +299,18 @@ class MemoryGigStore implements GigStore {
         ...existing,
         imageMirrorStatus: "failed",
         mirroredImagePath: null,
-        imageMirroredAt: null
+        imageMirroredAt: null,
+        mirroredImageWidth: null,
+        mirroredImageHeight: null
       });
 
       return {
         status: "failed",
         mirroredImagePath: null,
         errorMessage: "Image request failed (503)",
-        mirroredAt: null
+        mirroredAt: null,
+        mirroredImageWidth: null,
+        mirroredImageHeight: null
       };
     }
 
@@ -318,14 +328,18 @@ class MemoryGigStore implements GigStore {
       sourceImageUrl: sourceGig.sourceImageUrl,
       mirroredImagePath,
       imageMirrorStatus: "ready",
-      imageMirroredAt: mirroredAt
+      imageMirroredAt: mirroredAt,
+      mirroredImageWidth: 1200,
+      mirroredImageHeight: 600
     });
 
     return {
       status: "ready",
       mirroredImagePath,
       errorMessage: null,
-      mirroredAt
+      mirroredAt,
+      mirroredImageWidth: 1200,
+      mirroredImageHeight: 600
     };
   }
 

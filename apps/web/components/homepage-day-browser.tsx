@@ -41,6 +41,8 @@ interface BrowserTransition extends DayTransition {
 }
 
 const SWIPE_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
+const LOCAL_PREVIEW_ASSET_REVISION =
+  process.env.NEXT_PUBLIC_LOCAL_PREVIEW_ASSET_REVISION ?? "0";
 
 function buildTrackLayout(
   activeDateKey: string,
@@ -73,6 +75,7 @@ export function HomepageDayBrowser({
   days,
   initialActiveDateKey
 }: HomepageDayBrowserProps) {
+  const previewAssetRevision = LOCAL_PREVIEW_ASSET_REVISION;
   const pathname = usePathname();
   const gestureRef = useRef<PointerGesture | null>(null);
   const transitionFrameRef = useRef<number | null>(null);
@@ -393,6 +396,7 @@ export function HomepageDayBrowser({
 
   return (
     <section
+      data-preview-revision={previewAssetRevision}
       className="day-browser"
       onPointerCancel={clearGesture}
       onPointerDown={handlePointerDown}

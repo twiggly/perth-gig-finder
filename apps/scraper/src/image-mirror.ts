@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import sharp from "sharp";
 
 import type {
   ImageMirrorStatus,
@@ -46,7 +47,9 @@ function toFailureResult(errorMessage: string): SourceGigImageMirrorResult {
     status: "failed",
     mirroredImagePath: null,
     errorMessage,
-    mirroredAt: null
+    mirroredAt: null,
+    mirroredImageWidth: null,
+    mirroredImageHeight: null
   };
 }
 
@@ -106,7 +109,9 @@ export async function mirrorSourceImage(input: {
       status: "missing",
       mirroredImagePath: null,
       errorMessage: null,
-      mirroredAt: null
+      mirroredAt: null,
+      mirroredImageWidth: null,
+      mirroredImageHeight: null
     };
   }
 
@@ -143,6 +148,30 @@ export async function mirrorSourceImage(input: {
       return toFailureResult("Image exceeds 8 MB limit");
     }
 
+    let mirroredImageWidth: number | null = null;
+    let mirroredImageHeight: number | null = null;
+
+    try {
+      const metadata = await sharp(bytes).metadata();
+      mirroredImageWidth = metadata.width ?? null;
+      mirroredImageHeight = metadata.height ?? null;
+    } catch (error) {
+      return toFailureResult(
+        error instanceof Error
+          ? `Unable to read image dimensions: ${error.message}`
+          : "Unable to read image dimensions"
+      );
+    }
+
+    if (
+      !mirroredImageWidth ||
+      !Number.isFinite(mirroredImageWidth) ||
+      !mirroredImageHeight ||
+      !Number.isFinite(mirroredImageHeight)
+    ) {
+      return toFailureResult("Unable to read image dimensions");
+    }
+
     const mirroredImagePath = buildMirroredImagePath({
       sourceSlug: input.sourceGig.sourceSlug,
       identityKey: input.sourceGig.identityKey,
@@ -162,7 +191,9 @@ export async function mirrorSourceImage(input: {
       status: "ready",
       mirroredImagePath,
       errorMessage: null,
-      mirroredAt: (input.now ?? (() => new Date().toISOString()))()
+      mirroredAt: (input.now ?? (() => new Date().toISOString()))(),
+      mirroredImageWidth,
+      mirroredImageHeight
     };
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -182,6 +213,8 @@ export function shouldMirrorImage(sourceGig: SourceGigRecord): boolean {
     sourceGig.sourceImageUrl &&
       (sourceGig.imageMirrorStatus === "missing" ||
         sourceGig.imageMirrorStatus === "failed" ||
-        !sourceGig.mirroredImagePath)
+        !sourceGig.mirroredImagePath ||
+        !sourceGig.mirroredImageWidth ||
+        !sourceGig.mirroredImageHeight)
   );
 }

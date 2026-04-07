@@ -13,7 +13,8 @@
     "@perth-gig-finder/shared": "workspace:*",
     "@supabase/supabase-js": "^2.57.4",
     "cheerio": "^1.1.2",
-    "dotenv": "^17.2.3"
+    "dotenv": "^17.2.3",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@types/node": "^24.6.0",

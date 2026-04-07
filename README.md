@@ -260,6 +260,27 @@ pnpm test
    pnpm scrape
    ```
 
+### Local web servers
+
+- Desktop development uses the webpack dev server:
+
+  ```bash
+  pnpm local:web:dev
+  ```
+
+  This serves the site at `http://127.0.0.1:3001`.
+
+- Phone testing uses the production preview server:
+
+  ```bash
+  pnpm local:web:preview
+  ```
+
+  This serves the site on your Mac at `http://127.0.0.1:3003` and on the same
+  Wi-Fi network via your Mac's LAN IP. The preview runs through a local wrapper
+  that serves the real production build while forcing fresh `_next/static`
+  asset URLs for reliable mobile Safari hydration during local testing.
+
 7. Start the web app:
 
    ```bash

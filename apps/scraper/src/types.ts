@@ -46,6 +46,8 @@ export interface SourceGigRecord {
   mirroredImagePath: string | null;
   imageMirrorStatus: ImageMirrorStatus;
   imageMirroredAt: string | null;
+  mirroredImageWidth: number | null;
+  mirroredImageHeight: number | null;
 }
 
 export interface SourceGigImageMirrorResult {
@@ -53,6 +55,8 @@ export interface SourceGigImageMirrorResult {
   mirroredImagePath: string | null;
   errorMessage: string | null;
   mirroredAt: string | null;
+  mirroredImageWidth: number | null;
+  mirroredImageHeight: number | null;
 }
 
 export interface GigStore {
