@@ -112,7 +112,7 @@ Good first pages:
 
 - The public site is still homepage-first; venue pages and gig detail pages are not built yet.
 - Scraping is still manual in local development; there is no scheduled production refresh flow yet.
-- The preview server uses a local wrapper because mobile Safari was caching stale preview assets aggressively.
+- The preview server still uses a local wrapper because mobile Safari was caching stale preview assets aggressively, but it now builds in an isolated temp workspace instead of sharing Next build output with the main checkout.
 
 ## Local Development
 
@@ -192,7 +192,9 @@ pnpm verify
   This serves the production-style preview on your Mac at `http://127.0.0.1:3003`
   and on the same Wi-Fi network via your Mac's LAN IP. It is the same preview on
   desktop and phone; the phone just accesses it over LAN.
-  It also auto-starts Colima and Supabase before the preview build runs.
+  It also auto-starts Colima and Supabase before the preview build runs, and it
+  builds from an isolated temp workspace so preview runs do not churn tracked
+  Next.js files in the main checkout.
 
 ### Verification
 
