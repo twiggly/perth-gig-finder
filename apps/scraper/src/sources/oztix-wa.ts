@@ -3,7 +3,7 @@ import * as cheerio from "cheerio";
 import {
   buildGigChecksum,
   normalizeWhitespace,
-  slugify,
+  slugifyVenueName,
   type GigStatus,
   type JsonObject,
   type NormalizedGig,
@@ -190,6 +190,68 @@ function normalizeUrl(value: string | null | undefined): string | null {
   }
 }
 
+function stripImageSizeParams(urlValue: string): string {
+  try {
+    const url = new URL(urlValue);
+    url.searchParams.delete("width");
+    url.searchParams.delete("height");
+    return url.toString();
+  } catch {
+    return urlValue;
+  }
+}
+
+function parseImageArea(urlValue: string): number | null {
+  try {
+    const url = new URL(urlValue);
+    const width = Number(url.searchParams.get("width") ?? "");
+    const height = Number(url.searchParams.get("height") ?? "");
+
+    if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
+      return width * height;
+    }
+  } catch {
+    // Ignore malformed URLs and fall back to the candidate ordering.
+  }
+
+  return null;
+}
+
+function selectPreferredImageUrl(hit: OztixHit): string | null {
+  const candidates = [hit.EventImage1, hit.HomepageImage]
+    .map((value) => normalizeUrl(value))
+    .filter((value): value is string => Boolean(value))
+    .map((value) => ({
+      area: parseImageArea(value),
+      preferred: stripImageSizeParams(value)
+    }));
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const [preferred] = candidates.sort((left, right) => {
+    const leftArea = left.area;
+    const rightArea = right.area;
+
+    if (leftArea !== null && rightArea !== null && leftArea !== rightArea) {
+      return rightArea - leftArea;
+    }
+
+    if (leftArea !== null) {
+      return -1;
+    }
+
+    if (rightArea !== null) {
+      return 1;
+    }
+
+    return 0;
+  });
+
+  return preferred.preferred;
+}
+
 function collectNamedArtists(hit: OztixHit): string[] {
   const fromBands = Array.isArray(hit.Bands) ? hit.Bands : [];
   const fromPerformances = Array.isArray(hit.Performances)
@@ -266,7 +328,7 @@ function normalizeVenue(hit: OztixHit): NormalizedVenue {
 
   return {
     name: venueName,
-    slug: slugify(venueName),
+    slug: slugifyVenueName(venueName),
     suburb: venue?.Locality ? normalizeWhitespace(venue.Locality) : null,
     address: venue?.Address ? normalizeWhitespace(venue.Address) : null,
     websiteUrl: normalizeUrl(venue?.WebsiteUrl) ?? "https://www.oztix.com.au"
@@ -317,7 +379,7 @@ export function normalizeOztixHit(hit: OztixHit): NormalizedGig {
     sourceSlug: "oztix-wa",
     externalId: hit.EventGuid?.trim() || null,
     sourceUrl,
-    imageUrl: normalizeUrl(hit.HomepageImage) ?? normalizeUrl(hit.EventImage1),
+    imageUrl: selectPreferredImageUrl(hit),
     title,
     description,
     status: normalizeGigStatus(hit, title),
@@ -386,6 +448,7 @@ export const oztixWaSource: SourceAdapter = {
   name: "Oztix WA",
   baseUrl: SOURCE_URL,
   priority: 10,
+  isPublicListingSource: true,
   async fetchListings(fetchImpl = fetch) {
     const hits = await fetchOztixHits(fetchImpl);
     return parseOztixHits(hits);

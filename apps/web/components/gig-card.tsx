@@ -16,17 +16,27 @@ function formatVenueLine(gig: GigCardRecord): string {
 
 export function GigCard({ gig }: { gig: GigCardRecord }) {
   const imageUrl = getGigImageUrl(gig);
+  const hasRenderableImage =
+    Boolean(imageUrl) &&
+    typeof gig.image_width === "number" &&
+    gig.image_width > 0 &&
+    typeof gig.image_height === "number" &&
+    gig.image_height > 0;
+  const imageWidth = hasRenderableImage ? gig.image_width! : undefined;
+  const imageHeight = hasRenderableImage ? gig.image_height! : undefined;
 
   return (
     <article className="gig-card">
       <div className="gig-card__media">
-        {imageUrl ? (
+        {hasRenderableImage && imageUrl ? (
           <Image
             alt={`${gig.title} poster`}
             className="gig-card__media-image"
-            fill
-            sizes="(max-width: 720px) 9rem, 14rem"
+            height={imageHeight}
+            sizes="(max-width: 480px) 88px, (max-width: 720px) 115px, 168px"
             src={imageUrl}
+            style={{ height: "auto", width: "100%" }}
+            width={imageWidth}
           />
         ) : (
           <div aria-hidden="true" className="gig-card__media-fallback">

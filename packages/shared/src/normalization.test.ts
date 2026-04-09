@@ -4,12 +4,15 @@ import {
   buildGigChecksum,
   buildGigSlug,
   normalizeTitleForMatch,
-  slugify
+  slugify,
+  slugifyVenueName
 } from "./index";
 
 describe("normalization helpers", () => {
   it("creates stable slugs", () => {
     expect(slugify("Milk Bar Presents: TIME!!!")).toBe("milk-bar-presents-time");
+    expect(slugifyVenueName("Mojo's Bar")).toBe("mojos-bar");
+    expect(slugifyVenueName("Mojos Bar")).toBe("mojos-bar");
     expect(
       buildGigSlug({
         venueSlug: "milk-bar",
@@ -37,4 +40,3 @@ describe("normalization helpers", () => {
     expect(buildGigChecksum(input)).toBe(buildGigChecksum(input));
   });
 });
-

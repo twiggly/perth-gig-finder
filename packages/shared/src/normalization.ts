@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 const NON_ALPHANUMERIC = /[^a-z0-9]+/g;
+const APOSTROPHES = /['’]/g;
 
 export function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -20,6 +21,10 @@ export function slugify(value: string): string {
 
 export function normalizeTitleForMatch(value: string): string {
   return slugify(value);
+}
+
+export function slugifyVenueName(value: string): string {
+  return slugify(value.replace(APOSTROPHES, ""));
 }
 
 export function buildGigSlug(input: {
@@ -48,4 +53,3 @@ export function buildGigChecksum(input: {
 
   return createHash("sha256").update(payload).digest("hex");
 }
-

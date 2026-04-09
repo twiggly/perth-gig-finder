@@ -5,6 +5,7 @@ import {
   type GigStatus,
   normalizeTitleForMatch,
   slugify,
+  slugifyVenueName,
   type NormalizedGig
 } from "@perth-gig-finder/shared";
 import { describe, expect, it } from "vitest";
@@ -63,6 +64,7 @@ class MemoryGigStore implements GigStore {
     name: string;
     baseUrl: string;
     priority: number;
+    isPublicListingSource: boolean;
   }): Promise<SourceRecord> {
     const existing = this.sources.get(input.slug);
 
@@ -235,7 +237,9 @@ class MemoryGigStore implements GigStore {
       Boolean(sourceImageUrl) &&
       existing?.sourceImageUrl === sourceImageUrl &&
       existing.imageMirrorStatus === "ready" &&
-      Boolean(existing.mirroredImagePath);
+      Boolean(existing.mirroredImagePath) &&
+      Boolean(existing.mirroredImageWidth) &&
+      Boolean(existing.mirroredImageHeight);
 
     const nextRecord: SourceGigRecord & {
       sourceId: string;
@@ -251,6 +255,8 @@ class MemoryGigStore implements GigStore {
       identityKey: input.gig.externalId ?? input.gig.checksum,
       sourceImageUrl,
       mirroredImagePath: unchangedReadyImage ? existing?.mirroredImagePath ?? null : null,
+      mirroredImageWidth: unchangedReadyImage ? existing?.mirroredImageWidth ?? null : null,
+      mirroredImageHeight: unchangedReadyImage ? existing?.mirroredImageHeight ?? null : null,
       imageMirrorStatus: !sourceImageUrl
         ? "missing"
         : unchangedReadyImage
@@ -282,7 +288,9 @@ class MemoryGigStore implements GigStore {
         status: "missing",
         mirroredImagePath: null,
         errorMessage: null,
-        mirroredAt: null
+        mirroredAt: null,
+        mirroredImageWidth: null,
+        mirroredImageHeight: null
       };
     }
 
@@ -293,14 +301,18 @@ class MemoryGigStore implements GigStore {
         ...existing,
         imageMirrorStatus: "failed",
         mirroredImagePath: null,
-        imageMirroredAt: null
+        imageMirroredAt: null,
+        mirroredImageWidth: null,
+        mirroredImageHeight: null
       });
 
       return {
         status: "failed",
         mirroredImagePath: null,
         errorMessage: "Image request failed (503)",
-        mirroredAt: null
+        mirroredAt: null,
+        mirroredImageWidth: null,
+        mirroredImageHeight: null
       };
     }
 
@@ -318,19 +330,25 @@ class MemoryGigStore implements GigStore {
       sourceImageUrl: sourceGig.sourceImageUrl,
       mirroredImagePath,
       imageMirrorStatus: "ready",
-      imageMirroredAt: mirroredAt
+      imageMirroredAt: mirroredAt,
+      mirroredImageWidth: 1200,
+      mirroredImageHeight: 600
     });
 
     return {
       status: "ready",
       mirroredImagePath,
       errorMessage: null,
-      mirroredAt
+      mirroredAt,
+      mirroredImageWidth: 1200,
+      mirroredImageHeight: 600
     };
   }
 
-  async listSourceGigsNeedingImageMirror(): Promise<SourceGigRecord[]> {
-    return [...this.sourceGigs.values()].filter(shouldMirrorImage);
+  async listSourceGigsNeedingImageMirror(force = false): Promise<SourceGigRecord[]> {
+    return force
+      ? [...this.sourceGigs.values()].filter((sourceGig) => Boolean(sourceGig.sourceImageUrl))
+      : [...this.sourceGigs.values()].filter(shouldMirrorImage);
   }
 
   async replaceGigArtists(gigId: string, artists: string[]): Promise<void> {
@@ -371,7 +389,16 @@ function createGigForSource(input: {
   status: GigStatus;
   imageUrl?: string | null;
   artists?: string[];
+  venueName?: string;
+  venueSuburb?: string | null;
+  venueAddress?: string | null;
+  venueWebsiteUrl?: string | null;
 }): NormalizedGig {
+  const venueName = input.venueName ?? "Milk Bar";
+  const venueSuburb = input.venueSuburb ?? "Inglewood";
+  const venueAddress = input.venueAddress ?? "981 Beaufort Street";
+  const venueWebsiteUrl = input.venueWebsiteUrl ?? "https://milkbarperth.com.au";
+
   return {
     sourceSlug: input.sourceSlug,
     externalId: input.externalId,
@@ -384,11 +411,11 @@ function createGigForSource(input: {
     endsAt: null,
     ticketUrl: input.sourceUrl,
     venue: {
-      name: "Milk Bar",
-      slug: "milk-bar",
-      suburb: "Inglewood",
-      address: "981 Beaufort Street",
-      websiteUrl: "https://milkbarperth.com.au"
+      name: venueName,
+      slug: slugifyVenueName(venueName),
+      suburb: venueSuburb,
+      address: venueAddress,
+      websiteUrl: venueWebsiteUrl
     },
     artists: input.artists ?? ["Time"],
     rawPayload: { EventName: input.title },
@@ -396,7 +423,7 @@ function createGigForSource(input: {
       sourceSlug: input.sourceSlug,
       startsAt: "2026-04-10T11:30:00.000Z",
       title: input.title,
-      venueSlug: "milk-bar",
+      venueSlug: slugifyVenueName(venueName),
       sourceUrl: input.sourceUrl
     })
   };
@@ -410,6 +437,7 @@ describe("executeSourceRun", () => {
       name: "Milk Bar",
       baseUrl: "https://milkbarperth.com.au/gigs/",
       priority: 100,
+      isPublicListingSource: true,
       async fetchListings() {
         return {
           gigs: [createGig()],
@@ -436,6 +464,7 @@ describe("executeSourceRun", () => {
       name: "Milk Bar",
       baseUrl: "https://milkbarperth.com.au/gigs/",
       priority: 100,
+      isPublicListingSource: true,
       async fetchListings() {
         return {
           gigs: [createGig("Doctor Jazz")],
@@ -459,6 +488,7 @@ describe("executeSourceRun", () => {
       name: "Milk Bar",
       baseUrl: "https://milkbarperth.com.au/gigs/",
       priority: 100,
+      isPublicListingSource: true,
       async fetchListings() {
         return {
           gigs: [
@@ -487,6 +517,7 @@ describe("executeSourceRun", () => {
       name: "Oztix WA",
       baseUrl: "https://www.oztix.com.au/search?states%5B0%5D=WA&q=",
       priority: 10,
+      isPublicListingSource: true,
       async fetchListings() {
         return {
           gigs: [
@@ -508,6 +539,7 @@ describe("executeSourceRun", () => {
       name: "Milk Bar",
       baseUrl: "https://milkbarperth.com.au/gigs/",
       priority: 100,
+      isPublicListingSource: true,
       async fetchListings() {
         return {
           gigs: [
@@ -532,6 +564,69 @@ describe("executeSourceRun", () => {
     expect(store.sourceGigs.size).toBe(2);
   });
 
+  it("reuses the canonical gig when venue names differ only by apostrophe punctuation", async () => {
+    const store = new MemoryGigStore();
+    const oztixSource: SourceAdapter = {
+      slug: "oztix-wa",
+      name: "Oztix WA",
+      baseUrl: "https://www.oztix.com.au/search?states%5B0%5D=WA&q=",
+      priority: 10,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "oztix-wa",
+              externalId: "sophie-oztix",
+              sourceUrl: "https://tickets.oztix.com.au/outlet/event/sophie-oztix",
+              title: "Sophie Lilah ‘Busy Being in Love’ Album Launch",
+              status: "active",
+              imageUrl: "https://assets.oztix.com.au/image/sophie.png",
+              venueName: "Mojo's Bar",
+              venueSuburb: "North Fremantle",
+              venueAddress: "237 Queen Victoria St",
+              venueWebsiteUrl: "https://www.mojosbar.com.au"
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+    const moshtixSource: SourceAdapter = {
+      slug: "moshtix-wa",
+      name: "Moshtix WA",
+      baseUrl: "https://www.moshtix.com.au/v2/search",
+      priority: 10,
+      isPublicListingSource: false,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "moshtix-wa",
+              externalId: "sophie-moshtix",
+              sourceUrl: "https://www.moshtix.com.au/v2/event/sophie-lilah/192946",
+              title: "Sophie Lilah 'Busy Being in Love' Album Launch",
+              status: "active",
+              imageUrl: "https://static.moshtix.com.au/uploads/sophie-square.jpg",
+              venueName: "Mojos Bar",
+              venueSuburb: "North Fremantle",
+              venueAddress: "237 Queen Victoria St",
+              venueWebsiteUrl: "https://www.mojosbar.com.au"
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+
+    await executeSourceRun(store, oztixSource);
+    await executeSourceRun(store, moshtixSource);
+
+    expect(store.venues.size).toBe(1);
+    expect(store.gigs.size).toBe(1);
+    expect(store.sourceGigs.size).toBe(2);
+  });
+
   it("keeps gig ingestion successful when image mirroring fails", async () => {
     const store = new MemoryGigStore();
     const imageUrl = "https://assets.oztix.com.au/image/doctor-jazz.png";
@@ -541,6 +636,7 @@ describe("executeSourceRun", () => {
       name: "Oztix WA",
       baseUrl: "https://www.oztix.com.au/search?states%5B0%5D=WA&q=",
       priority: 10,
+      isPublicListingSource: true,
       async fetchListings() {
         return {
           gigs: [
@@ -573,6 +669,7 @@ describe("executeSourceRun", () => {
       name: "Oztix WA",
       baseUrl: "https://www.oztix.com.au/search?states%5B0%5D=WA&q=",
       priority: 10,
+      isPublicListingSource: true,
       async fetchListings() {
         return {
           gigs: [
@@ -606,6 +703,7 @@ describe("executeSourceRun", () => {
       name: "Oztix WA",
       baseUrl: "https://www.oztix.com.au/search?states%5B0%5D=WA&q=",
       priority: 10,
+      isPublicListingSource: true,
       async fetchListings() {
         return {
           gigs: [
@@ -643,6 +741,7 @@ describe("executeSourceRun", () => {
       name: "Oztix WA",
       baseUrl: "https://www.oztix.com.au/search?states%5B0%5D=WA&q=",
       priority: 10,
+      isPublicListingSource: true,
       async fetchListings() {
         return {
           gigs: [

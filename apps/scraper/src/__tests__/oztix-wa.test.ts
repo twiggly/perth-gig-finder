@@ -81,7 +81,7 @@ describe("oztix wa source adapter", () => {
     ).toBe(false);
   });
 
-  it("prefers HomepageImage and falls back to EventImage1 for artwork", () => {
+  it("prefers the fuller payload image candidate and falls back when needed", () => {
     expect(
       normalizeOztixHit({
         EventGuid: "doctor-jazz",
@@ -100,7 +100,7 @@ describe("oztix wa source adapter", () => {
         },
         Bands: ["Doctor Jazz"]
       }).imageUrl
-    ).toBe("https://assets.oztix.com.au/image/homepage.png?width=360&height=180");
+    ).toBe("https://assets.oztix.com.au/image/event.png");
 
     expect(
       normalizeOztixHit({
@@ -118,7 +118,7 @@ describe("oztix wa source adapter", () => {
           WebsiteUrl: "https://milkbarperth.com.au"
         }
       }).imageUrl
-    ).toBe("https://assets.oztix.com.au/image/event.png?width=600&height=300");
+    ).toBe("https://assets.oztix.com.au/image/event.png");
   });
 
   it("parses WA hits into normalized gigs, skips non-gig events, and counts failures", () => {

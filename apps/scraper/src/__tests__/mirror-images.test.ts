@@ -1,6 +1,7 @@
 import type { NormalizedGig } from "@perth-gig-finder/shared";
 import { describe, expect, it } from "vitest";
 
+import { shouldMirrorImage } from "../image-mirror";
 import { mirrorPendingSourceGigImages } from "../mirror-images";
 import type {
   GigRecord,
@@ -14,6 +15,7 @@ import type {
 class MirrorOnlyStore implements GigStore {
   readonly sourceGigs = new Map<string, SourceGigRecord>();
   imageBucketEnsured = false;
+  lastForceValue = false;
 
   constructor(sourceGigs: SourceGigRecord[]) {
     for (const sourceGig of sourceGigs) {
@@ -26,6 +28,7 @@ class MirrorOnlyStore implements GigStore {
     name: string;
     baseUrl: string;
     priority: number;
+    isPublicListingSource: boolean;
   }): Promise<SourceRecord> {
     throw new Error("not implemented");
   }
@@ -106,7 +109,9 @@ class MirrorOnlyStore implements GigStore {
       ...existing,
       mirroredImagePath: `${existing.sourceSlug}/${existing.identityKey}/mirrored.png`,
       imageMirrorStatus: "ready" as const,
-      imageMirroredAt: "2026-04-06T09:00:00.000Z"
+      imageMirroredAt: "2026-04-06T09:00:00.000Z",
+      mirroredImageWidth: 1200,
+      mirroredImageHeight: 600
     };
 
     this.sourceGigs.set(sourceGig.id, readyRecord);
@@ -115,18 +120,17 @@ class MirrorOnlyStore implements GigStore {
       status: "ready",
       mirroredImagePath: readyRecord.mirroredImagePath,
       errorMessage: null,
-      mirroredAt: readyRecord.imageMirroredAt
+      mirroredAt: readyRecord.imageMirroredAt,
+      mirroredImageWidth: readyRecord.mirroredImageWidth,
+      mirroredImageHeight: readyRecord.mirroredImageHeight
     };
   }
 
-  async listSourceGigsNeedingImageMirror(): Promise<SourceGigRecord[]> {
-    return [...this.sourceGigs.values()].filter(
-      (sourceGig) =>
-        Boolean(sourceGig.sourceImageUrl) &&
-        (sourceGig.imageMirrorStatus === "missing" ||
-          sourceGig.imageMirrorStatus === "failed" ||
-          !sourceGig.mirroredImagePath)
-    );
+  async listSourceGigsNeedingImageMirror(force = false): Promise<SourceGigRecord[]> {
+    this.lastForceValue = force;
+    return force
+      ? [...this.sourceGigs.values()].filter((sourceGig) => Boolean(sourceGig.sourceImageUrl))
+      : [...this.sourceGigs.values()].filter(shouldMirrorImage);
   }
 
   async replaceGigArtists(_gigId: string, _artists: string[]): Promise<void> {
@@ -144,7 +148,9 @@ describe("mirrorPendingSourceGigImages", () => {
       sourceImageUrl: "https://assets.oztix.com.au/image/doctor-jazz.png",
       mirroredImagePath: null,
       imageMirrorStatus: "failed",
-      imageMirroredAt: null
+      imageMirroredAt: null,
+      mirroredImageWidth: null,
+      mirroredImageHeight: null
     };
     const store = new MirrorOnlyStore([sourceGig]);
 
@@ -158,7 +164,65 @@ describe("mirrorPendingSourceGigImages", () => {
     expect(store.imageBucketEnsured).toBe(true);
     expect(store.sourceGigs.get("source-gig-1")).toMatchObject({
       imageMirrorStatus: "ready",
-      mirroredImagePath: "oztix-wa/doctor-jazz/mirrored.png"
+      mirroredImagePath: "oztix-wa/doctor-jazz/mirrored.png",
+      mirroredImageWidth: 1200,
+      mirroredImageHeight: 600
     });
+  });
+
+  it("backfills ready mirrored rows that are missing stored dimensions", async () => {
+    const store = new MirrorOnlyStore([
+      {
+        id: "source-gig-2",
+        gigId: "gig-2",
+        sourceSlug: "oztix-wa",
+        identityKey: "portrait-night",
+        sourceImageUrl: "https://assets.oztix.com.au/image/portrait-night.png",
+        mirroredImagePath: "oztix-wa/portrait-night/mirrored.png",
+        imageMirrorStatus: "ready",
+        imageMirroredAt: "2026-04-06T09:00:00.000Z",
+        mirroredImageWidth: null,
+        mirroredImageHeight: null
+      }
+    ]);
+
+    const result = await mirrorPendingSourceGigImages(store);
+
+    expect(result).toEqual({
+      discoveredCount: 1,
+      mirroredCount: 1,
+      failedCount: 0
+    });
+    expect(store.sourceGigs.get("source-gig-2")).toMatchObject({
+      imageMirrorStatus: "ready",
+      mirroredImageWidth: 1200,
+      mirroredImageHeight: 600
+    });
+  });
+
+  it("force-remirrors already ready rows", async () => {
+    const store = new MirrorOnlyStore([
+      {
+        id: "source-gig-3",
+        gigId: "gig-3",
+        sourceSlug: "oztix-wa",
+        identityKey: "michael-vdelli",
+        sourceImageUrl: "https://assets.oztix.com.au/image/michael-vdelli.png",
+        mirroredImagePath: "oztix-wa/michael-vdelli/mirrored.png",
+        imageMirrorStatus: "ready",
+        imageMirroredAt: "2026-04-06T09:00:00.000Z",
+        mirroredImageWidth: 1836,
+        mirroredImageHeight: 918
+      }
+    ]);
+
+    const result = await mirrorPendingSourceGigImages(store, fetch, { force: true });
+
+    expect(result).toEqual({
+      discoveredCount: 1,
+      mirroredCount: 1,
+      failedCount: 0
+    });
+    expect(store.lastForceValue).toBe(true);
   });
 });

@@ -10,39 +10,19 @@ icon = "run"
 command = "./scripts/with-supported-node.sh pnpm local:bootstrap"
 
 [[actions]]
-name = "Start Supabase"
-icon = "run"
-command = "./scripts/with-supported-node.sh pnpm supabase:start"
-
-[[actions]]
-name = "Print Local Keys"
-icon = "run"
-command = "./scripts/with-supported-node.sh pnpm supabase:keys"
-
-[[actions]]
-name = "Reset Database"
-icon = "run"
-command = "./scripts/with-supported-node.sh pnpm supabase:reset"
-
-[[actions]]
 name = "Refresh Gigs"
 icon = "run"
 command = "./scripts/with-supported-node.sh pnpm scrape"
 
 [[actions]]
-name = "Run Web"
+name = "Run Dev Server"
 icon = "run"
-command = "./scripts/with-supported-node.sh pnpm local:web:dev"
+command = "./scripts/with-supported-node.sh pnpm web:dev"
 
 [[actions]]
-name = "Run Web Preview"
+name = "Run Preview Server"
 icon = "run"
-command = "./scripts/with-supported-node.sh pnpm local:web:preview"
-
-[[actions]]
-name = "Run Phone Proxy"
-icon = "run"
-command = "./scripts/with-supported-node.sh pnpm local:web:phone-proxy"
+command = "./scripts/with-supported-node.sh pnpm web:preview"
 
 [[actions]]
 name = "Run Tests"

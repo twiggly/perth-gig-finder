@@ -240,6 +240,7 @@ export const milkBarSource: SourceAdapter = {
   name: "Milk Bar",
   baseUrl: SOURCE_URL,
   priority: 100,
+  isPublicListingSource: true,
   async fetchListings(fetchImpl = fetch) {
     const response = await fetchImpl(SOURCE_URL);
 

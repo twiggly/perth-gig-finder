@@ -1,5 +1,7 @@
 node_modules
 .next
+.next-dev
+.next-prod
 coverage
 dist
 .turbo
@@ -13,4 +15,3 @@ apps/web/.env.local
 apps/scraper/.env
 
 .supabase
-

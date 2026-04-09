@@ -2,6 +2,7 @@ import {
   buildGigSlug,
   normalizeTitleForMatch,
   slugify,
+  slugifyVenueName,
   type NormalizedGig
 } from "@perth-gig-finder/shared";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -33,6 +34,7 @@ interface SourceRow {
   name: string;
   base_url: string;
   priority: number;
+  is_public_listing_source: boolean;
 }
 
 interface VenueRow {
@@ -55,6 +57,8 @@ interface SourceGigRow {
   mirrored_image_path: string | null;
   image_mirror_status: ImageMirrorStatus;
   image_mirrored_at: string | null;
+  mirrored_image_width: number | null;
+  mirrored_image_height: number | null;
 }
 
 interface SourceGigSourceRow {
@@ -74,7 +78,9 @@ function toSourceGigRecord(
     sourceImageUrl: row.source_image_url,
     mirroredImagePath: row.mirrored_image_path,
     imageMirrorStatus: row.image_mirror_status,
-    imageMirroredAt: row.image_mirrored_at
+    imageMirroredAt: row.image_mirrored_at,
+    mirroredImageWidth: row.mirrored_image_width,
+    mirroredImageHeight: row.mirrored_image_height
   };
 }
 
@@ -113,6 +119,7 @@ export class SupabaseGigStore implements GigStore {
     name: string;
     baseUrl: string;
     priority: number;
+    isPublicListingSource: boolean;
   }): Promise<SourceRecord> {
     const { data, error } = await this.client
       .from("sources")
@@ -122,11 +129,12 @@ export class SupabaseGigStore implements GigStore {
           name: input.name,
           base_url: input.baseUrl,
           priority: input.priority,
+          is_public_listing_source: input.isPublicListingSource,
           is_active: true
         },
         { onConflict: "slug" }
       )
-      .select("id, slug, name, base_url, priority")
+      .select("id, slug, name, base_url, priority, is_public_listing_source")
       .single<SourceRow>();
 
     if (error || !data) {
@@ -137,7 +145,8 @@ export class SupabaseGigStore implements GigStore {
       id: data.id,
       slug: data.slug,
       name: data.name,
-      baseUrl: data.base_url
+      baseUrl: data.base_url,
+      isPublicListingSource: data.is_public_listing_source
     };
   }
 
@@ -198,7 +207,7 @@ export class SupabaseGigStore implements GigStore {
       .from("venues")
       .upsert(
         {
-          slug: gig.venue.slug || slugify(gig.venue.name),
+          slug: gig.venue.slug || slugifyVenueName(gig.venue.name),
           name: gig.venue.name,
           suburb: gig.venue.suburb,
           address: gig.venue.address,
@@ -224,7 +233,7 @@ export class SupabaseGigStore implements GigStore {
     let query = this.client
       .from("source_gigs")
       .select(
-        "id, source_id, gig_id, identity_key, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at"
+        "id, source_id, gig_id, identity_key, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height"
       )
       .eq("source_id", sourceId)
       .limit(1);
@@ -357,7 +366,9 @@ export class SupabaseGigStore implements GigStore {
       Boolean(sourceImageUrl) &&
       existing?.sourceImageUrl === sourceImageUrl &&
       existing.imageMirrorStatus === "ready" &&
-      Boolean(existing.mirroredImagePath);
+      Boolean(existing.mirroredImagePath) &&
+      Boolean(existing.mirroredImageWidth) &&
+      Boolean(existing.mirroredImageHeight);
 
     const imageMirrorStatus: ImageMirrorStatus = !sourceImageUrl
       ? "missing"
@@ -377,6 +388,12 @@ export class SupabaseGigStore implements GigStore {
         mirrored_image_path: unchangedReadyImage
           ? existing?.mirroredImagePath ?? null
           : null,
+        mirrored_image_width: unchangedReadyImage
+          ? existing?.mirroredImageWidth ?? null
+          : null,
+        mirrored_image_height: unchangedReadyImage
+          ? existing?.mirroredImageHeight ?? null
+          : null,
         image_mirror_status: imageMirrorStatus,
         image_mirror_error: null,
         image_mirrored_at: unchangedReadyImage
@@ -391,7 +408,7 @@ export class SupabaseGigStore implements GigStore {
       }
     )
       .select(
-        "id, source_id, gig_id, identity_key, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at"
+        "id, source_id, gig_id, identity_key, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height"
       )
       .single<SourceGigRow>();
 
@@ -439,12 +456,16 @@ export class SupabaseGigStore implements GigStore {
       result.status === "ready"
         ? {
             mirrored_image_path: result.mirroredImagePath,
+            mirrored_image_width: result.mirroredImageWidth,
+            mirrored_image_height: result.mirroredImageHeight,
             image_mirror_status: "ready",
             image_mirror_error: null,
             image_mirrored_at: result.mirroredAt
           }
         : {
             mirrored_image_path: null,
+            mirrored_image_width: null,
+            mirrored_image_height: null,
             image_mirror_status: nextStatus,
             image_mirror_error: result.errorMessage,
             image_mirrored_at: null
@@ -465,11 +486,11 @@ export class SupabaseGigStore implements GigStore {
     };
   }
 
-  async listSourceGigsNeedingImageMirror(): Promise<SourceGigRecord[]> {
+  async listSourceGigsNeedingImageMirror(force = false): Promise<SourceGigRecord[]> {
     const { data, error } = await this.client
       .from("source_gigs")
       .select(
-        "id, source_id, gig_id, identity_key, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at"
+        "id, source_id, gig_id, identity_key, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height"
       )
       .not("source_image_url", "is", null)
       .order("last_seen_at", { ascending: false });
@@ -501,9 +522,11 @@ export class SupabaseGigStore implements GigStore {
       ])
     );
 
-    return rows
-      .map((row) => toSourceGigRecord(row, sourceSlugById.get(row.source_id) ?? "unknown-source"))
-      .filter(shouldMirrorImage);
+    const sourceGigs = rows.map((row) =>
+      toSourceGigRecord(row, sourceSlugById.get(row.source_id) ?? "unknown-source")
+    );
+
+    return force ? sourceGigs : sourceGigs.filter(shouldMirrorImage);
   }
 
   async replaceGigArtists(gigId: string, artists: string[]): Promise<void> {

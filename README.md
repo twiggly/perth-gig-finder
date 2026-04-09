@@ -11,59 +11,11 @@ Users should be able to:
 - click through to the original source listing
 - trust that listings are recent, deduplicated, and clearly sourced
 
-## Proposed Stack
+## Current Architecture
 
-- `Next.js + React + TypeScript` for the web app
-- `Supabase` for backend infrastructure
-- `Postgres` for structured gig, venue, artist, and scrape data
-- `Supabase Auth` for user accounts later
-- `Supabase Storage` for images and imported media later
-- `Supabase Edge Functions` for webhooks and notifications later
-- `pnpm workspaces` for the monorepo
-- `Cheerio` for most scraping/parsing
-- `Playwright` only for JavaScript-heavy sites
-- `Vitest` for unit and integration tests
-
-Likely later integrations:
-
-- `Stripe` for paid features
-- `Postmark` for email notifications
-- `Twilio` for SMS alerts
-- `Leaflet` for venue maps
-
-## Recommended Architecture
-
-Keep the web app and scraping pipeline separate.
-
-- The `web` app reads curated data from Supabase and renders the public site.
-- Scrapers run as background jobs, not during page requests.
-- Each scraper writes normalized gigs plus raw source metadata for traceability.
-- Deduplication happens during ingestion, not in the UI.
-
-That gives us a cleaner system:
-
-- `apps/web`: public Next.js site
-- `apps/scraper`: scraper runner / ingestion jobs
-- `packages/shared`: shared types, schemas, helpers
-- `supabase/`: SQL migrations, seeds, config, and edge functions later
-
-## Suggested Repo Layout
-
-```text
-.
-├─ apps/
-│  ├─ web/
-│  └─ scraper/
-├─ packages/
-│  └─ shared/
-├─ supabase/
-│  ├─ migrations/
-│  ├─ seed.sql
-│  └─ functions/
-├─ package.json
-├─ pnpm-workspace.yaml
-└─ README.md
-```
+- `apps/web` is the public Next.js site. It reads curated gig data from Supabase and never scrapes during page requests.
+- `apps/scraper` fetches source data, normalizes it, deduplicates gigs, mirrors image assets, and writes canonical records into Supabase.
+- `packages/shared` holds shared normalization contracts and helpers used by both sides.
 
 ## Data Model Direction
 
@@ -148,59 +100,19 @@ Good first pages:
 - `/gigs/[slug]`
 - `/venues/[slug]`
 
-## Delivery Phases
-
-### Phase 1
-
-- monorepo scaffold
-- Supabase project setup
-- initial SQL migrations
-- first scraper for one source
-- public gigs listing page
-
-### Phase 2
-
-- deduplication improvements
-- venue pages
-- richer filters
-- scrape observability and retries
-
-### Phase 3
-
-- user accounts
-- saved gigs / alerts
-- email and SMS notifications
-- payments for premium features if needed
-
-## Practical Recommendations
-
-- Keep scraping code out of the Next.js app runtime.
-- Prefer SQL migrations over ORM-first schema management.
-- Store enough raw source data to debug parser breakages.
-- Design around idempotent upserts from day one.
-- Add coordinates to venues early if maps are likely.
-- Keep Stripe, Postmark, and Twilio fully optional until the core ingestion loop is stable.
-
-## Best Next Build Step
-
-The strongest next step is to scaffold the monorepo and create the first Supabase migration with the core tables:
-
-- `sources`
-- `venues`
-- `artists`
-- `gigs`
-- `gig_artists`
-- `source_gigs`
-- `scrape_runs`
-
 ## MVP Status
 
-The first working source is now implemented against `Milk Bar`.
+- Sources live today:
+  - `Milk Bar`
+  - `Oztix WA` filtered down to Perth-metro music gigs
+- The homepage supports search, venue chips, day-by-day navigation, mirrored gig images, and mobile/trackpad-friendly browsing.
+- Mirrored source images are stored in Supabase Storage and preferred over third-party hotlinks.
 
-- scraper source page: `https://milkbarperth.com.au/gigs/`
-- source data path: embedded Algolia config in the venue page, fetched with `fetch` and normalized without Playwright
-- public listing page: `apps/web/app/page.tsx`
-- canonical listing view: `public.gig_cards`
+## Current Limitations
+
+- The public site is still homepage-first; venue pages and gig detail pages are not built yet.
+- Scraping is still manual in local development; there is no scheduled production refresh flow yet.
+- The preview server uses a local wrapper because mobile Safari was caching stale preview assets aggressively.
 
 ## Local Development
 
@@ -222,7 +134,7 @@ nvm use
 # or
 pnpm env use --global 22.12.0
 pnpm install
-pnpm test
+pnpm verify
 ```
 
 1. Install dependencies:
@@ -260,8 +172,38 @@ pnpm test
    pnpm scrape
    ```
 
-7. Start the web app:
+### Local web servers
 
-   ```bash
-   pnpm dev
-   ```
+- Dev server:
+
+  ```bash
+  pnpm web:dev
+  ```
+
+  This is the hot-reloading local development server at `http://127.0.0.1:3001`.
+  It will bring Colima and the local Supabase stack up automatically when needed.
+
+- Preview server:
+
+  ```bash
+  pnpm web:preview
+  ```
+
+  This serves the production-style preview on your Mac at `http://127.0.0.1:3003`
+  and on the same Wi-Fi network via your Mac's LAN IP. It is the same preview on
+  desktop and phone; the phone just accesses it over LAN.
+  It also auto-starts Colima and Supabase before the preview build runs.
+
+### Verification
+
+- Fast workspace tests:
+
+  ```bash
+  pnpm test
+  ```
+
+- Full verification, including builds:
+
+  ```bash
+  pnpm verify
+  ```

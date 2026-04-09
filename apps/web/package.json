@@ -4,10 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "next build",
+    "build": "node ../../scripts/clean-web-production-dist.mjs && next build",
     "dev": "next dev --webpack",
+    "preview": "node ../../scripts/clean-web-production-dist.mjs && next build && next start --hostname 0.0.0.0 --port 3003",
     "start": "next start",
-    "test": "node ../../scripts/check-node-version.mjs && vitest run && next build >/dev/null"
+    "test": "node ../../scripts/check-node-version.mjs && vitest run",
+    "verify": "node ../../scripts/check-node-version.mjs && vitest run && pnpm build >/dev/null"
   },
   "dependencies": {
     "@fontsource/source-serif-4": "^5.2.9",

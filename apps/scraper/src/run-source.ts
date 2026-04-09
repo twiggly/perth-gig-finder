@@ -106,7 +106,8 @@ export async function executeSourceRun(
     slug: source.slug,
     name: source.name,
     baseUrl: source.baseUrl,
-    priority: source.priority
+    priority: source.priority,
+    isPublicListingSource: source.isPublicListingSource
   });
   await store.ensureImageBucket();
 
