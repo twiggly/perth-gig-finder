@@ -13,6 +13,7 @@ export interface GigCardRecord {
   source_image_url: string | null;
   image_width: number | null;
   image_height: number | null;
+  image_version: string | null;
   ticket_url: string | null;
   source_url: string;
   source_name: string | null;
@@ -32,7 +33,7 @@ export async function listUpcomingGigs(
   let query = client
     .from("gig_cards")
     .select(
-      "id, slug, title, starts_at, artist_names, image_path, source_image_url, image_width, image_height, ticket_url, source_url, source_name, venue_slug, venue_name, venue_suburb, status"
+      "id, slug, title, starts_at, artist_names, image_path, source_image_url, image_width, image_height, image_version, ticket_url, source_url, source_name, venue_slug, venue_name, venue_suburb, status"
     )
     .eq("status", "active")
     .gte("starts_at", lowerBound.toISOString())
@@ -77,7 +78,9 @@ export function getGigImageUrl(gig: GigCardRecord): string | null {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "") ?? null;
 
   if (gig.image_path && supabaseUrl) {
-    return `${supabaseUrl}/storage/v1/object/public/gig-images/${encodeStoragePath(gig.image_path)}`;
+    const baseUrl = `${supabaseUrl}/storage/v1/object/public/gig-images/${encodeStoragePath(gig.image_path)}`;
+    const version = gig.image_version ? encodeURIComponent(gig.image_version) : null;
+    return version ? `${baseUrl}?v=${version}` : baseUrl;
   }
 
   return gig.source_image_url;

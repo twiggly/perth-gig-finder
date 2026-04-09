@@ -2,6 +2,7 @@ import {
   buildGigSlug,
   normalizeTitleForMatch,
   slugify,
+  slugifyVenueName,
   type NormalizedGig
 } from "@perth-gig-finder/shared";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -33,6 +34,7 @@ interface SourceRow {
   name: string;
   base_url: string;
   priority: number;
+  is_public_listing_source: boolean;
 }
 
 interface VenueRow {
@@ -117,6 +119,7 @@ export class SupabaseGigStore implements GigStore {
     name: string;
     baseUrl: string;
     priority: number;
+    isPublicListingSource: boolean;
   }): Promise<SourceRecord> {
     const { data, error } = await this.client
       .from("sources")
@@ -126,11 +129,12 @@ export class SupabaseGigStore implements GigStore {
           name: input.name,
           base_url: input.baseUrl,
           priority: input.priority,
+          is_public_listing_source: input.isPublicListingSource,
           is_active: true
         },
         { onConflict: "slug" }
       )
-      .select("id, slug, name, base_url, priority")
+      .select("id, slug, name, base_url, priority, is_public_listing_source")
       .single<SourceRow>();
 
     if (error || !data) {
@@ -141,7 +145,8 @@ export class SupabaseGigStore implements GigStore {
       id: data.id,
       slug: data.slug,
       name: data.name,
-      baseUrl: data.base_url
+      baseUrl: data.base_url,
+      isPublicListingSource: data.is_public_listing_source
     };
   }
 
@@ -202,7 +207,7 @@ export class SupabaseGigStore implements GigStore {
       .from("venues")
       .upsert(
         {
-          slug: gig.venue.slug || slugify(gig.venue.name),
+          slug: gig.venue.slug || slugifyVenueName(gig.venue.name),
           name: gig.venue.name,
           suburb: gig.venue.suburb,
           address: gig.venue.address,
@@ -481,7 +486,7 @@ export class SupabaseGigStore implements GigStore {
     };
   }
 
-  async listSourceGigsNeedingImageMirror(): Promise<SourceGigRecord[]> {
+  async listSourceGigsNeedingImageMirror(force = false): Promise<SourceGigRecord[]> {
     const { data, error } = await this.client
       .from("source_gigs")
       .select(
@@ -517,9 +522,11 @@ export class SupabaseGigStore implements GigStore {
       ])
     );
 
-    return rows
-      .map((row) => toSourceGigRecord(row, sourceSlugById.get(row.source_id) ?? "unknown-source"))
-      .filter(shouldMirrorImage);
+    const sourceGigs = rows.map((row) =>
+      toSourceGigRecord(row, sourceSlugById.get(row.source_id) ?? "unknown-source")
+    );
+
+    return force ? sourceGigs : sourceGigs.filter(shouldMirrorImage);
   }
 
   async replaceGigArtists(gigId: string, artists: string[]): Promise<void> {

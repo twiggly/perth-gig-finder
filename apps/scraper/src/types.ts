@@ -14,6 +14,7 @@ export interface SourceAdapter {
   name: string;
   baseUrl: string;
   priority: number;
+  isPublicListingSource: boolean;
   fetchListings(fetchImpl?: typeof fetch): Promise<SourceAdapterResult>;
 }
 
@@ -22,6 +23,7 @@ export interface SourceRecord {
   slug: string;
   name: string;
   baseUrl: string;
+  isPublicListingSource: boolean;
 }
 
 export interface VenueRecord {
@@ -65,6 +67,7 @@ export interface GigStore {
     name: string;
     baseUrl: string;
     priority: number;
+    isPublicListingSource: boolean;
   }): Promise<SourceRecord>;
   ensureImageBucket(): Promise<void>;
   startScrapeRun(sourceId: string, startedAt: string): Promise<string>;
@@ -109,7 +112,7 @@ export interface GigStore {
     sourceGig: SourceGigRecord,
     fetchImpl?: typeof fetch
   ): Promise<SourceGigImageMirrorResult>;
-  listSourceGigsNeedingImageMirror(): Promise<SourceGigRecord[]>;
+  listSourceGigsNeedingImageMirror(force?: boolean): Promise<SourceGigRecord[]>;
   replaceGigArtists(gigId: string, artists: string[]): Promise<void>;
 }
 

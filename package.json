@@ -7,18 +7,17 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "build": "node scripts/check-node-version.mjs && pnpm --filter @perth-gig-finder/shared build && pnpm --filter @perth-gig-finder/scraper build && pnpm --filter @perth-gig-finder/web build",
-    "dev": "node scripts/check-node-version.mjs && pnpm --filter @perth-gig-finder/web dev",
+    "dev": "node scripts/check-node-version.mjs && pnpm web:dev",
     "local:bootstrap": "pnpm supabase:start && pnpm supabase:reset && pnpm scrape",
-    "local:web:dev": "pnpm --filter @perth-gig-finder/web exec next dev --webpack --hostname 127.0.0.1 --port 3001",
-    "local:web:lan": "pnpm --filter @perth-gig-finder/web exec next dev --webpack --hostname 0.0.0.0 --port 3002",
-    "local:web:phone-proxy": "node scripts/phone-proxy.mjs",
-    "local:web:preview": "node scripts/run-local-preview.mjs",
     "mirror-images": "pnpm --filter @perth-gig-finder/scraper mirror-images",
     "preinstall": "node scripts/check-node-version.mjs",
-    "scrape": "pnpm --filter @perth-gig-finder/scraper scrape",
+    "scrape": "node scripts/ensure-local-supabase.mjs && pnpm --filter @perth-gig-finder/scraper scrape",
     "supabase:keys": "node scripts/print-local-supabase-keys.mjs",
-    "supabase:start": "supabase start -x gotrue,realtime,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor",
+    "supabase:start": "node scripts/ensure-local-supabase.mjs",
     "supabase:reset": "supabase db reset",
-    "test": "node scripts/check-node-version.mjs && pnpm -r test"
+    "test": "node scripts/check-node-version.mjs && pnpm -r test",
+    "verify": "node scripts/check-node-version.mjs && pnpm -r test && pnpm build",
+    "web:dev": "node scripts/ensure-local-supabase.mjs && pnpm --filter @perth-gig-finder/web exec next dev --webpack --hostname 127.0.0.1 --port 3001",
+    "web:preview": "node scripts/ensure-local-supabase.mjs && node scripts/run-preview-server.mjs"
   }
 }

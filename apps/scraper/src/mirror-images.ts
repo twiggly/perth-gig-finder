@@ -13,10 +13,13 @@ export interface MirrorImagesResult {
 
 export async function mirrorPendingSourceGigImages(
   store: GigStore,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  options: {
+    force?: boolean;
+  } = {}
 ): Promise<MirrorImagesResult> {
   await store.ensureImageBucket();
-  const sourceGigs = await store.listSourceGigsNeedingImageMirror();
+  const sourceGigs = await store.listSourceGigsNeedingImageMirror(options.force);
 
   let mirroredCount = 0;
   let failedCount = 0;
@@ -40,7 +43,9 @@ export async function mirrorPendingSourceGigImages(
 
 async function main(): Promise<void> {
   const store = new SupabaseGigStore();
-  const result = await mirrorPendingSourceGigImages(store);
+  const result = await mirrorPendingSourceGigImages(store, fetch, {
+    force: process.argv.includes("--force")
+  });
 
   console.log(JSON.stringify(result, null, 2));
 

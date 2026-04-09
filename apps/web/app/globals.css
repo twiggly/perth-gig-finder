@@ -365,18 +365,27 @@ code {
 .gig-card__media {
   display: block;
   min-width: 0;
-  overflow: hidden;
   align-self: start;
+  overflow: hidden;
   border-radius: 1.05rem;
-  background:
-    radial-gradient(circle at top left, rgba(249, 90, 55, 0.24), transparent 42%),
-    linear-gradient(160deg, rgba(255, 255, 255, 0.1), rgba(11, 9, 16, 0.75));
+  clip-path: inset(0 round 1.05rem);
+  isolation: isolate;
+  position: relative;
 }
 
+.gig-card__media > span {
+  display: block !important;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.gig-card__media img,
 .gig-card__media-image {
   display: block;
   width: 100%;
   height: auto;
+  border-radius: inherit;
+  clip-path: inset(0 round 1.05rem);
 }
 
 .gig-card__media-fallback {
@@ -385,6 +394,8 @@ code {
   aspect-ratio: 2 / 1;
   place-items: end start;
   padding: 1rem;
+  overflow: hidden;
+  border-radius: 1.05rem;
   background:
     radial-gradient(circle at top left, rgba(249, 90, 55, 0.3), transparent 36%),
     linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(11, 9, 16, 0.78));

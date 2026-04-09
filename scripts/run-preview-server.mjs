@@ -1,4 +1,5 @@
 import http from "node:http";
+import { networkInterfaces } from "node:os";
 import { spawn } from "node:child_process";
 
 const upstreamHost = "127.0.0.1";
@@ -7,6 +8,46 @@ const publicHost = "0.0.0.0";
 const publicPort = 3003;
 const previewRevision = Date.now().toString();
 const previewAssetPrefix = `/preview-assets-${previewRevision}`;
+
+function getPreviewUrls() {
+  const interfaces = networkInterfaces();
+  const lanUrls = [];
+  const ignoredPrefixes = ["bridge", "docker", "lo", "utun", "veth"];
+
+  for (const [name, entries] of Object.entries(interfaces)) {
+    if (ignoredPrefixes.some((prefix) => name.startsWith(prefix))) {
+      continue;
+    }
+
+    for (const entry of entries ?? []) {
+      if (entry.family !== "IPv4" || entry.internal) {
+        continue;
+      }
+
+      lanUrls.push(`http://${entry.address}:${publicPort}`);
+    }
+  }
+
+  return {
+    lanUrls: [...new Set(lanUrls)].sort(),
+    localUrl: `http://127.0.0.1:${publicPort}`
+  };
+}
+
+function logPreviewUrls() {
+  const { lanUrls, localUrl } = getPreviewUrls();
+
+  console.log("");
+  console.log("Preview server is ready:");
+  console.log(`- Local: ${localUrl}`);
+
+  for (const lanUrl of lanUrls) {
+    console.log(`- LAN:   ${lanUrl}`);
+  }
+
+  console.log(`- Assets: ${previewAssetPrefix}`);
+  console.log("");
+}
 
 function startProxy() {
   const server = http.createServer((request, response) => {
@@ -48,8 +89,9 @@ function startProxy() {
 
   server.listen(publicPort, publicHost, () => {
     console.log(
-      `Local preview listening on http://${publicHost}:${publicPort} -> http://${upstreamHost}:${upstreamPort} (assets ${previewAssetPrefix})`
+      `Preview proxy listening on http://${publicHost}:${publicPort} -> http://${upstreamHost}:${upstreamPort}`
     );
+    logPreviewUrls();
   });
 
   return server;

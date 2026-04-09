@@ -15,6 +15,7 @@ import type {
 class MirrorOnlyStore implements GigStore {
   readonly sourceGigs = new Map<string, SourceGigRecord>();
   imageBucketEnsured = false;
+  lastForceValue = false;
 
   constructor(sourceGigs: SourceGigRecord[]) {
     for (const sourceGig of sourceGigs) {
@@ -27,6 +28,7 @@ class MirrorOnlyStore implements GigStore {
     name: string;
     baseUrl: string;
     priority: number;
+    isPublicListingSource: boolean;
   }): Promise<SourceRecord> {
     throw new Error("not implemented");
   }
@@ -124,8 +126,11 @@ class MirrorOnlyStore implements GigStore {
     };
   }
 
-  async listSourceGigsNeedingImageMirror(): Promise<SourceGigRecord[]> {
-    return [...this.sourceGigs.values()].filter(shouldMirrorImage);
+  async listSourceGigsNeedingImageMirror(force = false): Promise<SourceGigRecord[]> {
+    this.lastForceValue = force;
+    return force
+      ? [...this.sourceGigs.values()].filter((sourceGig) => Boolean(sourceGig.sourceImageUrl))
+      : [...this.sourceGigs.values()].filter(shouldMirrorImage);
   }
 
   async replaceGigArtists(_gigId: string, _artists: string[]): Promise<void> {
@@ -193,5 +198,31 @@ describe("mirrorPendingSourceGigImages", () => {
       mirroredImageWidth: 1200,
       mirroredImageHeight: 600
     });
+  });
+
+  it("force-remirrors already ready rows", async () => {
+    const store = new MirrorOnlyStore([
+      {
+        id: "source-gig-3",
+        gigId: "gig-3",
+        sourceSlug: "oztix-wa",
+        identityKey: "michael-vdelli",
+        sourceImageUrl: "https://assets.oztix.com.au/image/michael-vdelli.png",
+        mirroredImagePath: "oztix-wa/michael-vdelli/mirrored.png",
+        imageMirrorStatus: "ready",
+        imageMirroredAt: "2026-04-06T09:00:00.000Z",
+        mirroredImageWidth: 1836,
+        mirroredImageHeight: 918
+      }
+    ]);
+
+    const result = await mirrorPendingSourceGigImages(store, fetch, { force: true });
+
+    expect(result).toEqual({
+      discoveredCount: 1,
+      mirroredCount: 1,
+      failedCount: 0
+    });
+    expect(store.lastForceValue).toBe(true);
   });
 });
