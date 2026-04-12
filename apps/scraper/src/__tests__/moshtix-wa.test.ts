@@ -298,6 +298,49 @@ describe("moshtix wa source adapter", () => {
     });
   });
 
+  it("canonicalizes renamed venue labels before storing Moshtix gigs", () => {
+    const listing = parseMoshtixSearchPage(
+      buildSearchPage({
+        results: [
+          buildSearchResult({
+            eventId: "193079",
+            title: "Rosemount Late Show",
+            eventUrl: "https://www.moshtix.com.au/v2/event/rosemount-late-show/193079",
+            imageUrl: "https://static.moshtix.com.au/uploads/rosemountx140x140",
+            startDate: "2026-04-08T20:00:00",
+            endDate: "2026-04-08T23:00:00",
+            venueName: "Four5Nine Bar",
+            streetAddress: "459 Fitzgerald St",
+            locality: "North Perth"
+          })
+        ]
+      })
+    ).listings[0];
+
+    const gig = normalizeMoshtixEventPage({
+      listing,
+      html: buildEventPage({
+        eventId: "193079",
+        title: "Rosemount Late Show",
+        eventUrl: listing.eventUrl,
+        startDate: "2026-04-08T20:00:00",
+        endDate: "2026-04-08T23:00:00",
+        venueName: "Four5Nine Bar",
+        streetAddress: "459 Fitzgerald St",
+        locality: "North Perth",
+        region: "WA",
+        postalCode: "6006",
+        descriptionHtml: "<p>Late live music at the Rosemount.</p>"
+      })
+    });
+
+    expect(gig.venue).toMatchObject({
+      name: "Four5Nine Bar @ Rosemount",
+      slug: "four5nine-bar-rosemount",
+      suburb: "North Perth"
+    });
+  });
+
   it("excludes obvious non-music leaks that still make it through the live-music feed", () => {
     expect(() =>
       normalizeMoshtixEventPage({

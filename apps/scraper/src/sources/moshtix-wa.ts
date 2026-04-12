@@ -2,6 +2,8 @@ import * as cheerio from "cheerio";
 
 import {
   buildGigChecksum,
+  normalizeVenueName,
+  normalizeVenueWebsiteUrl,
   normalizeWhitespace,
   slugifyVenueName,
   type GigStatus,
@@ -307,13 +309,17 @@ function normalizeVenue(input: {
         "Moshtix Venue"
     ) || "Moshtix Venue";
   const { venueName, suburb } = splitVenueNameAndSuburb(rawVenueName, locality);
+  const normalizedVenueName = normalizeVenueName(venueName);
 
   return {
-    name: venueName,
-    slug: slugifyVenueName(venueName),
+    name: normalizedVenueName,
+    slug: slugifyVenueName(normalizedVenueName),
     suburb,
     address: buildPostalAddress(input.structuredEvent?.location?.address),
-    websiteUrl: normalizeUrl(input.structuredEvent?.location?.sameAs ?? null)
+    websiteUrl: normalizeVenueWebsiteUrl(
+      normalizedVenueName,
+      normalizeUrl(input.structuredEvent?.location?.sameAs ?? null)
+    )
   };
 }
 

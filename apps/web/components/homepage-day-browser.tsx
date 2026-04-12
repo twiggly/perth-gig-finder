@@ -9,7 +9,11 @@ import {
   DAY_SWIPE_DURATION_MS,
   getAdjacentDateKey,
   getDayTransition,
+  getHomepageRequestedDateKey,
+  HOMEPAGE_REQUEST_ACTIVE_DATE_EVENT,
   getSwipeDirection,
+  replaceHomepageDateInUrl,
+  syncHomepageActiveDate,
   shouldConsumeLockedTrackpadMomentum,
   TRACKPAD_GESTURE_LOCK_MS,
   type DateGroup,
@@ -87,6 +91,7 @@ export function HomepageDayBrowser({
     lockedUntil: 0
   });
   const [activeDateKey, setActiveDateKey] = useState(initialActiveDateKey);
+  const [openGigId, setOpenGigId] = useState<string | null>(null);
   const [transition, setTransition] = useState<BrowserTransition | null>(null);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(() =>
     typeof window !== "undefined" &&
@@ -124,8 +129,39 @@ export function HomepageDayBrowser({
 
   useEffect(() => {
     setActiveDateKey(initialActiveDateKey);
+    setOpenGigId(null);
     setTransition(null);
   }, [initialActiveDateKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    function handleRequestedActiveDate(event: Event) {
+      const nextDateKey = getHomepageRequestedDateKey(event);
+
+      if (!nextDateKey || !availableDateKeys.includes(nextDateKey)) {
+        return;
+      }
+
+      setTransition(null);
+      setOpenGigId(null);
+      setActiveDateKey(nextDateKey);
+    }
+
+    window.addEventListener(
+      HOMEPAGE_REQUEST_ACTIVE_DATE_EVENT,
+      handleRequestedActiveDate
+    );
+
+    return () => {
+      window.removeEventListener(
+        HOMEPAGE_REQUEST_ACTIVE_DATE_EVENT,
+        handleRequestedActiveDate
+      );
+    };
+  }, [availableDateKeys]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -162,17 +198,7 @@ export function HomepageDayBrowser({
       return;
     }
 
-    const currentParams = new URLSearchParams(window.location.search);
-
-    if (currentParams.get("date") === activeDateKey) {
-      return;
-    }
-
-    currentParams.set("date", activeDateKey);
-    const nextSearch = currentParams.toString();
-    const nextUrl = `${pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
-
-    window.history.replaceState(window.history.state, "", nextUrl);
+    syncHomepageActiveDate(pathname, activeDateKey);
   }, [activeDateKey, pathname]);
 
   useEffect(() => {
@@ -225,21 +251,6 @@ export function HomepageDayBrowser({
     };
   }, []);
 
-  function replaceDateInUrl(dateKey: string) {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const nextParams = new URLSearchParams(window.location.search);
-
-    nextParams.set("date", dateKey);
-
-    const nextSearch = nextParams.toString();
-    const nextUrl = `${pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
-
-    window.history.replaceState(window.history.state, "", nextUrl);
-  }
-
   function clearGesture() {
     gestureRef.current = null;
   }
@@ -266,7 +277,8 @@ export function HomepageDayBrowser({
       return false;
     }
 
-    replaceDateInUrl(nextTransition.toDateKey);
+    replaceHomepageDateInUrl(pathname, nextTransition.toDateKey);
+    setOpenGigId(null);
     wheelGestureRef.current.accumulatedDeltaX = 0;
 
     if (prefersReducedMotion) {
@@ -461,7 +473,17 @@ export function HomepageDayBrowser({
               >
                 <div className="gig-grid" data-date={dateKey}>
                   {day.items.map((gig) => (
-                    <GigCard key={gig.id} gig={gig} />
+                    <GigCard
+                      gig={gig}
+                      isOpen={openGigId === gig.id}
+                      key={gig.id}
+                      onClose={() =>
+                        setOpenGigId((current) => (current === gig.id ? null : current))
+                      }
+                      onToggle={() =>
+                        setOpenGigId((current) => (current === gig.id ? null : gig.id))
+                      }
+                    />
                   ))}
                 </div>
               </div>

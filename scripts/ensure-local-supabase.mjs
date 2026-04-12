@@ -13,6 +13,13 @@ const disabledServices = [
   "supavisor"
 ];
 
+class UserFacingError extends Error {
+  constructor(message, guidance = []) {
+    super(message);
+    this.guidance = guidance;
+  }
+}
+
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -60,22 +67,68 @@ async function ensureDockerRuntime() {
   const hasColima = await succeeds("colima", ["version"]);
 
   if (!hasColima) {
-    throw new Error(
-      "Docker is unavailable and Colima is not installed. Start Docker or install Colima first."
+    throw new UserFacingError(
+      "Docker is unavailable and Colima is not installed.",
+      [
+        "Install Colima or start Docker Desktop manually.",
+        "Then rerun `pnpm supabase:start`."
+      ]
     );
   }
 
   console.log("Docker is not available. Starting Colima...");
-  await run("colima", ["start"]);
+  try {
+    await run("colima", ["start"]);
+  } catch {
+    throw new UserFacingError(
+      "Colima could not be started automatically.",
+      [
+        "Start Colima manually with `colima start`.",
+        "Then rerun `pnpm supabase:start`."
+      ]
+    );
+  }
 
   if (!(await succeeds("docker", ["info"]))) {
-    throw new Error("Docker is still unavailable after starting Colima.");
+    throw new UserFacingError(
+      "Docker is still unavailable after attempting to start Colima.",
+      [
+        "Check `colima status` or Docker Desktop.",
+        "Then rerun `pnpm supabase:start`."
+      ]
+    );
   }
 }
 
 async function ensureLocalSupabase() {
   await ensureDockerRuntime();
-  await run("supabase", ["start", "-x", disabledServices.join(",")]);
+
+  try {
+    await run("supabase", ["start", "-x", disabledServices.join(",")]);
+  } catch {
+    throw new UserFacingError("Local Supabase could not be started.", [
+      "Check Docker and Colima health.",
+      "Then rerun `pnpm supabase:start`."
+    ]);
+  }
 }
 
-await ensureLocalSupabase();
+try {
+  await ensureLocalSupabase();
+} catch (error) {
+  if (error instanceof UserFacingError) {
+    console.error(error.message);
+
+    if (error.guidance.length > 0) {
+      console.error("");
+      for (const step of error.guidance) {
+        console.error(step);
+      }
+    }
+
+    process.exit(1);
+  }
+
+  console.error(error);
+  process.exit(1);
+}

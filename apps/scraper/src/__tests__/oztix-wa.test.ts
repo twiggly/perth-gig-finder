@@ -121,6 +121,64 @@ describe("oztix wa source adapter", () => {
     ).toBe("https://assets.oztix.com.au/image/event.png");
   });
 
+  it("uses real venue website overrides instead of falling back to Oztix", () => {
+    expect(
+      normalizeOztixHit({
+        EventGuid: "rosemount-show",
+        EventName: "The Horrors",
+        DateStart: "2026-04-18T12:00:00",
+        EventUrl: "https://tickets.oztix.com.au/outlet/event/the-horrors",
+        Categories: ["Music"],
+        _geoloc: { lat: -31.9307, lng: 115.8711 },
+        Venue: {
+          Name: "Rosemount Hotel",
+          Locality: "North Perth",
+          Address: "459 Fitzgerald Street"
+        }
+      }).venue.websiteUrl
+    ).toBe("https://www.rosemounthotel.com.au/");
+
+    expect(
+      normalizeOztixHit({
+        EventGuid: "unknown-venue-show",
+        EventName: "Unknown Venue Gig",
+        DateStart: "2026-04-18T12:00:00",
+        EventUrl: "https://tickets.oztix.com.au/outlet/event/unknown",
+        Categories: ["Music"],
+        _geoloc: { lat: -31.9523, lng: 115.8613 },
+        Venue: {
+          Name: "Mystery Room",
+          Locality: "Perth",
+          Address: "123 Example Street"
+        }
+      }).venue.websiteUrl
+    ).toBeNull();
+  });
+
+  it("canonicalizes renamed venue labels before storing Oztix gigs", () => {
+    const gig = normalizeOztixHit({
+      EventGuid: "clancys-fish-pub",
+      EventName: "Late Night Set",
+      DateStart: "2026-04-09T19:30:00",
+      EventUrl: "https://tickets.oztix.com.au/outlet/event/clancys-fish-pub",
+      Categories: ["Music"],
+      _geoloc: { lat: -31.9523, lng: 115.8613 },
+      Venue: {
+        Name: "Clancy's Fish Pub | Freemantle",
+        Locality: "City Beach",
+        Address: "195 Challenger Parade",
+        WebsiteUrl: "https://www.clancysfishpub.com.au"
+      },
+      Bands: ["Late Night Set"]
+    });
+
+    expect(gig.venue).toMatchObject({
+      name: "Clancy's Fish Pub",
+      slug: "clancys-fish-pub",
+      suburb: "City Beach"
+    });
+  });
+
   it("parses WA hits into normalized gigs, skips non-gig events, and counts failures", () => {
     const fixture = JSON.parse(
       readFileSync(resolve(FIXTURE_DIR, "oztix-wa-hits.json"), "utf8")

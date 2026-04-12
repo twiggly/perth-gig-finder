@@ -2,6 +2,8 @@ import * as cheerio from "cheerio";
 
 import {
   buildGigChecksum,
+  normalizeVenueName,
+  normalizeVenueWebsiteUrl,
   normalizeWhitespace,
   slugifyVenueName,
   type GigStatus,
@@ -324,14 +326,17 @@ export function isMusicGigHit(hit: OztixHit): boolean {
 
 function normalizeVenue(hit: OztixHit): NormalizedVenue {
   const venue = hit.Venue;
-  const venueName = normalizeWhitespace(venue?.Name ?? "Oztix Venue");
+  const venueName = normalizeVenueName(normalizeWhitespace(venue?.Name ?? "Oztix Venue"));
 
   return {
     name: venueName,
     slug: slugifyVenueName(venueName),
     suburb: venue?.Locality ? normalizeWhitespace(venue.Locality) : null,
     address: venue?.Address ? normalizeWhitespace(venue.Address) : null,
-    websiteUrl: normalizeUrl(venue?.WebsiteUrl) ?? "https://www.oztix.com.au"
+    websiteUrl: normalizeVenueWebsiteUrl(
+      venueName,
+      normalizeUrl(venue?.WebsiteUrl)
+    )
   };
 }
 

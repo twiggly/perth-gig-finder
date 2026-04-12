@@ -5,10 +5,17 @@ import {
   DAY_SWIPE_DURATION_MS,
   formatDateHeading,
   getAdjacentDateKey,
+  getDateShortcutLabel,
+  getDateShortcutTarget,
+  getTodayShortcutLabel,
+  getTodayShortcutState,
   getDayTransition,
+  getHomepageLowerBound,
+  isWeekendShortcutActiveDate,
   getPerthDateKey,
   getSwipeDirection,
   isTrackpadHorizontalIntent,
+  resolveHomepageDateKey,
   shouldConsumeLockedTrackpadMomentum,
   TRACKPAD_HORIZONTAL_BIAS_RATIO,
   TRACKPAD_GESTURE_LOCK_MS,
@@ -60,6 +67,254 @@ describe("resolveActiveDateKey", () => {
 
   it("keeps a valid requested date", () => {
     expect(resolveActiveDateKey(availableDateKeys, "2026-04-07")).toBe("2026-04-07");
+  });
+});
+
+describe("getDateShortcutTarget", () => {
+  it("jumps to today when that date exists", () => {
+    expect(
+      getDateShortcutTarget(
+        ["2026-04-10", "2026-04-11", "2026-04-12"],
+        "today",
+        new Date("2026-04-10T02:00:00.000Z")
+      )
+    ).toBe("2026-04-10");
+  });
+
+  it("falls back to the nearest available day when today is inaccessible", () => {
+    expect(
+      getDateShortcutTarget(
+        ["2026-04-11", "2026-04-12"],
+        "today",
+        new Date("2026-04-10T18:00:00.000Z")
+      )
+    ).toBe("2026-04-11");
+  });
+
+  it("prefers the upcoming Friday for the weekend shortcut on weekdays", () => {
+    expect(
+      getDateShortcutTarget(
+        ["2026-04-08", "2026-04-10", "2026-04-11"],
+        "weekend",
+        new Date("2026-04-08T02:00:00.000Z")
+      )
+    ).toBe("2026-04-10");
+  });
+
+  it("falls through to Saturday or Sunday within the current weekend only", () => {
+    expect(
+      getDateShortcutTarget(
+        ["2026-04-11", "2026-04-12", "2026-04-17"],
+        "weekend",
+        new Date("2026-04-08T02:00:00.000Z")
+      )
+    ).toBe("2026-04-11");
+  });
+
+  it("stays on the current Friday once the weekend has started", () => {
+    expect(
+      getDateShortcutTarget(
+        ["2026-04-10", "2026-04-11", "2026-04-12", "2026-04-17"],
+        "weekend",
+        new Date("2026-04-10T04:00:00.000Z")
+      )
+    ).toBe("2026-04-10");
+  });
+
+  it("jumps to next Friday once the current weekend has started", () => {
+    expect(
+      getDateShortcutTarget(
+        ["2026-04-11", "2026-04-12", "2026-04-17", "2026-04-18"],
+        "weekend",
+        new Date("2026-04-12T04:00:00.000Z")
+      )
+    ).toBe("2026-04-17");
+  });
+
+  it("falls back to the first later weekend day when next Friday is unavailable", () => {
+    expect(
+      getDateShortcutTarget(
+        ["2026-04-11", "2026-04-12", "2026-04-18", "2026-04-20"],
+        "weekend",
+        new Date("2026-04-12T04:00:00.000Z")
+      )
+    ).toBe("2026-04-18");
+  });
+
+  it("does not fall through to a later unrelated weekend", () => {
+    expect(
+      getDateShortcutTarget(
+        ["2026-04-17", "2026-04-18"],
+        "weekend",
+        new Date("2026-04-08T02:00:00.000Z")
+      )
+    ).toBeNull();
+  });
+});
+
+describe("getDateShortcutLabel", () => {
+  it("uses This weekend on weekdays", () => {
+    expect(getDateShortcutLabel("weekend", new Date("2026-04-08T02:00:00.000Z"))).toBe(
+      "This weekend"
+    );
+  });
+
+  it("uses Next weekend once it is already Saturday or Sunday", () => {
+    expect(getDateShortcutLabel("weekend", new Date("2026-04-11T04:00:00.000Z"))).toBe(
+      "Next weekend"
+    );
+    expect(getDateShortcutLabel("weekend", new Date("2026-04-12T04:00:00.000Z"))).toBe(
+      "Next weekend"
+    );
+  });
+});
+
+describe("getTodayShortcutLabel", () => {
+  it("uses Today when the current date is accessible", () => {
+    expect(
+      getTodayShortcutLabel(
+        ["2026-04-10", "2026-04-11"],
+        new Date("2026-04-10T02:00:00.000Z")
+      )
+    ).toBe("Today");
+  });
+
+  it("uses Nearest day when filters block access to today", () => {
+    expect(
+      getTodayShortcutLabel(
+        ["2026-04-11", "2026-04-12"],
+        new Date("2026-04-10T10:00:00.000Z")
+      )
+    ).toBe("Nearest day");
+  });
+});
+
+describe("getTodayShortcutState", () => {
+  it("keeps the real current day as both the label and target when available", () => {
+    expect(
+      getTodayShortcutState(
+        ["2026-04-10", "2026-04-11"],
+        new Date("2026-04-10T02:00:00.000Z")
+      )
+    ).toEqual({
+      label: "Today",
+      nearestDateKey: null,
+      targetDateKey: "2026-04-10",
+      todayDateKey: "2026-04-10"
+    });
+  });
+
+  it("uses a separate nearest-day fallback when today is unavailable", () => {
+    expect(
+      getTodayShortcutState(
+        ["2026-04-11", "2026-04-12"],
+        new Date("2026-04-10T10:00:00.000Z")
+      )
+    ).toEqual({
+      label: "Nearest day",
+      nearestDateKey: "2026-04-11",
+      targetDateKey: "2026-04-11",
+      todayDateKey: null
+    });
+  });
+});
+
+describe("isWeekendShortcutActiveDate", () => {
+  it("treats Friday through Sunday of the current weekend as active on weekdays", () => {
+    const now = new Date("2026-04-08T02:00:00.000Z");
+
+    expect(isWeekendShortcutActiveDate("2026-04-10", now)).toBe(true);
+    expect(isWeekendShortcutActiveDate("2026-04-11", now)).toBe(true);
+    expect(isWeekendShortcutActiveDate("2026-04-12", now)).toBe(true);
+    expect(isWeekendShortcutActiveDate("2026-04-17", now)).toBe(false);
+  });
+
+  it("treats only the next weekend as active on Saturday and Sunday", () => {
+    const now = new Date("2026-04-11T04:00:00.000Z");
+
+    expect(isWeekendShortcutActiveDate("2026-04-10", now)).toBe(false);
+    expect(isWeekendShortcutActiveDate("2026-04-11", now)).toBe(false);
+    expect(isWeekendShortcutActiveDate("2026-04-12", now)).toBe(false);
+    expect(isWeekendShortcutActiveDate("2026-04-17", now)).toBe(true);
+    expect(isWeekendShortcutActiveDate("2026-04-18", now)).toBe(true);
+    expect(isWeekendShortcutActiveDate("2026-04-19", now)).toBe(true);
+  });
+});
+
+describe("getHomepageLowerBound", () => {
+  it("does not reopen past dates on Saturday", () => {
+    expect(
+      getHomepageLowerBound(new Date("2026-04-11T04:00:00.000Z")).toISOString()
+    ).toBe("2026-04-11T04:00:00.000Z");
+  });
+
+  it("does not reopen past dates on Sunday", () => {
+    expect(
+      getHomepageLowerBound(new Date("2026-04-12T04:00:00.000Z")).toISOString()
+    ).toBe("2026-04-12T04:00:00.000Z");
+  });
+
+  it("uses the current time outside the weekend", () => {
+    expect(
+      getHomepageLowerBound(new Date("2026-04-08T02:00:00.000Z")).toISOString()
+    ).toBe("2026-04-08T02:00:00.000Z");
+  });
+});
+
+describe("resolveHomepageDateKey", () => {
+  it("uses a valid explicit date before considering a legacy shortcut", () => {
+    expect(
+      resolveHomepageDateKey(
+        ["2026-04-10", "2026-04-11"],
+        "2026-04-11",
+        "today",
+        new Date("2026-04-10T02:00:00.000Z")
+      )
+    ).toBe("2026-04-11");
+  });
+
+  it("maps legacy weekend links into the matching shortcut target", () => {
+    expect(
+      resolveHomepageDateKey(
+        ["2026-04-11", "2026-04-12", "2026-04-17"],
+        "",
+        "weekend",
+        new Date("2026-04-11T04:00:00.000Z")
+      )
+    ).toBe("2026-04-17");
+  });
+
+  it("maps legacy today links to the real current date when available", () => {
+    expect(
+      resolveHomepageDateKey(
+        ["2026-04-10", "2026-04-11"],
+        "",
+        "today",
+        new Date("2026-04-10T02:00:00.000Z")
+      )
+    ).toBe("2026-04-10");
+  });
+
+  it("maps legacy today links to the nearest future day when today is unavailable", () => {
+    expect(
+      resolveHomepageDateKey(
+        ["2026-04-11", "2026-04-12"],
+        "",
+        "today",
+        new Date("2026-04-10T10:00:00.000Z")
+      )
+    ).toBe("2026-04-11");
+  });
+
+  it("falls back to the first available day when a legacy weekend target is unavailable", () => {
+    expect(
+      resolveHomepageDateKey(
+        ["2026-04-14", "2026-04-15", "2026-04-17"],
+        "",
+        "weekend",
+        new Date("2026-04-08T02:00:00.000Z")
+      )
+    ).toBe("2026-04-14");
   });
 });
 

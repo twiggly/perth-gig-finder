@@ -2,6 +2,15 @@ import { createHash } from "node:crypto";
 
 const NON_ALPHANUMERIC = /[^a-z0-9]+/g;
 const APOSTROPHES = /['’]/g;
+const VENUE_NAME_OVERRIDES = new Map<string, string>([
+  ["clancys-fish-pub-freemantle", "Clancy's Fish Pub"],
+  ["clancys-fish-pub-fremantle", "Clancy's Fish Pub"],
+  ["four5nine-bar", "Four5Nine Bar @ Rosemount"]
+]);
+const VENUE_WEBSITE_OVERRIDES = new Map<string, string>([
+  ["four5nine-bar-rosemount", "https://www.rosemounthotel.com.au/"],
+  ["rosemount-hotel", "https://www.rosemounthotel.com.au/"]
+]);
 
 export function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -23,8 +32,26 @@ export function normalizeTitleForMatch(value: string): string {
   return slugify(value);
 }
 
+export function normalizeVenueName(value: string): string {
+  const normalized = normalizeWhitespace(value);
+  const lookupKey = slugify(normalized.replace(APOSTROPHES, ""));
+
+  return VENUE_NAME_OVERRIDES.get(lookupKey) ?? normalized;
+}
+
 export function slugifyVenueName(value: string): string {
-  return slugify(value.replace(APOSTROPHES, ""));
+  return slugify(normalizeVenueName(value).replace(APOSTROPHES, ""));
+}
+
+export function normalizeVenueWebsiteUrl(
+  venueName: string,
+  websiteUrl: string | null
+): string | null {
+  if (websiteUrl) {
+    return normalizeWhitespace(websiteUrl);
+  }
+
+  return VENUE_WEBSITE_OVERRIDES.get(slugifyVenueName(venueName)) ?? null;
 }
 
 export function buildGigSlug(input: {

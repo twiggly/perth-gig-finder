@@ -33,4 +33,3 @@ export function createSupabaseServerClient(): SupabaseClient {
     }
   });
 }
-

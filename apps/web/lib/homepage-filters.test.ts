@@ -2,13 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildHomepageFilterHref,
-  getWhenBounds,
   matchesGigQuery,
   parseHomepageFilters
 } from "./homepage-filters";
 
 describe("parseHomepageFilters", () => {
-  it("keeps valid date filters and repeated venue slugs", () => {
+  it("keeps repeated venue slugs and only preserves legacy today/weekend links", () => {
     expect(
       parseHomepageFilters({
         date: "2026-04-06",
@@ -18,23 +17,23 @@ describe("parseHomepageFilters", () => {
       })
     ).toEqual({
       date: "2026-04-06",
+      legacyWhen: "weekend",
       q: "jazz",
-      venueSlugs: ["milk-bar", "the-bird"],
-      when: "weekend"
+      venueSlugs: ["milk-bar", "the-bird"]
     });
   });
 
-  it("falls back to all when the date filter is invalid", () => {
+  it("drops unsupported legacy when values", () => {
     expect(
       parseHomepageFilters({
         q: "funk",
-        when: "tomorrow"
+        when: "next7days"
       })
     ).toEqual({
       date: "",
+      legacyWhen: null,
       q: "funk",
-      venueSlugs: [],
-      when: "all"
+      venueSlugs: []
     });
   });
 });
@@ -47,7 +46,7 @@ describe("buildHomepageFilterHref", () => {
         "q=jazz&when=weekend&venue=milk-bar&date=2026-04-08",
         { q: "funk" }
       )
-    ).toBe("/?q=funk&when=weekend&venue=milk-bar");
+    ).toBe("/?q=funk&venue=milk-bar");
   });
 
   it("clears the active date when venue filters change", () => {
@@ -60,26 +59,16 @@ describe("buildHomepageFilterHref", () => {
     ).toBe("/?q=jazz&venue=milk-bar&venue=the-bird");
   });
 
+  it("sets the requested date and strips legacy when params", () => {
+    expect(
+      buildHomepageFilterHref("/", "q=jazz&when=today", { date: "2026-04-10" })
+    ).toBe("/?q=jazz&date=2026-04-10");
+  });
+
   it("keeps the active date when the submitted filters are unchanged", () => {
     expect(
       buildHomepageFilterHref("/", "q=jazz&date=2026-04-08", { q: " jazz " })
     ).toBe("/?q=jazz&date=2026-04-08");
-  });
-});
-
-describe("getWhenBounds", () => {
-  it("returns the next Friday to Monday window on a weekday", () => {
-    const bounds = getWhenBounds("weekend", new Date("2026-04-06T02:00:00.000Z"));
-
-    expect(bounds.startAt.toISOString()).toBe("2026-04-09T16:00:00.000Z");
-    expect(bounds.endAt?.toISOString()).toBe("2026-04-12T16:00:00.000Z");
-  });
-
-  it("keeps the current weekend window on Saturday", () => {
-    const bounds = getWhenBounds("weekend", new Date("2026-04-11T04:00:00.000Z"));
-
-    expect(bounds.startAt.toISOString()).toBe("2026-04-09T16:00:00.000Z");
-    expect(bounds.endAt?.toISOString()).toBe("2026-04-12T16:00:00.000Z");
   });
 });
 

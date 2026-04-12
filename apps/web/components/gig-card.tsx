@@ -1,5 +1,9 @@
+"use client";
+
+import { useEffect, useRef } from "react";
 import Image from "next/image";
 
+import { getGigActions } from "@/lib/gig-actions";
 import { getGigImageUrl, type GigCardRecord } from "@/lib/gigs";
 
 function formatGigDate(value: string): string {
@@ -14,7 +18,17 @@ function formatVenueLine(gig: GigCardRecord): string {
   return gig.venue_suburb ? `${gig.venue_name}, ${gig.venue_suburb}` : gig.venue_name;
 }
 
-export function GigCard({ gig }: { gig: GigCardRecord }) {
+interface GigCardProps {
+  gig: GigCardRecord;
+  isOpen: boolean;
+  onClose: () => void;
+  onToggle: () => void;
+}
+
+export function GigCard({ gig, isOpen, onClose, onToggle }: GigCardProps) {
+  const articleRef = useRef<HTMLElement>(null);
+  const actions = getGigActions(gig);
+  const isActionable = actions.length > 0;
   const imageUrl = getGigImageUrl(gig);
   const hasRenderableImage =
     Boolean(imageUrl) &&
@@ -24,9 +38,46 @@ export function GigCard({ gig }: { gig: GigCardRecord }) {
     gig.image_height > 0;
   const imageWidth = hasRenderableImage ? gig.image_width! : undefined;
   const imageHeight = hasRenderableImage ? gig.image_height! : undefined;
+  const articleClassName = [
+    "gig-card",
+    isActionable ? "gig-card--interactive" : "",
+    isOpen ? "gig-card--open" : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  return (
-    <article className="gig-card">
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (
+        articleRef.current &&
+        event.target instanceof Node &&
+        !articleRef.current.contains(event.target)
+      ) {
+        onClose();
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
+  const content = (
+    <>
       <div className="gig-card__media">
         {hasRenderableImage && imageUrl ? (
           <Image
@@ -48,15 +99,48 @@ export function GigCard({ gig }: { gig: GigCardRecord }) {
         <h2>{gig.title}</h2>
         <p className="gig-card__venue">{formatVenueLine(gig)}</p>
         <p className="gig-card__time">{formatGigDate(gig.starts_at)}</p>
-        <a
-          className="gig-card__link"
-          href={gig.ticket_url ?? gig.source_url}
-          rel="noreferrer"
-          target="_blank"
-        >
-          View listing
-        </a>
       </div>
+    </>
+  );
+
+  return (
+    <article className={articleClassName} ref={articleRef}>
+      {isActionable ? (
+        <button
+          aria-expanded={isOpen}
+          aria-haspopup="dialog"
+          aria-label={`Open links for ${gig.title}`}
+          className="gig-card__surface gig-card__surface--interactive"
+          onClick={onToggle}
+          type="button"
+        >
+          {content}
+        </button>
+      ) : (
+        <div className="gig-card__surface gig-card__surface--static">{content}</div>
+      )}
+      {isOpen ? (
+        <div
+          aria-label={`${gig.title} links`}
+          className="gig-card__popover"
+          role="dialog"
+        >
+          <div className="gig-card__actions">
+            {actions.map((action) => (
+              <a
+                className="gig-card__action"
+                href={action.href}
+                key={action.key}
+                onClick={onClose}
+                rel="noreferrer"
+                target="_blank"
+              >
+                {action.label}
+              </a>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </article>
   );
 }

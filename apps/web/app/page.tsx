@@ -2,7 +2,7 @@ import { HomepageFilters } from "@/components/homepage-filters";
 import { HomepageDayBrowser } from "@/components/homepage-day-browser";
 import {
   groupItemsByPerthDate,
-  resolveActiveDateKey
+  resolveHomepageDateKey
 } from "@/lib/homepage-dates";
 import { parseHomepageFilters } from "@/lib/homepage-filters";
 import { listUpcomingGigs } from "@/lib/gigs";
@@ -20,14 +20,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
   return (
     <main className="page-shell">
-      <section className="hero">
-        <div className="hero__eyebrow">Perth live music, cleaned up</div>
-        <h1>Perth Gig Finder</h1>
-        <p>
-          One list of upcoming Perth gigs, sourced from venue pages and normalized
-          into a single local database.
-        </p>
-      </section>
       {isSupabaseConfigured() ? (
         <ConfiguredHomepage filters={filters} />
       ) : (
@@ -48,30 +40,31 @@ async function ConfiguredHomepage({
 }: {
   filters: ReturnType<typeof parseHomepageFilters>;
 }) {
+  const now = new Date();
   const [gigs, selectedVenues] = await Promise.all([
     listUpcomingGigs(filters),
     listSelectedVenues(filters.venueSlugs)
   ]);
-  const hasActiveFilters =
-    filters.q.length > 0 ||
-    filters.when !== "all" ||
-    selectedVenues.length > 0;
+  const hasActiveFilters = filters.q.length > 0 || selectedVenues.length > 0;
   const groupedGigs = groupItemsByPerthDate(gigs);
   const availableDays = groupedGigs.map((group) => ({
     dateKey: group.dateKey,
     heading: group.heading
   }));
-  const activeDateKey = resolveActiveDateKey(
+  const activeDateKey = resolveHomepageDateKey(
     availableDays.map((day) => day.dateKey),
-    filters.date
+    filters.date,
+    filters.legacyWhen,
+    now
   );
-  const dayBrowserKey = [filters.q, filters.when, filters.venueSlugs.join("|")].join("::");
+  const dayBrowserKey = [filters.q, filters.venueSlugs.join("|")].join("::");
 
   return (
     <>
       <HomepageFilters
+        activeDateKey={activeDateKey}
+        availableDateKeys={availableDays.map((day) => day.dateKey)}
         currentQuery={filters.q}
-        currentWhen={filters.when}
         resultCount={gigs.length}
         selectedVenues={selectedVenues}
       />
@@ -84,7 +77,7 @@ async function ConfiguredHomepage({
           </p>
           <p>
             {hasActiveFilters
-              ? "Try another venue, widen the date range, or clear the search."
+              ? "Try another venue, change the search, or clear the filters."
               : "Run the scraper once and this page will fill with upcoming shows."}
           </p>
         </section>

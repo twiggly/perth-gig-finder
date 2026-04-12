@@ -1,6 +1,7 @@
 import type { GigStatus } from "@perth-gig-finder/shared";
 
-import { getWhenBounds, matchesGigQuery, type HomepageFilters } from "./homepage-filters";
+import { matchesGigQuery, type HomepageFilters } from "./homepage-filters";
+import { getHomepageLowerBound } from "./homepage-dates";
 import { createSupabaseServerClient } from "./supabase";
 
 export interface GigCardRecord {
@@ -20,6 +21,7 @@ export interface GigCardRecord {
   venue_slug: string;
   venue_name: string;
   venue_suburb: string | null;
+  venue_website_url: string | null;
   status: GigStatus;
 }
 
@@ -27,21 +29,15 @@ export async function listUpcomingGigs(
   filters: HomepageFilters
 ): Promise<GigCardRecord[]> {
   const client = createSupabaseServerClient();
-  const now = new Date();
-  const { startAt, endAt } = getWhenBounds(filters.when, now);
-  const lowerBound = startAt > now ? startAt : now;
+  const lowerBound = getHomepageLowerBound(new Date());
   let query = client
     .from("gig_cards")
     .select(
-      "id, slug, title, starts_at, artist_names, image_path, source_image_url, image_width, image_height, image_version, ticket_url, source_url, source_name, venue_slug, venue_name, venue_suburb, status"
+      "id, slug, title, starts_at, artist_names, image_path, source_image_url, image_width, image_height, image_version, ticket_url, source_url, source_name, venue_slug, venue_name, venue_suburb, venue_website_url, status"
     )
     .eq("status", "active")
     .gte("starts_at", lowerBound.toISOString())
     .order("starts_at", { ascending: true });
-
-  if (endAt) {
-    query = query.lt("starts_at", endAt.toISOString());
-  }
 
   if (filters.venueSlugs.length > 0) {
     query = query.in("venue_slug", filters.venueSlugs);

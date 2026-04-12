@@ -66,11 +66,6 @@ export async function listVenueSuggestions(
   excludedSlugs: string[] = []
 ): Promise<VenueOption[]> {
   const normalizedQuery = normalizeSearchText(query);
-
-  if (!normalizedQuery) {
-    return [];
-  }
-
   const client = createSupabaseServerClient();
   const { data, error } = await client
     .from("venues")
@@ -90,15 +85,21 @@ export async function listVenueSuggestions(
     const normalizedName = normalizeSearchText(venue.name);
     const normalizedSuburb = normalizeSearchText(venue.suburb ?? "");
 
+    if (!normalizedQuery) {
+      return true;
+    }
+
     return (
       normalizedName.includes(normalizedQuery) ||
       normalizedSuburb.includes(normalizedQuery)
     );
   });
 
-  return venues
-    .sort((left, right) =>
-      compareVenueSuggestions(left, right, normalizedQuery)
-    )
-    .slice(0, 8);
+  if (!normalizedQuery) {
+    return venues.sort((left, right) => left.name.localeCompare(right.name, "en-AU"));
+  }
+
+  return venues.sort((left, right) =>
+    compareVenueSuggestions(left, right, normalizedQuery)
+  );
 }

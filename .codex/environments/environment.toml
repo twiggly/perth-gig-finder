@@ -2,7 +2,7 @@ version = 1
 name = "Perth Gig Finder"
 
 [setup]
-script = "./scripts/with-supported-node.sh pnpm install"
+script = "CI=true ./scripts/with-supported-node.sh pnpm install --frozen-lockfile"
 
 [[actions]]
 name = "Bootstrap Local"
@@ -33,3 +33,8 @@ command = "./scripts/with-supported-node.sh pnpm test"
 name = "Build App"
 icon = "run"
 command = "./scripts/with-supported-node.sh pnpm build"
+
+[[actions]]
+name = "Repair Local"
+icon = "run"
+command = "./scripts/with-supported-node.sh pnpm local:repair"

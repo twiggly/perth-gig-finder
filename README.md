@@ -146,8 +146,10 @@ pnpm verify
 2. Start the local Supabase stack:
 
    ```bash
-   supabase start -x gotrue,realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+   pnpm supabase:start
    ```
+
+   If Docker is unavailable, start Colima or Docker Desktop manually first, then rerun the command.
 
 3. Print the local API keys from the running gateway container:
 
@@ -181,7 +183,8 @@ pnpm verify
   ```
 
   This is the hot-reloading local development server at `http://127.0.0.1:3001`.
-  It will bring Colima and the local Supabase stack up automatically when needed.
+  It now fails fast if local config, Docker, or Supabase are not ready.
+  Start local infra first with `pnpm supabase:start`.
 
 - Preview server:
 
@@ -192,9 +195,9 @@ pnpm verify
   This serves the production-style preview on your Mac at `http://127.0.0.1:3003`
   and on the same Wi-Fi network via your Mac's LAN IP. It is the same preview on
   desktop and phone; the phone just accesses it over LAN.
-  It also auto-starts Colima and Supabase before the preview build runs, and it
-  builds from an isolated temp workspace so preview runs do not churn tracked
-  Next.js files in the main checkout.
+  It uses the same fail-fast preflight as `pnpm web:dev`, and it builds from an
+  isolated temp workspace so preview runs do not churn tracked Next.js files in
+  the main checkout.
 
 ### Verification
 
@@ -209,3 +212,27 @@ pnpm verify
   ```bash
   pnpm verify
   ```
+
+### Troubleshooting
+
+- Docker or Colima unavailable:
+
+  ```bash
+  colima start
+  pnpm supabase:start
+  ```
+
+- Supabase unhealthy:
+
+  ```bash
+  pnpm supabase:start
+  ```
+
+- Next hangs before `Ready`, imports behave strangely, or local build output looks stale:
+
+  ```bash
+  pnpm local:repair
+  ```
+
+  This clears the workspace `node_modules` tree and local Next build output, then
+  reinstalls from the lockfile.

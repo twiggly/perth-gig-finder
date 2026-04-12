@@ -40,6 +40,7 @@ interface SourceRow {
 interface VenueRow {
   id: string;
   slug: string;
+  website_url?: string | null;
 }
 
 interface GigRow {
@@ -203,15 +204,28 @@ export class SupabaseGigStore implements GigStore {
   }
 
   async upsertVenue(gig: NormalizedGig): Promise<VenueRecord> {
+    const venueSlug = gig.venue.slug || slugifyVenueName(gig.venue.name);
+    const { data: existingVenue, error: existingVenueError } = await this.client
+      .from("venues")
+      .select("id, slug, website_url")
+      .eq("slug", venueSlug)
+      .maybeSingle<VenueRow>();
+
+    if (existingVenueError) {
+      throw new Error(
+        `Unable to look up venue before upsert: ${existingVenueError.message ?? "unknown error"}`
+      );
+    }
+
     const { data, error } = await this.client
       .from("venues")
       .upsert(
         {
-          slug: gig.venue.slug || slugifyVenueName(gig.venue.name),
+          slug: venueSlug,
           name: gig.venue.name,
           suburb: gig.venue.suburb,
           address: gig.venue.address,
-          website_url: gig.venue.websiteUrl
+          website_url: gig.venue.websiteUrl ?? existingVenue?.website_url ?? null
         },
         { onConflict: "slug" }
       )
