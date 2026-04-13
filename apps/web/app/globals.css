@@ -17,6 +17,7 @@
   --shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
   --font-display: "Space Grotesk Variable", "Avenir Next", "Segoe UI", sans-serif;
   --font-body: "Source Serif 4", Georgia, serif;
+  color-scheme: dark;
 }
 
 * {
@@ -24,10 +25,8 @@
 }
 
 html {
-  background:
-    radial-gradient(circle at top left, rgba(249, 90, 55, 0.18), transparent 28%),
-    radial-gradient(circle at top right, rgba(60, 38, 144, 0.28), transparent 30%),
-    linear-gradient(180deg, #0d0b11 0%, #17131f 48%, #0e0b13 100%);
+  background-color: var(--bg);
+  overflow-y: scroll;
 }
 
 body {
@@ -35,6 +34,10 @@ body {
   min-height: 100vh;
   color: var(--text);
   font-family: var(--font-body), serif;
+  background:
+    radial-gradient(circle at top left, rgba(249, 90, 55, 0.18), transparent 28%),
+    radial-gradient(circle at top right, rgba(60, 38, 144, 0.28), transparent 30%),
+    linear-gradient(180deg, #0d0b11 0%, #17131f 48%, #0e0b13 100%);
 }
 
 a {

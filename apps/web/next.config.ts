@@ -78,6 +78,7 @@ const nextConfig: NextConfig = {
     // image optimizer needs this enabled to serve mirrored gig artwork locally.
     dangerouslyAllowLocalIP: true,
     imageSizes: [88, 115, 168, 176, 230, 336],
+    qualities: [72, 75],
     remotePatterns: getImageRemotePatterns()
   },
   transpilePackages: ["@perth-gig-finder/shared"]
