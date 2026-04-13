@@ -65,7 +65,6 @@ async function ConfiguredHomepage({
         activeDateKey={activeDateKey}
         availableDateKeys={availableDays.map((day) => day.dateKey)}
         currentQuery={filters.q}
-        resultCount={gigs.length}
         selectedVenues={selectedVenues}
       />
       {gigs.length === 0 || !activeDateKey ? (

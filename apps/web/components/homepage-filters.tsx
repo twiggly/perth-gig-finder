@@ -8,6 +8,7 @@ import {
   useState,
   useTransition
 } from "react";
+import { flushSync } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 
 import {
@@ -42,7 +43,6 @@ interface HomepageFiltersProps {
   activeDateKey: string | null;
   availableDateKeys: string[];
   currentQuery: string;
-  resultCount: number;
   selectedVenues: VenueOption[];
 }
 
@@ -138,7 +138,6 @@ export function HomepageFilters({
   activeDateKey,
   availableDateKeys,
   currentQuery,
-  resultCount,
   selectedVenues
 }: HomepageFiltersProps) {
   const previewAssetRevision = LOCAL_PREVIEW_ASSET_REVISION;
@@ -147,6 +146,7 @@ export function HomepageFilters({
   const searchMenuRef = useRef<HTMLFormElement | null>(null);
   const venueMenuRef = useRef<HTMLDivElement | null>(null);
   const venueSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const shouldAutoFocusVenueInputRef = useRef(false);
   const pathname = usePathname();
   const router = useRouter();
   const [currentActiveDateKey, setCurrentActiveDateKey] = useState(activeDateKey);
@@ -182,7 +182,6 @@ export function HomepageFilters({
   const combinedSearchSuggestions = searchAction
     ? [searchAction, ...searchSuggestions]
     : [];
-  const hasActiveFilters = currentQuery.length > 0 || selectedVenueSlugs.length > 0;
 
   useEffect(() => {
     setCurrentActiveDateKey(activeDateKey);
@@ -345,7 +344,12 @@ export function HomepageFilters({
       return;
     }
 
+    if (!shouldAutoFocusVenueInputRef.current) {
+      return;
+    }
+
     venueSearchInputRef.current?.focus();
+    shouldAutoFocusVenueInputRef.current = false;
   }, [isVenueMenuOpen]);
 
   useEffect(() => {
@@ -418,6 +422,14 @@ export function HomepageFilters({
         router.replace(href);
       }
     });
+  }
+
+  function handleDateShortcutNavigation(requestedDateKey: string) {
+    flushSync(() => {
+      setCurrentActiveDateKey(requestedDateKey);
+    });
+
+    navigate({ date: requestedDateKey });
   }
 
   function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -673,6 +685,18 @@ export function HomepageFilters({
             className={`venue-menu__trigger${
               isVenueMenuOpen ? " venue-menu__trigger--open" : ""
             }`}
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter" ||
+                event.key === " " ||
+                event.key === "ArrowDown"
+              ) {
+                shouldAutoFocusVenueInputRef.current = true;
+              }
+            }}
+            onPointerDown={() => {
+              shouldAutoFocusVenueInputRef.current = false;
+            }}
             onClick={() => {
               closeSearchMenu();
               setIsVenueMenuOpen((current) => !current);
@@ -778,29 +802,6 @@ export function HomepageFilters({
         </div>
       </div>
 
-      <div className="filter-panel__meta">
-        <p>
-          {resultCount === 1
-            ? "1 upcoming gig matches these filters."
-            : `${resultCount} upcoming gigs match these filters.`}
-        </p>
-        {hasActiveFilters ? (
-          <button
-            className="filter-panel__reset"
-            disabled={isPending}
-            onClick={() =>
-              navigate({
-                q: "",
-                venues: []
-              })
-            }
-            type="button"
-          >
-            Reset all
-          </button>
-        ) : null}
-      </div>
-
       {selectedVenues.length > 0 ? (
         <div className="filter-chips" role="list" aria-label="Selected venues">
           {selectedVenues.map((venue) => (
@@ -854,10 +855,7 @@ export function HomepageFilters({
                 className="date-pill"
                 disabled={isPending}
                 key={option.value}
-                onClick={() => {
-                  setCurrentActiveDateKey(targetDateKey);
-                  navigate({ date: targetDateKey });
-                }}
+                onClick={() => handleDateShortcutNavigation(targetDateKey)}
                 type="button"
               >
                 {option.value === "today"

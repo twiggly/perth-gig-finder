@@ -10,6 +10,7 @@ import {
   getTodayShortcutLabel,
   getTodayShortcutState,
   getDayTransition,
+  getRequestedDayTransition,
   getHomepageLowerBound,
   isWeekendShortcutActiveDate,
   getPerthDateKey,
@@ -216,6 +217,60 @@ describe("getTodayShortcutState", () => {
       targetDateKey: "2026-04-11",
       todayDateKey: null
     });
+  });
+});
+
+describe("getRequestedDayTransition", () => {
+  const availableDateKeys = [
+    "2026-04-10",
+    "2026-04-11",
+    "2026-04-12",
+    "2026-04-17"
+  ];
+
+  it("returns a next transition for later requested dates", () => {
+    expect(
+      getRequestedDayTransition(
+        availableDateKeys,
+        "2026-04-10",
+        "2026-04-17"
+      )
+    ).toEqual({
+      direction: "next",
+      fromDateKey: "2026-04-10",
+      toDateKey: "2026-04-17"
+    });
+  });
+
+  it("returns a previous transition for earlier requested dates", () => {
+    expect(
+      getRequestedDayTransition(
+        availableDateKeys,
+        "2026-04-17",
+        "2026-04-10"
+      )
+    ).toEqual({
+      direction: "previous",
+      fromDateKey: "2026-04-17",
+      toDateKey: "2026-04-10"
+    });
+  });
+
+  it("returns null for identical or unavailable requested dates", () => {
+    expect(
+      getRequestedDayTransition(
+        availableDateKeys,
+        "2026-04-10",
+        "2026-04-10"
+      )
+    ).toBeNull();
+    expect(
+      getRequestedDayTransition(
+        availableDateKeys,
+        "2026-04-10",
+        "2026-04-20"
+      )
+    ).toBeNull();
   });
 });
 

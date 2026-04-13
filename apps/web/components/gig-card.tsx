@@ -4,7 +4,11 @@ import { useEffect, useRef } from "react";
 import Image from "next/image";
 
 import { getGigActions } from "@/lib/gig-actions";
-import { getGigImageUrl, type GigCardRecord } from "@/lib/gigs";
+import {
+  getRenderableGigImageUrl,
+  hasRenderableGigImage,
+  type GigCardRecord
+} from "@/lib/gigs";
 
 const GIG_CARD_IMAGE_SIZES =
   "(max-width: 480px) 88px, (max-width: 720px) 115px, 168px";
@@ -33,13 +37,8 @@ export function GigCard({ gig, isOpen, onClose, onToggle }: GigCardProps) {
   const articleRef = useRef<HTMLElement>(null);
   const actions = getGigActions(gig);
   const isActionable = actions.length > 0;
-  const imageUrl = getGigImageUrl(gig);
-  const hasRenderableImage =
-    Boolean(imageUrl) &&
-    typeof gig.image_width === "number" &&
-    gig.image_width > 0 &&
-    typeof gig.image_height === "number" &&
-    gig.image_height > 0;
+  const imageUrl = getRenderableGigImageUrl(gig);
+  const hasRenderableImage = hasRenderableGigImage(gig) && Boolean(imageUrl);
   const imageWidth = hasRenderableImage ? gig.image_width! : undefined;
   const imageHeight = hasRenderableImage ? gig.image_height! : undefined;
   const articleClassName = [

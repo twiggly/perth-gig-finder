@@ -209,7 +209,7 @@ export function requestHomepageActiveDate(pathname: string, dateKey: string): vo
   );
 }
 
-export function syncHomepageActiveDate(pathname: string, dateKey: string): void {
+export function announceHomepageActiveDate(dateKey: string): void {
   if (typeof window === "undefined" || !dateKey) {
     return;
   }
@@ -219,6 +219,14 @@ export function syncHomepageActiveDate(pathname: string, dateKey: string): void 
       detail: { dateKey }
     })
   );
+}
+
+export function syncHomepageActiveDate(pathname: string, dateKey: string): void {
+  if (typeof window === "undefined" || !dateKey) {
+    return;
+  }
+
+  announceHomepageActiveDate(dateKey);
 
   const currentParams = new URLSearchParams(window.location.search);
   const hasLegacyWhen = currentParams.has("when");
@@ -411,6 +419,25 @@ export function getDayTransition(
     direction,
     fromDateKey: activeDateKey,
     toDateKey
+  };
+}
+
+export function getRequestedDayTransition(
+  availableDateKeys: string[],
+  activeDateKey: string,
+  requestedDateKey: string
+): DayTransition | null {
+  const activeIndex = availableDateKeys.indexOf(activeDateKey);
+  const requestedIndex = availableDateKeys.indexOf(requestedDateKey);
+
+  if (activeIndex === -1 || requestedIndex === -1 || activeIndex === requestedIndex) {
+    return null;
+  }
+
+  return {
+    direction: requestedIndex > activeIndex ? "next" : "previous",
+    fromDateKey: activeDateKey,
+    toDateKey: requestedDateKey
   };
 }
 
