@@ -13,7 +13,10 @@ import type {
 export const IMAGE_MIRROR_BUCKET = "gig-images";
 export const IMAGE_MIRROR_TIMEOUT_MS = 10_000;
 export const IMAGE_MIRROR_MAX_BYTES = 8 * 1024 * 1024;
+export const IMAGE_MIRROR_SOURCE_MAX_BYTES = 32 * 1024 * 1024;
 export const IMAGE_TRIM_THRESHOLD = 10;
+const IMAGE_OPTIMIZATION_SCALE_STEPS = [1, 0.85, 0.7, 0.55, 0.4, 0.25] as const;
+const IMAGE_OPTIMIZATION_QUALITY_STEPS = [84, 74, 64, 54, 44, 34] as const;
 
 const SUPPORTED_IMAGE_TYPES = new Map<string, string>([
   ["image/jpeg", "jpg"],
@@ -24,6 +27,7 @@ const SUPPORTED_IMAGE_TYPES = new Map<string, string>([
 
 interface PreparedMirroredImage {
   bytes: Buffer;
+  contentType: string;
   width: number;
   height: number;
 }
@@ -69,6 +73,26 @@ async function readImageDimensions(bytes: Buffer): Promise<{
   }
 
   return { width, height };
+}
+
+async function readImageCharacteristics(bytes: Buffer): Promise<{
+  hasAlpha: boolean;
+  height: number;
+  width: number;
+}> {
+  const metadata = await sharp(bytes).metadata();
+  const width = metadata.width ?? null;
+  const height = metadata.height ?? null;
+
+  if (!width || !Number.isFinite(width) || !height || !Number.isFinite(height)) {
+    throw new Error("Unable to read image dimensions");
+  }
+
+  return {
+    hasAlpha: metadata.hasAlpha === true,
+    height,
+    width
+  };
 }
 
 async function readRawImage(bytes: Buffer): Promise<{
@@ -206,6 +230,7 @@ async function trimMirroredImage(input: {
 
     return {
       bytes: input.bytes,
+      contentType: input.contentType,
       width: dimensions.width,
       height: dimensions.height
     };
@@ -219,6 +244,7 @@ async function trimMirroredImage(input: {
 
   return {
     bytes: Buffer.from(data),
+    contentType: input.contentType,
     width: info.width,
     height: info.height
   };
@@ -235,6 +261,7 @@ export async function prepareMirroredImageForUpload(input: {
   const originalDimensions = await readImageDimensions(input.bytes);
   const originalImage: PreparedMirroredImage = {
     bytes: input.bytes,
+    contentType: input.contentType,
     width: originalDimensions.width,
     height: originalDimensions.height
   };
@@ -273,6 +300,77 @@ export async function prepareMirroredImageForUpload(input: {
   } catch {
     return originalImage;
   }
+}
+
+function applyOptimizedOutputFormat(input: {
+  contentType: string;
+  image: sharp.Sharp;
+  quality: number;
+}): sharp.Sharp {
+  if (input.contentType === "image/jpeg") {
+    return input.image.jpeg({
+      mozjpeg: true,
+      quality: input.quality
+    });
+  }
+
+  return input.image.webp({
+    alphaQuality: input.quality,
+    effort: 4,
+    quality: input.quality
+  });
+}
+
+function getOversizedImageTargetContentType(hasAlpha: boolean): string {
+  return hasAlpha ? "image/webp" : "image/jpeg";
+}
+
+async function optimizeMirroredImageToFit(
+  input: PreparedMirroredImage
+): Promise<PreparedMirroredImage | null> {
+  if (input.bytes.byteLength <= IMAGE_MIRROR_MAX_BYTES) {
+    return input;
+  }
+
+  const characteristics = await readImageCharacteristics(input.bytes);
+  const targetContentType = getOversizedImageTargetContentType(
+    characteristics.hasAlpha
+  );
+
+  for (const scale of IMAGE_OPTIMIZATION_SCALE_STEPS) {
+    const targetWidth = Math.max(1, Math.round(input.width * scale));
+    const targetHeight = Math.max(1, Math.round(input.height * scale));
+
+    for (const quality of IMAGE_OPTIMIZATION_QUALITY_STEPS) {
+      let pipeline = sharp(input.bytes, { animated: false });
+
+      if (targetWidth !== input.width || targetHeight !== input.height) {
+        pipeline = pipeline.resize({
+          fit: "inside",
+          height: targetHeight,
+          width: targetWidth,
+          withoutEnlargement: true
+        });
+      }
+
+      const { data, info } = await applyOptimizedOutputFormat({
+        contentType: targetContentType,
+        image: pipeline,
+        quality
+      }).toBuffer({ resolveWithObject: true });
+
+      if (data.byteLength <= IMAGE_MIRROR_MAX_BYTES) {
+        return {
+          bytes: Buffer.from(data),
+          contentType: targetContentType,
+          height: info.height,
+          width: info.width
+        };
+      }
+    }
+  }
+
+  return null;
 }
 
 function isNotFoundBucketError(error: { status?: number; message?: string } | null): boolean {
@@ -379,14 +477,17 @@ export async function mirrorSourceImage(input: {
 
     const contentLength = Number(response.headers.get("content-length") ?? "0");
 
-    if (Number.isFinite(contentLength) && contentLength > IMAGE_MIRROR_MAX_BYTES) {
-      return toFailureResult("Image exceeds 8 MB limit");
+    if (
+      Number.isFinite(contentLength) &&
+      contentLength > IMAGE_MIRROR_SOURCE_MAX_BYTES
+    ) {
+      return toFailureResult("Source image exceeds 32 MB limit");
     }
 
     const bytes = Buffer.from(await response.arrayBuffer());
 
-    if (bytes.byteLength > IMAGE_MIRROR_MAX_BYTES) {
-      return toFailureResult("Image exceeds 8 MB limit");
+    if (bytes.byteLength > IMAGE_MIRROR_SOURCE_MAX_BYTES) {
+      return toFailureResult("Source image exceeds 32 MB limit");
     }
 
     let preparedImage: PreparedMirroredImage;
@@ -404,18 +505,28 @@ export async function mirrorSourceImage(input: {
       );
     }
 
+    if (preparedImage.bytes.byteLength > IMAGE_MIRROR_MAX_BYTES) {
+      const optimizedImage = await optimizeMirroredImageToFit(preparedImage);
+
+      if (!optimizedImage) {
+        return toFailureResult("Image could not be reduced under 8 MB limit");
+      }
+
+      preparedImage = optimizedImage;
+    }
+
     const mirroredImagePath = buildMirroredImagePath({
+      contentType: preparedImage.contentType,
       sourceSlug: input.sourceGig.sourceSlug,
       identityKey: input.sourceGig.identityKey,
-      sourceImageUrl: input.sourceGig.sourceImageUrl,
-      contentType
+      sourceImageUrl: input.sourceGig.sourceImageUrl
     });
 
     const { error: uploadError } = await input.upload(
       mirroredImagePath,
       preparedImage.bytes,
       {
-        contentType
+        contentType: preparedImage.contentType
       }
     );
 

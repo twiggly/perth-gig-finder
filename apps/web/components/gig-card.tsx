@@ -6,6 +6,10 @@ import Image from "next/image";
 import { getGigActions } from "@/lib/gig-actions";
 import { getGigImageUrl, type GigCardRecord } from "@/lib/gigs";
 
+const GIG_CARD_IMAGE_SIZES =
+  "(max-width: 480px) 88px, (max-width: 720px) 115px, 168px";
+const GIG_CARD_IMAGE_QUALITY = 72;
+
 function formatGigDate(value: string): string {
   return new Intl.DateTimeFormat("en-AU", {
     hour: "numeric",
@@ -84,7 +88,8 @@ export function GigCard({ gig, isOpen, onClose, onToggle }: GigCardProps) {
             alt={`${gig.title} poster`}
             className="gig-card__media-image"
             height={imageHeight}
-            sizes="(max-width: 480px) 88px, (max-width: 720px) 115px, 168px"
+            quality={GIG_CARD_IMAGE_QUALITY}
+            sizes={GIG_CARD_IMAGE_SIZES}
             src={imageUrl}
             style={{ height: "auto", width: "100%" }}
             width={imageWidth}

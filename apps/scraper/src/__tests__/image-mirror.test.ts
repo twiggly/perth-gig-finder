@@ -3,6 +3,8 @@ import sharp from "sharp";
 
 import {
   buildMirroredImagePath,
+  IMAGE_MIRROR_MAX_BYTES,
+  IMAGE_MIRROR_SOURCE_MAX_BYTES,
   mirrorSourceImage,
   prepareMirroredImageForUpload
 } from "../image-mirror";
@@ -34,6 +36,39 @@ async function createPngBuffer(width: number, height: number): Promise<Buffer> {
     }
   })
     .png()
+    .toBuffer();
+}
+
+async function createLargePatternedPngBuffer(input: {
+  height: number;
+  transparent?: boolean;
+  width: number;
+}): Promise<Buffer> {
+  const channels = input.transparent ? 4 : 3;
+  const pixels = Buffer.alloc(input.width * input.height * channels);
+
+  for (let y = 0; y < input.height; y += 1) {
+    for (let x = 0; x < input.width; x += 1) {
+      const offset = (y * input.width + x) * channels;
+
+      pixels[offset] = (x * 17 + y * 3) % 256;
+      pixels[offset + 1] = (x * 11 + y * 5) % 256;
+      pixels[offset + 2] = (x * 7 + y * 13) % 256;
+
+      if (channels === 4) {
+        pixels[offset + 3] = (x + y) % 5 === 0 ? 0 : 255;
+      }
+    }
+  }
+
+  return sharp(pixels, {
+    raw: {
+      channels,
+      height: input.height,
+      width: input.width
+    }
+  })
+    .png({ compressionLevel: 0 })
     .toBuffer();
 }
 
@@ -148,14 +183,14 @@ describe("image mirroring", () => {
     expect(upload).not.toHaveBeenCalled();
   });
 
-  it("rejects oversized images before upload", async () => {
+  it("rejects source images above the source max limit", async () => {
     const upload = vi.fn().mockResolvedValue({ error: null });
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
       new Response("too-big", {
         status: 200,
         headers: {
           "content-type": "image/png",
-          "content-length": String(9 * 1024 * 1024)
+          "content-length": String(IMAGE_MIRROR_SOURCE_MAX_BYTES + 1)
         }
       })
     );
@@ -167,8 +202,87 @@ describe("image mirroring", () => {
     });
 
     expect(result.status).toBe("failed");
-    expect(result.errorMessage).toContain("8 MB");
+    expect(result.errorMessage).toContain("32 MB");
     expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("optimizes oversized opaque images into a smaller lossy format", async () => {
+    const imageBuffer = await createLargePatternedPngBuffer({
+      height: 1700,
+      width: 1700
+    });
+    const upload = vi.fn().mockResolvedValue({ error: null });
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(new Uint8Array(imageBuffer), {
+        status: 200,
+        headers: {
+          "content-length": String(imageBuffer.byteLength),
+          "content-type": "image/png"
+        }
+      })
+    );
+
+    expect(imageBuffer.byteLength).toBeGreaterThan(IMAGE_MIRROR_MAX_BYTES);
+
+    const result = await mirrorSourceImage({
+      sourceGig: createSourceGig(),
+      fetchImpl: fetchMock,
+      upload
+    });
+
+    expect(result.status).toBe("ready");
+    expect(result.mirroredImageWidth).toBeGreaterThan(0);
+    expect(result.mirroredImageHeight).toBeGreaterThan(0);
+    expect(result.mirroredImagePath).toMatch(/\.jpg$/);
+    expect(upload).toHaveBeenCalledTimes(1);
+
+    const [path, uploadedBytes, options] = upload.mock.calls[0]!;
+    const metadata = await sharp(uploadedBytes).metadata();
+
+    expect(path).toMatch(/\.jpg$/);
+    expect(options).toEqual({ contentType: "image/jpeg" });
+    expect(uploadedBytes.byteLength).toBeLessThanOrEqual(IMAGE_MIRROR_MAX_BYTES);
+    expect(metadata.format).toBe("jpeg");
+    expect(metadata.hasAlpha).toBe(false);
+  });
+
+  it("optimizes oversized transparent images into a smaller alpha-safe format", async () => {
+    const imageBuffer = await createLargePatternedPngBuffer({
+      height: 1700,
+      transparent: true,
+      width: 1700
+    });
+    const upload = vi.fn().mockResolvedValue({ error: null });
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(new Uint8Array(imageBuffer), {
+        status: 200,
+        headers: {
+          "content-length": String(imageBuffer.byteLength),
+          "content-type": "image/png"
+        }
+      })
+    );
+
+    expect(imageBuffer.byteLength).toBeGreaterThan(IMAGE_MIRROR_MAX_BYTES);
+
+    const result = await mirrorSourceImage({
+      sourceGig: createSourceGig(),
+      fetchImpl: fetchMock,
+      upload
+    });
+
+    expect(result.status).toBe("ready");
+    expect(result.mirroredImagePath).toMatch(/\.webp$/);
+    expect(upload).toHaveBeenCalledTimes(1);
+
+    const [path, uploadedBytes, options] = upload.mock.calls[0]!;
+    const metadata = await sharp(uploadedBytes).metadata();
+
+    expect(path).toMatch(/\.webp$/);
+    expect(options).toEqual({ contentType: "image/webp" });
+    expect(uploadedBytes.byteLength).toBeLessThanOrEqual(IMAGE_MIRROR_MAX_BYTES);
+    expect(metadata.format).toBe("webp");
+    expect(metadata.hasAlpha).toBe(true);
   });
 
   it("trims transparent outer padding before upload", async () => {

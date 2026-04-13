@@ -77,6 +77,7 @@ const nextConfig: NextConfig = {
     // Local Supabase Storage resolves to a private IP in development, so Next's
     // image optimizer needs this enabled to serve mirrored gig artwork locally.
     dangerouslyAllowLocalIP: true,
+    imageSizes: [88, 115, 168, 176, 230, 336],
     remotePatterns: getImageRemotePatterns()
   },
   transpilePackages: ["@perth-gig-finder/shared"]
