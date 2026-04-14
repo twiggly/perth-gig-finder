@@ -16,3 +16,4 @@ apps/web/.env.local
 apps/scraper/.env
 
 .supabase
+.vercel
