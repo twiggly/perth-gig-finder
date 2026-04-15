@@ -385,6 +385,17 @@ function normalizeStatus(input: {
   return "active";
 }
 
+function isInvalidMoshtixImageUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const normalizedPath = url.pathname.replace(/\/+$/, "");
+
+    return normalizedPath === "/uploads";
+  } catch {
+    return false;
+  }
+}
+
 function selectImageUrl(...values: Array<string | string[] | null | undefined>): string | null {
   const flattened = values.flatMap((value) =>
     Array.isArray(value) ? value : value ? [value] : []
@@ -393,7 +404,7 @@ function selectImageUrl(...values: Array<string | string[] | null | undefined>):
   for (const candidate of flattened) {
     const normalized = normalizeUrl(candidate);
 
-    if (normalized) {
+    if (normalized && !isInvalidMoshtixImageUrl(normalized)) {
       return normalized;
     }
   }

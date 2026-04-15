@@ -298,6 +298,47 @@ describe("moshtix wa source adapter", () => {
     });
   });
 
+  it("skips the empty Moshtix uploads directory URL and falls back to the next real image", () => {
+    const listing = parseMoshtixSearchPage(
+      buildSearchPage({
+        results: [
+          buildSearchResult({
+            eventId: "193082",
+            title: "Laneway Session",
+            eventUrl: "https://www.moshtix.com.au/v2/event/laneway-session/193082",
+            imageUrl: "https://static.moshtix.com.au/uploads/laneway-sessionx140x140",
+            startDate: "2026-04-10T19:30:00",
+            endDate: "2026-04-10T22:30:00",
+            venueName: "Mojos Bar, North Fremantle",
+            streetAddress: "237 Queen Victoria St",
+            locality: "North Fremantle"
+          })
+        ]
+      })
+    ).listings[0];
+
+    const gig = normalizeMoshtixEventPage({
+      listing,
+      html: buildEventPage({
+        eventId: "193082",
+        title: "Laneway Session",
+        eventUrl: listing.eventUrl,
+        startDate: "2026-04-10T19:30:00",
+        endDate: "2026-04-10T22:30:00",
+        customImage: "https://www.moshtix.com.au/uploads/",
+        venueName: "Mojos Bar, North Fremantle",
+        venueWebsite: "www.mojosbar.com.au",
+        streetAddress: "237 Queen Victoria St",
+        locality: "North Fremantle",
+        region: "WA",
+        postalCode: "6159",
+        descriptionHtml: "<p>Live music under the stars.</p>"
+      })
+    });
+
+    expect(gig.imageUrl).toBe("https://static.moshtix.com.au/uploads/laneway-sessionx140x140");
+  });
+
   it("canonicalizes renamed venue labels before storing Moshtix gigs", () => {
     const listing = parseMoshtixSearchPage(
       buildSearchPage({
