@@ -8,118 +8,121 @@ When work ships, remove it from this file or rewrite it to reflect the new next 
 
 ## Now
 
-### 1. Gig Detail Pages
+### 1. Add More Perth-Relevant Sources
 
-Build `/gigs/[slug]` as the first real destination page beyond the homepage.
-
-Outcome:
-- shipped, shareable gig pages with clear internal linking from the homepage
-
-Goals:
-- stable, shareable URLs for gigs
-- better SEO than homepage-only discovery
-- room for richer event context than the homepage card can hold
-
-Good first version:
-- title
-- hero/poster image
-- start time
-- venue name + suburb
-- artist list
-- source and ticket links
-- short description
-- “more gigs at this venue”
-- “more gigs on this date”
-
-### 2. Venue Pages
-
-Build `/venues/[slug]` after gig detail pages.
+Expand coverage in [apps/scraper/src/sources](/Users/tajbishop/Documents/perth-gig-finder/apps/scraper/src/sources).
 
 Outcome:
-- venue pages become a real browse surface, not just filter targets
+- more complete city coverage and fewer missing gigs from important Perth venues/promoters
 
-Goals:
-- give venues a canonical presence in the app
-- improve browseability for people who shop by venue
-- create stronger internal linking between homepage, gig pages, and venue pages
+Good targets:
+- additional ticketing feeds
+- venue-owned event pages
+- promoters with recurring live-music listings
 
-Good first version:
-- venue name
-- suburb
-- website link if available
-- upcoming gigs at that venue
-- recent/related artists later if useful
+Done means:
+- source adapter added
+- tests added
+- hosted refresh can ingest it reliably
+
+### 2. Improve Normalization And Dedupe Quality
+
+Strengthen canonicalization in the scraper and store layer.
+
+Outcome:
+- fewer duplicate gigs
+- cleaner venue and artist data
+- less manual cleanup after scrapes
+
+Key areas:
+- venue alias handling
+- artist normalization
+- checksum and matching behavior
+- source-specific cleanup before upsert
+
+Primary touchpoints:
+- [apps/scraper/src/index.ts](/Users/tajbishop/Documents/perth-gig-finder/apps/scraper/src/index.ts)
+- [apps/scraper/src/supabase-store.ts](/Users/tajbishop/Documents/perth-gig-finder/apps/scraper/src/supabase-store.ts)
+- [packages/shared](/Users/tajbishop/Documents/perth-gig-finder/packages/shared)
+
+### 3. Harden Image Handling
+
+Keep mirrored posters reliable without making the scraper brittle.
+
+Outcome:
+- fewer broken posters
+- fewer recurring image-mirror failures
+- better fallback behavior when a source image is bad
+
+Key areas:
+- bad source image URL rejection
+- image mirror retries and failure states
+- source-specific fallback selection
+- preserving useful metadata when mirroring is unavailable
+
+Primary touchpoints:
+- [apps/scraper/src/image-mirror.ts](/Users/tajbishop/Documents/perth-gig-finder/apps/scraper/src/image-mirror.ts)
+- [apps/scraper/src/mirror-images.ts](/Users/tajbishop/Documents/perth-gig-finder/apps/scraper/src/mirror-images.ts)
+- source adapters in [apps/scraper/src/sources](/Users/tajbishop/Documents/perth-gig-finder/apps/scraper/src/sources)
 
 ## Next
 
-### 3. Saved Alerts / Notifications
+### 4. Improve Scraper Observability
 
-Let users subscribe to changes that matter to them.
-
-Best first targets:
-- venue alerts
-- artist alerts
-- date-range alerts later
-
-Questions to settle before building:
-- email only vs push/SMS later
-- anonymous subscriptions vs accounts
-- frequency: instant vs daily digest
-
-### 4. Better Data Quality Signals
-
-Improve confidence and clarity around listings.
-
-Possible work:
-- clearer source attribution on detail pages
-- more visible cancelled/postponed handling
-- better artist normalization
-- venue alias cleanup
-- stronger image/source fallback behavior where needed
-
-### 5. Workflow Observability
-
-The hosted refresh pipeline is healthy, but visibility can still improve.
+The hosted pipeline works, but scraper visibility can still improve.
 
 Useful follow-ups:
-- clearer scrape summaries by source
-- easier visibility into image-backfill failures
-- step timing summaries
-- optional split between scrape and mirror jobs if maintenance needs it
+- clearer per-source timing summaries
+- easier image-backfill failure summaries
+- better scrape run reporting in hosted workflows
+- optional separation of scrape and mirror reporting if maintenance needs it
+
+### 5. Add Scraper-Side Enrichment
+
+Improve the quality of what gets written into canonical gig data.
+
+Good candidates:
+- genre extraction
+- stronger artist extraction from descriptions/titles
+- better venue website and metadata enrichment
+- suburb/address cleanup
+
+### 6. Revisit Source Priorities And Coverage Gaps
+
+Once more sources are live, tune which source wins for image, URL, and display priority.
+
+Goals:
+- cleaner canonical gig cards
+- better preferred source selection
+- less noisy source overlap
 
 ## Later
 
-### 6. Genre / Tag Browsing
+### 7. Build Gig Detail Pages
 
-The README goal mentions genre filtering, but the current product does not really expose it yet.
+Once scraper quality and coverage improve, build `/gigs/[slug]` on a stronger data foundation.
 
-Later work could include:
-- genre chips
-- mood/scene tags
-- browse pages for common gig types
+Desired outcome:
+- shareable destination pages with richer event context
 
-### 7. Maps / Location-Aware Browsing
+### 8. Build Venue Pages
 
-Useful once venue data is rich enough.
+Build `/venues/[slug]` after scraper quality makes venue data more reliable.
 
-Potential scope:
-- venue coordinates
-- map view for gigs
-- distance-aware browsing
-- suburb clusters
+Desired outcome:
+- venue pages become a real browse surface, not just filter targets
 
-### 8. Personalization / Recommendations
+### 9. Saved Alerts / Notifications
 
-Only worth doing after the basic browse and detail experience is strong.
+Worth doing after scraper coverage and canonical data quality are stronger.
 
-Possible future directions:
-- “because you viewed”
-- related gigs by venue, artist overlap, or date
-- personalized homepage sections
+Likely first targets:
+- venue alerts
+- artist alerts
 
 ## Operating Notes
 
-- Prefer product work over more infra work unless something is actively painful.
-- Use local dev as the main build loop.
-- Use Git-connected Vercel previews to verify deployed behavior before shipping.
+- Prefer scraper/data-quality work over new web surface area for now.
+- Use local runs for fast debugging and source iteration.
+- Use the hosted refresh workflow to verify real ingestion behavior after scraper changes.
 - Keep `main` clean and production-safe.
