@@ -2,6 +2,12 @@
 
 Perth Gig Finder is a web app for discovering live music events in Perth by aggregating gig listings from multiple venue and event websites into one searchable place.
 
+## Project Docs
+
+- `README.md`: project overview, current status, and human-facing setup guidance
+- [AGENTS.md](/Users/tajbishop/Documents/perth-gig-finder/AGENTS.md): repo-specific operating rules for coding agents
+- [PLANS.md](/Users/tajbishop/Documents/perth-gig-finder/PLANS.md): lightweight roadmap for active priorities
+
 ## Product Goal
 
 Users should be able to:
@@ -105,16 +111,30 @@ Good first pages:
 - Sources live today:
   - `Milk Bar`
   - `Oztix WA` filtered down to Perth-metro music gigs
+  - `Moshtix WA`
 - The homepage supports search, venue chips, day-by-day navigation, mirrored gig images, and mobile/trackpad-friendly browsing.
 - Mirrored source images are stored in Supabase Storage and preferred over third-party hotlinks.
+- Production is live on Vercel, and Git-connected preview deployments are enabled for this repository.
 
 ## Current Limitations
 
 - The public site is still homepage-first; venue pages and gig detail pages are not built yet.
-- Scraping is still manual in local development; there is no scheduled production refresh flow yet.
+- Scraping is still manual in local development, but hosted Supabase refreshes now run on a schedule through GitHub Actions.
 - The preview server still uses a local wrapper because mobile Safari was caching stale preview assets aggressively, but it now builds in an isolated temp workspace instead of sharing Next build output with the main checkout.
 
+## Hosted Operations
+
+- Production is deployed on Vercel.
+- Git-connected preview deployments are created from repository pushes.
+- Hosted preview and production deployments use the hosted Supabase project configured in Vercel.
+- Hosted data refresh runs through [/.github/workflows/refresh-hosted-gigs.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-hosted-gigs.yml).
+- The hosted refresh workflow:
+  - scrapes source data into hosted Supabase
+  - backfills mirrored images as best effort
+
 ## Local Development
+
+Local development uses the local Supabase stack. Hosted preview and production deployments use the hosted Supabase project configured in Vercel.
 
 ### Supported Node.js
 
