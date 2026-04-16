@@ -144,6 +144,7 @@ describe("ticketek wa source adapter", () => {
     expect(parsed.listings[0]).toMatchObject({
       externalId: "BOOTLEGB26",
       title: "Bootleg Beatles",
+      imageUrl: "https://d35kvm5iuwjt9t.cloudfront.net/dbimages/default.jpg",
       locationText:
         "Riverside Theatre, Perth Convention and Exhibition Centre, Perth, WA",
       startsAt: "2026-11-07T04:00:00.000Z"
@@ -211,6 +212,7 @@ describe("ticketek wa source adapter", () => {
     expect(normalized).toMatchObject({
       sourceSlug: "ticketek-wa",
       externalId: "WAYGOP26",
+      imageUrl: "https://d35kvm5iuwjt9t.cloudfront.net/dbimages/waygop26.jpg",
       title: "Go Your Own Way",
       description: "In Concert",
       status: "active",

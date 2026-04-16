@@ -164,7 +164,7 @@ export interface ParsedTicketekSearchPage {
 
 class SkipTicketekListingError extends Error {}
 
-function normalizeUrl(value: string | null | undefined): string | null {
+function normalizeAssetUrl(value: string | null | undefined): string | null {
   if (!value) {
     return null;
   }
@@ -186,15 +186,32 @@ function normalizeUrl(value: string | null | undefined): string | null {
       url.protocol = "https:";
     }
 
+    return url.toString();
+  } catch {
+    return withOrigin;
+  }
+}
+
+function normalizeEventUrl(value: string | null | undefined): string | null {
+  const normalizedUrl = normalizeAssetUrl(value);
+
+  if (!normalizedUrl) {
+    return null;
+  }
+
+  try {
+    const url = new URL(normalizedUrl);
     const showId = url.searchParams.get("sh");
+
+    if (!showId) {
+      throw new Error(`Ticketek listing URL is missing a show code: ${normalizedUrl}`);
+    }
+
     const venueVariant = url.searchParams.get("v");
 
     url.pathname = "/Shows/Show.aspx";
     url.search = "";
-
-    if (showId) {
-      url.searchParams.set("sh", showId);
-    }
+    url.searchParams.set("sh", showId);
 
     if (venueVariant) {
       url.searchParams.set("v", venueVariant);
@@ -202,7 +219,7 @@ function normalizeUrl(value: string | null | undefined): string | null {
 
     return url.toString();
   } catch {
-    return withOrigin;
+    return normalizedUrl;
   }
 }
 
@@ -487,7 +504,7 @@ function parseListingFromRow(
 ): TicketekSearchListing {
   const rowButtonHref =
     row.find(".resultBuyNow a").attr("href") ?? context.moduleLevelButtonUrl;
-  const ticketUrl = normalizeUrl(rowButtonHref);
+  const ticketUrl = normalizeEventUrl(rowButtonHref);
   const locationText = normalizeWhitespace(row.find(".contentLocation").text());
   const dateText = normalizeWhitespace(row.find(".contentDate").text());
   const summary = normalizeWhitespace(row.find(".contentResultSummary").text()) || null;
@@ -556,8 +573,8 @@ export function parseTicketekSearchPage(
       }
 
       const subtitle = normalizeWhitespace(module.find(".contentEvent .sub-title").text()) || null;
-      const sharedImageUrl = normalizeUrl(module.find(".contentImage img").attr("src"));
-      const moduleLevelButtonUrl = normalizeUrl(
+      const sharedImageUrl = normalizeAssetUrl(module.find(".contentImage img").attr("src"));
+      const moduleLevelButtonUrl = normalizeEventUrl(
         module.find(".resultContainer > .resultBuyNow a").attr("href")
       );
       const eventRows = module.find(".contentEventAndDate");
