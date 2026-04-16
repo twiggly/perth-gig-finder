@@ -139,6 +139,9 @@ const MONTH_LOOKUP = new Map<string, string>([
   ["dec", "12"]
 ]);
 
+const TICKETEK_DATE_PATTERN =
+  /(?:mon|tue|wed|thu|fri|sat|sun)\s+(\d{1,2})\s+([a-z]{3})\s+(\d{4})/i;
+
 interface TicketekSearchListing {
   externalId: string;
   title: string;
@@ -332,9 +335,13 @@ function detectFrontdoorPage(html: string): boolean {
 }
 
 function buildStartsAtFromDateText(dateText: string): string {
-  const match = normalizeWhitespace(dateText).match(
-    /^(?:mon|tue|wed|thu|fri|sat|sun)\s+(\d{1,2})\s+([a-z]{3})\s+(\d{4})$/i
-  );
+  const normalizedDateText = normalizeWhitespace(dateText);
+
+  if (normalizedDateText.toLowerCase() === "tbc") {
+    throw new SkipTicketekListingError("Ticketek listing does not expose a schedulable date yet");
+  }
+
+  const match = normalizedDateText.match(TICKETEK_DATE_PATTERN);
 
   if (!match) {
     throw new Error(`Ticketek date could not be parsed: ${dateText}`);

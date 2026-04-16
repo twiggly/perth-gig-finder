@@ -225,6 +225,50 @@ describe("ticketek wa source adapter", () => {
     });
   });
 
+  it("keeps the first day from ranged Ticketek dates for Perth music listings", () => {
+    const parsed = parseTicketekSearchPage(
+      buildSearchPage({
+        results: [
+          buildSingleVenueResult({
+            title: "Jurassic World In Concert",
+            href: "/shows/show.aspx?sh=JWICP26",
+            subtitle: "Live with orchestra",
+            locationText:
+              "Riverside Theatre, Perth Convention and Exhibition Centre, Perth, WA",
+            dateText: "Fri 17 Apr 2026 to Sat 18 Apr 2026"
+          })
+        ]
+      }),
+      "concerts perth"
+    );
+
+    expect(parsed.failedCount).toBe(0);
+    expect(parsed.listings).toHaveLength(1);
+    expect(parsed.listings[0]).toMatchObject({
+      externalId: "JWICP26",
+      startsAt: "2026-04-17T04:00:00.000Z"
+    });
+  });
+
+  it("skips Ticketek listings with TBC dates without counting them as failures", () => {
+    const parsed = parseTicketekSearchPage(
+      buildSearchPage({
+        results: [
+          buildSingleVenueResult({
+            title: "Fisher | OUT 2 LUNCH Festival with Vodafone",
+            href: "/shows/show.aspx?sh=FISHFEST26",
+            locationText: "Wellington Square, Perth, WA",
+            dateText: "TBC"
+          })
+        ]
+      }),
+      "festival perth"
+    );
+
+    expect(parsed.failedCount).toBe(0);
+    expect(parsed.listings).toHaveLength(0);
+  });
+
   it("follows Ticketek's detection redirect flow and deduplicates across search queries", async () => {
     const searchHtml = buildSearchPage({
       results: [
