@@ -41,6 +41,7 @@ describe("milk bar source adapter", () => {
       imageUrl: null,
       status: "active",
       startsAt: "2026-04-10T11:30:00.000Z",
+      startsAtPrecision: "exact",
       artists: ["Time"]
     });
     expect(parsed.gigs[1]).toMatchObject({

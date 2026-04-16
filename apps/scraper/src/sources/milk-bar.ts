@@ -183,6 +183,7 @@ export function normalizeMilkBarHit(hit: MilkBarHit): NormalizedGig {
     description,
     status: normalizeGigStatus(hit, title),
     startsAt,
+    startsAtPrecision: "exact",
     endsAt: normalizeUtcDate(hit.DateEnd),
     ticketUrl: sourceUrl,
     venue,

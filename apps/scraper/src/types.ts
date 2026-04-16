@@ -1,7 +1,8 @@
 import type {
   NormalizedGig,
   ScrapeRunResult,
-  ScrapeRunStatus
+  ScrapeRunStatus,
+  StartsAtPrecision
 } from "@perth-gig-finder/shared";
 
 export interface SourceAdapterResult {
@@ -23,6 +24,7 @@ export interface SourceRecord {
   slug: string;
   name: string;
   baseUrl: string;
+  priority: number;
   isPublicListingSource: boolean;
 }
 
@@ -44,6 +46,7 @@ export interface SourceGigRecord {
   gigId: string;
   sourceSlug: string;
   identityKey: string;
+  startsAtPrecision: StartsAtPrecision;
   sourceImageUrl: string | null;
   mirroredImagePath: string | null;
   imageMirrorStatus: ImageMirrorStatus;
@@ -90,14 +93,18 @@ export interface GigStore {
     checksum: string
   ): Promise<SourceGigRecord | null>;
   findCanonicalGig(
-    venueId: string,
-    startsAt: string,
-    normalizedTitle: string
+    input: {
+      venueId: string;
+      startsAt: string;
+      title: string;
+    }
   ): Promise<GigRecord | null>;
   saveGig(input: {
     existingGigId: string | null;
     gig: NormalizedGig;
     venueId: string;
+    sourceId: string;
+    sourcePriority: number;
   }): Promise<{ gig: GigRecord; inserted: boolean }>;
   upsertSourceGig(input: {
     sourceId: string;

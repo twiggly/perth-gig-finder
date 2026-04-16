@@ -287,6 +287,7 @@ describe("moshtix wa source adapter", () => {
       title: "Doctor Jazz",
       description: "Free Entry | Late-night jazz set.",
       startsAt: "2026-04-07T11:30:00.000Z",
+      startsAtPrecision: "exact",
       endsAt: "2026-04-07T14:30:00.000Z",
       venue: {
         name: "Mojos Bar",

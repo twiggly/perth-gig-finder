@@ -197,6 +197,7 @@ describe("oztix wa source adapter", () => {
       imageUrl: null,
       status: "active",
       startsAt: "2026-04-07T10:30:00.000Z",
+      startsAtPrecision: "exact",
       artists: ["Doctor Jazz"]
     });
     expect(parsed.gigs[1]).toMatchObject({

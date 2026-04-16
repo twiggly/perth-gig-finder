@@ -15,6 +15,7 @@ export interface NormalizedVenue {
 }
 
 export type GigStatus = "active" | "cancelled" | "postponed";
+export type StartsAtPrecision = "exact" | "date";
 
 export interface NormalizedGig {
   sourceSlug: string;
@@ -25,6 +26,7 @@ export interface NormalizedGig {
   description: string | null;
   status: GigStatus;
   startsAt: string;
+  startsAtPrecision: StartsAtPrecision;
   endsAt: string | null;
   ticketUrl: string | null;
   venue: NormalizedVenue;

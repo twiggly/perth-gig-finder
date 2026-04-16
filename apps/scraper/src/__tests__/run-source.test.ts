@@ -1,12 +1,16 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  areCanonicalTitlesCompatible,
   buildGigChecksum,
+  buildGigSlug,
   type GigStatus,
+  normalizeCanonicalTitleForMatch,
   normalizeTitleForMatch,
   slugify,
   slugifyVenueName,
-  type NormalizedGig
+  type NormalizedGig,
+  type StartsAtPrecision
 } from "@perth-gig-finder/shared";
 import { describe, expect, it } from "vitest";
 
@@ -21,6 +25,29 @@ import type {
   SourceRecord,
   VenueRecord
 } from "../types";
+
+const PERTH_UTC_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+function getPerthDayKey(startsAt: string): string {
+  const perthDate = new Date(new Date(startsAt).getTime() + PERTH_UTC_OFFSET_MS);
+  return perthDate.toISOString().slice(0, 10);
+}
+
+function chooseTextField(
+  existingValue: string | null,
+  incomingValue: string | null,
+  canReplaceCanonical: boolean
+): string | null {
+  if (!existingValue) {
+    return incomingValue;
+  }
+
+  if (!incomingValue) {
+    return existingValue;
+  }
+
+  return canReplaceCanonical ? incomingValue : existingValue;
+}
 
 class MemoryGigStore implements GigStore {
   readonly sources = new Map<string, SourceRecord>();
@@ -41,8 +68,10 @@ class MemoryGigStore implements GigStore {
     GigRecord & {
       venueId: string;
       startsAt: string;
+      startsAtPrecision: StartsAtPrecision;
       status: GigStatus;
       normalizedTitle: string;
+      canonicalTitle: string;
       sourceUrl: string;
       description: string | null;
       ticketUrl: string | null;
@@ -50,7 +79,12 @@ class MemoryGigStore implements GigStore {
   >();
   readonly sourceGigs = new Map<
     string,
-    SourceGigRecord & { sourceId: string; externalId: string | null; checksum: string }
+    SourceGigRecord & {
+      sourceId: string;
+      externalId: string | null;
+      checksum: string;
+      sourceUrl: string;
+    }
   >();
   readonly artists = new Map<string, string>();
   readonly gigArtists = new Map<string, string[]>();
@@ -157,18 +191,49 @@ class MemoryGigStore implements GigStore {
   }
 
   async findCanonicalGig(
-    venueId: string,
-    startsAt: string,
-    normalizedTitle: string
+    input: {
+      venueId: string;
+      startsAt: string;
+      title: string;
+    }
   ): Promise<GigRecord | null> {
+    const normalizedTitle = normalizeTitleForMatch(input.title);
+    const canonicalTitle = normalizeCanonicalTitleForMatch(input.title);
+
     for (const gig of this.gigs.values()) {
       if (
-        gig.venueId === venueId &&
-        gig.startsAt === startsAt &&
+        gig.venueId === input.venueId &&
+        gig.startsAt === input.startsAt &&
         gig.normalizedTitle === normalizedTitle
       ) {
         return gig;
       }
+    }
+
+    const canonicalMatches = [...this.gigs.values()].filter(
+      (gig) =>
+        gig.venueId === input.venueId &&
+        getPerthDayKey(gig.startsAt) === getPerthDayKey(input.startsAt) &&
+        gig.canonicalTitle === canonicalTitle
+    );
+
+    if (canonicalMatches.length === 1) {
+      return canonicalMatches[0];
+    }
+
+    if (canonicalMatches.length > 1) {
+      return null;
+    }
+
+    const fuzzyMatches = [...this.gigs.values()].filter(
+      (gig) =>
+        gig.venueId === input.venueId &&
+        getPerthDayKey(gig.startsAt) === getPerthDayKey(input.startsAt) &&
+        areCanonicalTitlesCompatible(gig.title, input.title)
+    );
+
+    if (fuzzyMatches.length === 1) {
+      return fuzzyMatches[0];
     }
 
     return null;
@@ -178,6 +243,8 @@ class MemoryGigStore implements GigStore {
     existingGigId: string | null;
     gig: NormalizedGig;
     venueId: string;
+    sourceId: string;
+    sourcePriority: number;
   }): Promise<{ gig: GigRecord; inserted: boolean }> {
     if (input.existingGigId) {
       const existing = this.gigs.get(input.existingGigId);
@@ -186,16 +253,77 @@ class MemoryGigStore implements GigStore {
         throw new Error("existing gig not found");
       }
 
+      const attachedSourceGigs = [...this.sourceGigs.values()].filter(
+        (sourceGig) => sourceGig.gigId === existing.id
+      );
+      const ownerSource =
+        attachedSourceGigs.find((sourceGig) => sourceGig.sourceUrl === existing.sourceUrl) ??
+        attachedSourceGigs
+          .slice()
+          .sort((left, right) => {
+            const leftPriority = this.sources.get(left.sourceSlug)?.priority ?? 0;
+            const rightPriority = this.sources.get(right.sourceSlug)?.priority ?? 0;
+            return rightPriority - leftPriority;
+          })[0];
+      const ownerPriority = ownerSource
+        ? (this.sources.get(ownerSource.sourceSlug)?.priority ?? 0)
+        : 0;
+      const canReplaceCanonical =
+        !ownerSource ||
+        ownerSource.sourceId === input.sourceId ||
+        input.sourcePriority > ownerPriority;
+      const hasAttachedExactTime = attachedSourceGigs.some(
+        (sourceGig) => sourceGig.startsAtPrecision === "exact"
+      );
+      const shouldUpgradeStartsAt =
+        input.gig.startsAtPrecision === "exact" &&
+        !hasAttachedExactTime &&
+        input.gig.startsAt !== existing.startsAt;
+      const shouldPreserveExactStartsAt =
+        input.gig.startsAtPrecision === "date" &&
+        (existing.startsAtPrecision === "exact" || hasAttachedExactTime);
+      const startsAt =
+        shouldUpgradeStartsAt ||
+        (canReplaceCanonical && !shouldPreserveExactStartsAt)
+          ? input.gig.startsAt
+          : existing.startsAt;
+      const startsAtPrecision =
+        shouldUpgradeStartsAt ||
+        (canReplaceCanonical && !shouldPreserveExactStartsAt)
+          ? input.gig.startsAtPrecision
+          : existing.startsAtPrecision;
+      const title =
+        chooseTextField(existing.title, input.gig.title, canReplaceCanonical) ?? input.gig.title;
+      const description = chooseTextField(
+        existing.description,
+        input.gig.description,
+        canReplaceCanonical
+      );
+      const ticketUrl = chooseTextField(
+        existing.ticketUrl,
+        input.gig.ticketUrl,
+        canReplaceCanonical
+      );
+      const sourceUrl =
+        chooseTextField(existing.sourceUrl, input.gig.sourceUrl, canReplaceCanonical) ??
+        input.gig.sourceUrl;
       const updated = {
         ...existing,
+        slug: buildGigSlug({
+          venueSlug: input.gig.venue.slug,
+          startsAt,
+          title
+        }),
         venueId: input.venueId,
-        startsAt: input.gig.startsAt,
-        status: input.gig.status,
-        normalizedTitle: normalizeTitleForMatch(input.gig.title),
-        description: input.gig.description,
-        ticketUrl: input.gig.ticketUrl,
-        sourceUrl: input.gig.sourceUrl,
-        title: input.gig.title
+        startsAt,
+        startsAtPrecision,
+        status: canReplaceCanonical ? input.gig.status : existing.status,
+        normalizedTitle: normalizeTitleForMatch(title),
+        canonicalTitle: normalizeCanonicalTitleForMatch(title),
+        description,
+        ticketUrl,
+        sourceUrl,
+        title
       };
       this.gigs.set(existing.id, updated);
       return { gig: updated, inserted: false };
@@ -203,12 +331,18 @@ class MemoryGigStore implements GigStore {
 
     const gig = {
       id: randomUUID(),
-      slug: slugify(`${input.gig.venue.slug}-${input.gig.title}`),
+      slug: buildGigSlug({
+        venueSlug: input.gig.venue.slug,
+        startsAt: input.gig.startsAt,
+        title: input.gig.title
+      }),
       title: input.gig.title,
       venueId: input.venueId,
       startsAt: input.gig.startsAt,
+      startsAtPrecision: input.gig.startsAtPrecision,
       status: input.gig.status,
       normalizedTitle: normalizeTitleForMatch(input.gig.title),
+      canonicalTitle: normalizeCanonicalTitleForMatch(input.gig.title),
       description: input.gig.description,
       ticketUrl: input.gig.ticketUrl,
       sourceUrl: input.gig.sourceUrl
@@ -245,6 +379,7 @@ class MemoryGigStore implements GigStore {
       sourceId: string;
       externalId: string | null;
       checksum: string;
+      sourceUrl: string;
     } = {
       id: existing?.id ?? randomUUID(),
       gigId: input.gigId,
@@ -253,6 +388,8 @@ class MemoryGigStore implements GigStore {
       externalId: input.gig.externalId,
       checksum: input.gig.checksum,
       identityKey: input.gig.externalId ?? input.gig.checksum,
+      startsAtPrecision: input.gig.startsAtPrecision,
+      sourceUrl: input.gig.sourceUrl,
       sourceImageUrl,
       mirroredImagePath: unchangedReadyImage ? existing?.mirroredImagePath ?? null : null,
       mirroredImageWidth: unchangedReadyImage ? existing?.mirroredImageWidth ?? null : null,
@@ -387,6 +524,8 @@ function createGigForSource(input: {
   sourceUrl: string;
   title: string;
   status: GigStatus;
+  startsAt?: string;
+  startsAtPrecision?: StartsAtPrecision;
   imageUrl?: string | null;
   artists?: string[];
   venueName?: string;
@@ -398,6 +537,7 @@ function createGigForSource(input: {
   const venueSuburb = input.venueSuburb ?? "Inglewood";
   const venueAddress = input.venueAddress ?? "981 Beaufort Street";
   const venueWebsiteUrl = input.venueWebsiteUrl ?? "https://milkbarperth.com.au";
+  const startsAt = input.startsAt ?? "2026-04-10T11:30:00.000Z";
 
   return {
     sourceSlug: input.sourceSlug,
@@ -407,7 +547,8 @@ function createGigForSource(input: {
     title: input.title,
     description: "Immersive Pink Floyd tribute show.",
     status: input.status,
-    startsAt: "2026-04-10T11:30:00.000Z",
+    startsAt,
+    startsAtPrecision: input.startsAtPrecision ?? "exact",
     endsAt: null,
     ticketUrl: input.sourceUrl,
     venue: {
@@ -421,7 +562,7 @@ function createGigForSource(input: {
     rawPayload: { EventName: input.title },
     checksum: buildGigChecksum({
       sourceSlug: input.sourceSlug,
-      startsAt: "2026-04-10T11:30:00.000Z",
+      startsAt,
       title: input.title,
       venueSlug: slugifyVenueName(venueName),
       sourceUrl: input.sourceUrl
@@ -625,6 +766,236 @@ describe("executeSourceRun", () => {
     expect(store.venues.size).toBe(1);
     expect(store.gigs.size).toBe(1);
     expect(store.sourceGigs.size).toBe(2);
+  });
+
+  it("upgrades a date-only fallback to an exact start time on the same Perth day", async () => {
+    const store = new MemoryGigStore();
+    const ticketekSource: SourceAdapter = {
+      slug: "ticketek-wa",
+      name: "Ticketek WA",
+      baseUrl: "https://premier.ticketek.com.au/",
+      priority: 10,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "ticketek-wa",
+              externalId: "bootleg-ticketek",
+              sourceUrl: "https://premier.ticketek.com.au/Shows/Show.aspx?sh=BOOTLEGB26",
+              title: "Bootleg Beatles In Concert",
+              status: "active",
+              startsAt: "2026-11-07T04:00:00.000Z",
+              startsAtPrecision: "date",
+              venueName: "Riverside Theatre, Perth Convention and Exhibition Centre",
+              venueSuburb: "Perth",
+              venueAddress: "21 Mounts Bay Rd"
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+    const oztixSource: SourceAdapter = {
+      slug: "oztix-wa",
+      name: "Oztix WA",
+      baseUrl: "https://www.oztix.com.au/search?states%5B0%5D=WA&q=",
+      priority: 10,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "oztix-wa",
+              externalId: "bootleg-oztix",
+              sourceUrl: "https://tickets.oztix.com.au/outlet/event/bootleg-oztix",
+              title: "Bootleg Beatles",
+              status: "active",
+              startsAt: "2026-11-07T11:30:00.000Z",
+              startsAtPrecision: "exact",
+              venueName: "Riverside Theatre, Perth Convention and Exhibition Centre",
+              venueSuburb: "Perth",
+              venueAddress: "21 Mounts Bay Rd"
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+
+    await executeSourceRun(store, ticketekSource);
+    await executeSourceRun(store, oztixSource);
+
+    expect(store.gigs.size).toBe(1);
+    expect([...store.gigs.values()][0]).toMatchObject({
+      title: "Bootleg Beatles In Concert",
+      startsAt: "2026-11-07T11:30:00.000Z",
+      startsAtPrecision: "exact"
+    });
+  });
+
+  it("lets a higher-priority source take canonical ownership", async () => {
+    const store = new MemoryGigStore();
+    const oztixSource: SourceAdapter = {
+      slug: "oztix-wa",
+      name: "Oztix WA",
+      baseUrl: "https://www.oztix.com.au/search?states%5B0%5D=WA&q=",
+      priority: 10,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "oztix-wa",
+              externalId: "doctor-jazz-oztix",
+              sourceUrl: "https://tickets.oztix.com.au/outlet/event/doctor-jazz-oztix",
+              title: "Doctor Jazz Live",
+              status: "active"
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+    const milkBarSource: SourceAdapter = {
+      slug: "milk-bar",
+      name: "Milk Bar",
+      baseUrl: "https://milkbarperth.com.au/gigs/",
+      priority: 100,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "milk-bar",
+              externalId: "doctor-jazz-milkbar",
+              sourceUrl:
+                "https://tickets.avclive.com.au/outlet/event/doctor-jazz-milkbar",
+              title: "Doctor Jazz",
+              status: "cancelled"
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+
+    await executeSourceRun(store, oztixSource);
+    await executeSourceRun(store, milkBarSource);
+
+    expect(store.gigs.size).toBe(1);
+    expect([...store.gigs.values()][0]).toMatchObject({
+      title: "Doctor Jazz",
+      sourceUrl: "https://tickets.avclive.com.au/outlet/event/doctor-jazz-milkbar",
+      status: "cancelled"
+    });
+  });
+
+  it("keeps canonical fields stable when an equal-priority source matches later", async () => {
+    const store = new MemoryGigStore();
+    const oztixSource: SourceAdapter = {
+      slug: "oztix-wa",
+      name: "Oztix WA",
+      baseUrl: "https://www.oztix.com.au/search?states%5B0%5D=WA&q=",
+      priority: 10,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "oztix-wa",
+              externalId: "sophie-oztix",
+              sourceUrl: "https://tickets.oztix.com.au/outlet/event/sophie-oztix",
+              title: "Sophie Lilah ‘Busy Being in Love’ Album Launch",
+              status: "active",
+              venueName: "Mojo's Bar",
+              venueSuburb: "North Fremantle",
+              venueAddress: "237 Queen Victoria St",
+              venueWebsiteUrl: "https://www.mojosbar.com.au"
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+    const moshtixSource: SourceAdapter = {
+      slug: "moshtix-wa",
+      name: "Moshtix WA",
+      baseUrl: "https://www.moshtix.com.au/v2/search",
+      priority: 10,
+      isPublicListingSource: false,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "moshtix-wa",
+              externalId: "sophie-moshtix",
+              sourceUrl: "https://www.moshtix.com.au/v2/event/sophie-lilah/192946",
+              title: "Sophie Lilah Busy Being in Love",
+              status: "cancelled",
+              venueName: "Mojos Bar",
+              venueSuburb: "North Fremantle",
+              venueAddress: "237 Queen Victoria St",
+              venueWebsiteUrl: "https://www.mojosbar.com.au"
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+
+    await executeSourceRun(store, oztixSource);
+    await executeSourceRun(store, moshtixSource);
+
+    expect(store.gigs.size).toBe(1);
+    expect([...store.gigs.values()][0]).toMatchObject({
+      title: "Sophie Lilah ‘Busy Being in Love’ Album Launch",
+      sourceUrl: "https://tickets.oztix.com.au/outlet/event/sophie-oztix",
+      status: "active"
+    });
+  });
+
+  it("keeps same-night similar titles separate when they are not a strong canonical match", async () => {
+    const store = new MemoryGigStore();
+    const source: SourceAdapter = {
+      slug: "oztix-wa",
+      name: "Oztix WA",
+      baseUrl: "https://www.oztix.com.au/search?states%5B0%5D=WA&q=",
+      priority: 10,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "oztix-wa",
+              externalId: "late-show",
+              sourceUrl: "https://tickets.oztix.com.au/outlet/event/late-show",
+              title: "Late Show",
+              status: "active",
+              venueName: "Rosemount Hotel",
+              venueSuburb: "North Perth",
+              venueAddress: "459 Fitzgerald St"
+            }),
+            createGigForSource({
+              sourceSlug: "oztix-wa",
+              externalId: "rosemount-late-show",
+              sourceUrl:
+                "https://tickets.oztix.com.au/outlet/event/rosemount-late-show",
+              title: "Rosemount Late Show",
+              status: "active",
+              venueName: "Rosemount Hotel",
+              venueSuburb: "North Perth",
+              venueAddress: "459 Fitzgerald St"
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+
+    await executeSourceRun(store, source);
+
+    expect(store.gigs.size).toBe(2);
   });
 
   it("keeps gig ingestion successful when image mirroring fails", async () => {

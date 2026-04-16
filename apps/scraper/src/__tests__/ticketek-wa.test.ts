@@ -217,6 +217,7 @@ describe("ticketek wa source adapter", () => {
       description: "In Concert",
       status: "active",
       startsAt: "2026-06-12T04:00:00.000Z",
+      startsAtPrecision: "date",
       ticketUrl: "https://premier.ticketek.com.au/Shows/Show.aspx?sh=WAYGOP26",
       venue: {
         name: "Riverside Theatre, Perth Convention and Exhibition Centre",
