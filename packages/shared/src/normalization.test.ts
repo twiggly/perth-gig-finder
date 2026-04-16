@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  areCanonicalTitlesCompatible,
   buildGigChecksum,
   buildGigSlug,
+  normalizeCanonicalTitleForMatch,
   normalizeTitleForMatch,
   normalizeVenueName,
   normalizeVenueWebsiteUrl,
@@ -29,6 +31,32 @@ describe("normalization helpers", () => {
   it("normalizes titles for canonical matching", () => {
     expect(normalizeTitleForMatch("TIME  ")).toBe("time");
     expect(normalizeTitleForMatch("Time")).toBe("time");
+  });
+
+  it("normalizes canonical titles without changing checksum matching rules", () => {
+    expect(
+      normalizeCanonicalTitleForMatch(
+        "CANCELLED - Sophie Lilah 'Busy Being in Love' Album Launch 2026"
+      )
+    ).toBe("sophie-lilah-busy-being-in-love");
+    expect(normalizeCanonicalTitleForMatch("Bootleg Beatles In Concert")).toBe(
+      "bootleg-beatles"
+    );
+  });
+
+  it("matches conservative canonical title variants without collapsing distinct events", () => {
+    expect(
+      areCanonicalTitlesCompatible("Bootleg Beatles In Concert", "Bootleg Beatles")
+    ).toBe(true);
+    expect(
+      areCanonicalTitlesCompatible(
+        "Sophie Lilah 'Busy Being in Love' Album Launch",
+        "Sophie Lilah Busy Being in Love"
+      )
+    ).toBe(true);
+    expect(areCanonicalTitlesCompatible("Late Show", "Rosemount Late Show")).toBe(
+      false
+    );
   });
 
   it("canonicalizes known venue labels before storing them", () => {

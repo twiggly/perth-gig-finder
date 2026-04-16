@@ -69,9 +69,11 @@ class MirrorOnlyStore implements GigStore {
   }
 
   async findCanonicalGig(
-    _venueId: string,
-    _startsAt: string,
-    _normalizedTitle: string
+    _input: {
+      venueId: string;
+      startsAt: string;
+      title: string;
+    }
   ): Promise<GigRecord | null> {
     throw new Error("not implemented");
   }
@@ -80,6 +82,8 @@ class MirrorOnlyStore implements GigStore {
     existingGigId: string | null;
     gig: NormalizedGig;
     venueId: string;
+    sourceId: string;
+    sourcePriority: number;
   }): Promise<{ gig: GigRecord; inserted: boolean }> {
     throw new Error("not implemented");
   }
@@ -145,6 +149,7 @@ describe("mirrorPendingSourceGigImages", () => {
       gigId: "gig-1",
       sourceSlug: "oztix-wa",
       identityKey: "doctor-jazz",
+      startsAtPrecision: "exact",
       sourceImageUrl: "https://assets.oztix.com.au/image/doctor-jazz.png",
       mirroredImagePath: null,
       imageMirrorStatus: "failed",
@@ -177,6 +182,7 @@ describe("mirrorPendingSourceGigImages", () => {
         gigId: "gig-2",
         sourceSlug: "oztix-wa",
         identityKey: "portrait-night",
+        startsAtPrecision: "exact",
         sourceImageUrl: "https://assets.oztix.com.au/image/portrait-night.png",
         mirroredImagePath: "oztix-wa/portrait-night/mirrored.png",
         imageMirrorStatus: "ready",
@@ -207,6 +213,7 @@ describe("mirrorPendingSourceGigImages", () => {
         gigId: "gig-3",
         sourceSlug: "oztix-wa",
         identityKey: "michael-vdelli",
+        startsAtPrecision: "exact",
         sourceImageUrl: "https://assets.oztix.com.au/image/michael-vdelli.png",
         mirroredImagePath: "oztix-wa/michael-vdelli/mirrored.png",
         imageMirrorStatus: "ready",

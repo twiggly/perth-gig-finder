@@ -590,6 +590,7 @@ export function normalizeMoshtixEventPage(input: {
       statusText
     }),
     startsAt,
+    startsAtPrecision: "exact",
     endsAt: normalizePerthDateTime(eventData?.endDate ?? structuredEvent?.endDate),
     ticketUrl:
       normalizeUrl(

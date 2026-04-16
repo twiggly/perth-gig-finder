@@ -389,6 +389,7 @@ export function normalizeOztixHit(hit: OztixHit): NormalizedGig {
     description,
     status: normalizeGigStatus(hit, title),
     startsAt,
+    startsAtPrecision: "exact",
     endsAt: normalizeUtcDate(hit.DateEnd),
     ticketUrl: sourceUrl,
     venue,

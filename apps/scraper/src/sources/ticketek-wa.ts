@@ -626,6 +626,7 @@ export function normalizeTicketekListing(listing: TicketekSearchListing): Normal
     description,
     status,
     startsAt: listing.startsAt,
+    startsAtPrecision: "date",
     endsAt: null,
     ticketUrl: listing.ticketUrl,
     venue,

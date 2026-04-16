@@ -1,6 +1,5 @@
 import {
   buildGigSlug,
-  normalizeTitleForMatch,
   type NormalizedGig
 } from "@perth-gig-finder/shared";
 
@@ -46,23 +45,19 @@ function buildPartialResult(input: {
 
 async function processGig(
   store: GigStore,
-  sourceId: string,
+  source: { id: string; priority: number },
   gig: NormalizedGig,
   fetchImpl: typeof fetch
 ): Promise<"inserted" | "updated"> {
   const venue = await store.upsertVenue(gig);
-  const existingSourceGig = await store.findSourceGig(
-    sourceId,
-    gig.externalId,
-    gig.checksum
-  );
+  const existingSourceGig = await store.findSourceGig(source.id, gig.externalId, gig.checksum);
   const matchedGig = existingSourceGig
     ? { id: existingSourceGig.gigId }
-    : await store.findCanonicalGig(
-        venue.id,
-        gig.startsAt,
-        normalizeTitleForMatch(gig.title)
-      );
+    : await store.findCanonicalGig({
+        venueId: venue.id,
+        startsAt: gig.startsAt,
+        title: gig.title
+      });
 
   const result = await store.saveGig({
     existingGigId: matchedGig?.id ?? null,
@@ -73,11 +68,13 @@ async function processGig(
         slug: venue.slug
       }
     },
-    venueId: venue.id
+    venueId: venue.id,
+    sourceId: source.id,
+    sourcePriority: source.priority
   });
 
   const sourceGigResult = await store.upsertSourceGig({
-    sourceId,
+    sourceId: source.id,
     gigId: result.gig.id,
     gig: {
       ...gig,
@@ -123,7 +120,7 @@ export async function executeSourceRun(
 
     for (const gig of gigs) {
       try {
-        const outcome = await processGig(store, sourceRecord.id, {
+        const outcome = await processGig(store, sourceRecord, {
           ...gig,
           venue: {
             ...gig.venue,
