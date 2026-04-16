@@ -74,6 +74,14 @@ This file is for coding agents working in this repository. Keep it short, practi
 - Clean up merged branches when they are no longer useful.
 - Use [PLANS.md](/Users/tajbishop/Documents/perth-gig-finder/PLANS.md) for roadmap and feature priority decisions.
 
+## Documentation Hygiene
+
+- When a merged change makes docs stale, update the relevant file in the same change or immediately after:
+  - [README.md](/Users/tajbishop/Documents/perth-gig-finder/README.md) for project status, setup, and human-facing workflow
+  - [AGENTS.md](/Users/tajbishop/Documents/perth-gig-finder/AGENTS.md) for repo-specific operating rules
+  - [PLANS.md](/Users/tajbishop/Documents/perth-gig-finder/PLANS.md) for active priorities and shipped roadmap items
+- Do not force doc edits for unrelated cosmetic code changes, but do not leave behavior, infra, or workflow docs knowingly stale after merge.
+
 ## Common Traps
 
 - If local web commands fail, check Node version first, then Docker/Colima, then Supabase.
