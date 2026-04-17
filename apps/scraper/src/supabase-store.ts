@@ -76,6 +76,11 @@ interface SourceGigRow {
   mirrored_image_height: number | null;
 }
 
+interface AttachedSourceGigRow extends SourceGigRow {
+  last_seen_at: string;
+  created_at: string;
+}
+
 interface CanonicalGigSourceRow {
   source_id: string;
   source_url: string;
@@ -112,6 +117,15 @@ function toSourceGigRecord(
     mirroredImageWidth: row.mirrored_image_width,
     mirroredImageHeight: row.mirrored_image_height
   };
+}
+
+function isReadyMirroredSourceGig(row: SourceGigRow): boolean {
+  return (
+    row.image_mirror_status === "ready" &&
+    Boolean(row.mirrored_image_path) &&
+    Boolean(row.mirrored_image_width) &&
+    Boolean(row.mirrored_image_height)
+  );
 }
 
 const PERTH_UTC_OFFSET_MS = 8 * 60 * 60 * 1000;
@@ -412,6 +426,62 @@ export class SupabaseGigStore implements GigStore {
     return data ? toSourceGigRecord(data, "") : null;
   }
 
+  private async listSourceGigsForSourceAndGig(
+    sourceId: string,
+    gigId: string
+  ): Promise<AttachedSourceGigRow[]> {
+    const { data, error } = await this.client
+      .from("source_gigs")
+      .select(
+        "id, source_id, gig_id, identity_key, starts_at_precision, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height, last_seen_at, created_at"
+      )
+      .eq("source_id", sourceId)
+      .eq("gig_id", gigId)
+      .order("last_seen_at", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw new Error(
+        `Unable to load source gig attachments for canonical gig: ${error.message}`
+      );
+    }
+
+    return (data as AttachedSourceGigRow[] | null) ?? [];
+  }
+
+  private pickAttachedSourceGigKeeper(
+    rows: AttachedSourceGigRow[],
+    preferredIdentityKey: string
+  ): AttachedSourceGigRow | null {
+    const matchingIdentityRow = rows.find(
+      (row) => row.identity_key === preferredIdentityKey
+    );
+
+    if (matchingIdentityRow) {
+      return matchingIdentityRow;
+    }
+
+    const readyMirroredRow = rows.find(isReadyMirroredSourceGig);
+
+    if (readyMirroredRow) {
+      return readyMirroredRow;
+    }
+
+    return rows[0] ?? null;
+  }
+
+  private async deleteSourceGigsById(ids: string[]): Promise<void> {
+    if (ids.length === 0) {
+      return;
+    }
+
+    const { error } = await this.client.from("source_gigs").delete().in("id", ids);
+
+    if (error) {
+      throw new Error(`Unable to remove duplicate source gigs: ${error.message}`);
+    }
+  }
+
   async findCanonicalGig(
     input: {
       venueId: string;
@@ -636,11 +706,33 @@ export class SupabaseGigStore implements GigStore {
     sourceGig: SourceGigRecord;
     shouldMirror: boolean;
   }> {
-    const existing = await this.findSourceGig(
+    const preferredIdentityKey = input.gig.externalId ?? input.gig.checksum;
+    const existingByIdentity = await this.findSourceGig(
       input.sourceId,
       input.gig.externalId,
       input.gig.checksum
     );
+    const attachedSourceGigs = await this.listSourceGigsForSourceAndGig(
+      input.sourceId,
+      input.gigId
+    );
+    const reusableAttachedSourceGig = this.pickAttachedSourceGigKeeper(
+      attachedSourceGigs,
+      preferredIdentityKey
+    );
+    const existing =
+      existingByIdentity ??
+      (reusableAttachedSourceGig
+        ? toSourceGigRecord(reusableAttachedSourceGig, input.gig.sourceSlug)
+        : null);
+
+    if (existing) {
+      const duplicateSourceGigIds = attachedSourceGigs
+        .filter((row) => row.id !== existing.id)
+        .map((row) => row.id);
+
+      await this.deleteSourceGigsById(duplicateSourceGigIds);
+    }
 
     const sourceImageUrl = input.gig.imageUrl;
     const unchangedReadyImage =
@@ -657,38 +749,34 @@ export class SupabaseGigStore implements GigStore {
         ? "ready"
         : "pending";
 
-    const { data, error } = await this.client
-      .from("source_gigs")
-      .upsert(
-      {
-        source_id: input.sourceId,
-        gig_id: input.gigId,
-        external_id: input.gig.externalId,
-        source_url: input.gig.sourceUrl,
-        starts_at_precision: input.gig.startsAtPrecision,
-        source_image_url: sourceImageUrl,
-        mirrored_image_path: unchangedReadyImage
-          ? existing?.mirroredImagePath ?? null
-          : null,
-        mirrored_image_width: unchangedReadyImage
-          ? existing?.mirroredImageWidth ?? null
-          : null,
-        mirrored_image_height: unchangedReadyImage
-          ? existing?.mirroredImageHeight ?? null
-          : null,
-        image_mirror_status: imageMirrorStatus,
-        image_mirror_error: null,
-        image_mirrored_at: unchangedReadyImage
-          ? existing?.imageMirroredAt ?? null
-          : null,
-        raw_payload: input.gig.rawPayload,
-        checksum: input.gig.checksum,
-        last_seen_at: new Date().toISOString()
-      },
-      {
-        onConflict: "source_id,identity_key"
-      }
-    )
+    const payload = {
+      source_id: input.sourceId,
+      gig_id: input.gigId,
+      external_id: input.gig.externalId,
+      source_url: input.gig.sourceUrl,
+      starts_at_precision: input.gig.startsAtPrecision,
+      source_image_url: sourceImageUrl,
+      mirrored_image_path: unchangedReadyImage ? existing?.mirroredImagePath ?? null : null,
+      mirrored_image_width: unchangedReadyImage
+        ? existing?.mirroredImageWidth ?? null
+        : null,
+      mirrored_image_height: unchangedReadyImage
+        ? existing?.mirroredImageHeight ?? null
+        : null,
+      image_mirror_status: imageMirrorStatus,
+      image_mirror_error: null,
+      image_mirrored_at: unchangedReadyImage ? existing?.imageMirroredAt ?? null : null,
+      raw_payload: input.gig.rawPayload,
+      checksum: input.gig.checksum,
+      last_seen_at: new Date().toISOString()
+    };
+    const mutation = existing
+      ? this.client
+          .from("source_gigs")
+          .update(payload)
+          .eq("id", existing.id)
+      : this.client.from("source_gigs").insert(payload);
+    const { data, error } = await mutation
       .select(
         "id, source_id, gig_id, identity_key, starts_at_precision, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height"
       )

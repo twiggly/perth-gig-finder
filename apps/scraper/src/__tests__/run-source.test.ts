@@ -190,6 +190,56 @@ class MemoryGigStore implements GigStore {
     return null;
   }
 
+  private listSourceGigsForSourceAndGig(
+    sourceId: string,
+    gigId: string
+  ): Array<
+    SourceGigRecord & {
+      sourceId: string;
+      externalId: string | null;
+      checksum: string;
+      sourceUrl: string;
+    }
+  > {
+    return [...this.sourceGigs.values()].filter(
+      (sourceGig) => sourceGig.sourceId === sourceId && sourceGig.gigId === gigId
+    );
+  }
+
+  private pickAttachedSourceGigKeeper(
+    rows: Array<
+      SourceGigRecord & {
+        sourceId: string;
+        externalId: string | null;
+        checksum: string;
+        sourceUrl: string;
+      }
+    >,
+    preferredIdentityKey: string
+  ) {
+    const matchingIdentityRow = rows.find(
+      (row) => row.identityKey === preferredIdentityKey
+    );
+
+    if (matchingIdentityRow) {
+      return matchingIdentityRow;
+    }
+
+    const readyMirroredRow = rows.find(
+      (row) =>
+        row.imageMirrorStatus === "ready" &&
+        Boolean(row.mirroredImagePath) &&
+        Boolean(row.mirroredImageWidth) &&
+        Boolean(row.mirroredImageHeight)
+    );
+
+    if (readyMirroredRow) {
+      return readyMirroredRow;
+    }
+
+    return rows[0] ?? null;
+  }
+
   async findCanonicalGig(
     input: {
       venueId: string;
@@ -360,11 +410,29 @@ class MemoryGigStore implements GigStore {
     sourceGig: SourceGigRecord;
     shouldMirror: boolean;
   }> {
-    const existing = await this.findSourceGig(
+    const preferredIdentityKey = input.gig.externalId ?? input.gig.checksum;
+    const existingByIdentity = await this.findSourceGig(
       input.sourceId,
       input.gig.externalId,
       input.gig.checksum
     );
+    const attachedSourceGigs = this.listSourceGigsForSourceAndGig(
+      input.sourceId,
+      input.gigId
+    );
+    const reusableAttachedSourceGig = this.pickAttachedSourceGigKeeper(
+      attachedSourceGigs,
+      preferredIdentityKey
+    );
+    const existing = existingByIdentity ?? reusableAttachedSourceGig;
+
+    if (existing) {
+      for (const sourceGig of attachedSourceGigs) {
+        if (sourceGig.id !== existing.id) {
+          this.sourceGigs.delete(sourceGig.id);
+        }
+      }
+    }
 
     const sourceImageUrl = input.gig.imageUrl;
     const unchangedReadyImage =
@@ -596,6 +664,117 @@ describe("executeSourceRun", () => {
     expect(store.gigs.size).toBe(1);
     expect(store.sourceGigs.size).toBe(1);
     expect(store.imageBucketEnsured).toBe(true);
+  });
+
+  it("reuses one source attachment when the same source emits duplicate listings for one gig", async () => {
+    const store = new MemoryGigStore();
+    const source: SourceAdapter = {
+      slug: "oztix-wa",
+      name: "Oztix WA",
+      baseUrl: "https://www.oztix.com.au/search?states%5B0%5D=WA&q=",
+      priority: 10,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "oztix-wa",
+              externalId: "art-of-dysfunction-a",
+              sourceUrl:
+                "https://tickets.oztix.com.au/outlet/event/art-of-dysfunction-a",
+              title: "Art Of Dysfunction live at Kokomos Freo",
+              status: "active",
+              venueName: "Kokomo's Livid Skate Cafe",
+              venueSuburb: "Fremantle",
+              venueAddress: "46 William Street"
+            }),
+            createGigForSource({
+              sourceSlug: "oztix-wa",
+              externalId: "art-of-dysfunction-b",
+              sourceUrl:
+                "https://tickets.oztix.com.au/outlet/event/art-of-dysfunction-b",
+              title: "Art Of Dysfunction live at Kokomos Freo",
+              status: "active",
+              venueName: "Kokomo's Livid Skate Cafe",
+              venueSuburb: "Fremantle",
+              venueAddress: "46 William Street"
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+
+    const result = await executeSourceRun(store, source);
+    const sourceGig = [...store.sourceGigs.values()][0];
+
+    expect(result.insertedCount).toBe(1);
+    expect(result.updatedCount).toBe(1);
+    expect(store.gigs.size).toBe(1);
+    expect(store.sourceGigs.size).toBe(1);
+    expect(sourceGig).toMatchObject({
+      externalId: "art-of-dysfunction-b",
+      gigId: [...store.gigs.values()][0]?.id
+    });
+  });
+
+  it("prunes duplicate same-source attachments that already exist on the canonical gig", async () => {
+    const store = new MemoryGigStore();
+    const source: SourceAdapter = {
+      slug: "oztix-wa",
+      name: "Oztix WA",
+      baseUrl: "https://www.oztix.com.au/search?states%5B0%5D=WA&q=",
+      priority: 10,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "oztix-wa",
+              externalId: "art-of-dysfunction-a",
+              sourceUrl:
+                "https://tickets.oztix.com.au/outlet/event/art-of-dysfunction-a",
+              title: "Art Of Dysfunction live at Kokomos Freo",
+              status: "active",
+              venueName: "Kokomo's Livid Skate Cafe",
+              venueSuburb: "Fremantle",
+              venueAddress: "46 William Street"
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+
+    await executeSourceRun(store, source);
+    const [sourceRecord] = [...store.sources.values()];
+    const [gig] = [...store.gigs.values()];
+
+    const duplicateSourceGigId = randomUUID();
+    store.sourceGigs.set(duplicateSourceGigId, {
+      id: duplicateSourceGigId,
+      gigId: gig!.id,
+      sourceId: sourceRecord!.id,
+      sourceSlug: "oztix-wa",
+      externalId: "art-of-dysfunction-b",
+      checksum: "duplicate-checksum",
+      identityKey: "art-of-dysfunction-b",
+      startsAtPrecision: "exact",
+      sourceUrl: "https://tickets.oztix.com.au/outlet/event/art-of-dysfunction-b",
+      sourceImageUrl: null,
+      mirroredImagePath: null,
+      imageMirrorStatus: "missing",
+      imageMirroredAt: null,
+      mirroredImageWidth: null,
+      mirroredImageHeight: null
+    });
+
+    expect(store.sourceGigs.size).toBe(2);
+
+    await executeSourceRun(store, source);
+
+    expect(store.gigs.size).toBe(1);
+    expect(store.sourceGigs.size).toBe(1);
   });
 
   it("records a partial run when one listing fails but another succeeds", async () => {
