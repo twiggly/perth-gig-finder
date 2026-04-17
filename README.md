@@ -113,6 +113,7 @@ Good first pages:
   - `Oztix WA` filtered down to Perth-metro music gigs
   - `Moshtix WA`
   - `Ticketek WA` filtered down to Perth-metro live music results
+  - `Ticketmaster AU` filtered down to direct Perth music listings
 - The homepage supports search, venue chips, day-by-day navigation, mirrored gig images, and mobile/trackpad-friendly browsing.
 - Mirrored source images are stored in Supabase Storage and preferred over third-party hotlinks.
 - Production is live on Vercel, and Git-connected preview deployments are enabled for this repository.
