@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  buildTicketekExactTimeLookupKey,
+  mergeTicketekSearchApiResponseIntoExactTimeLookup,
   normalizeTicketekListing,
   parseTicketekSearchPage,
   ticketekWaSource
@@ -99,6 +101,48 @@ function buildSearchPage(input: { results: string[]; totalPages?: number }): str
   `;
 }
 
+function buildTicketekSearchApiResponse(input: {
+  events: Array<{
+    id: string;
+    title: string;
+    subtitle: string;
+    dateTimeLocalized: string;
+    showCode: string;
+    venueName: string;
+    venueCode?: string;
+    linkUri?: string;
+  }>;
+  nextPageToken?: string | null;
+  hasMore?: boolean;
+  totalCount?: number;
+}) {
+  return {
+    paging: {
+      nextPageToken: input.nextPageToken ?? null,
+      hasMore: input.hasMore ?? false,
+      totalCount: input.totalCount ?? input.events.length
+    },
+    events: input.events.map((event) => ({
+      id: event.id,
+      title: event.title,
+      subtitle: event.subtitle,
+      dateTimeLocalized: event.dateTimeLocalized,
+      show: { showCode: event.showCode },
+      venue: {
+        name: event.venueName,
+        city: "Perth",
+        state: "WA",
+        venueCode: event.venueCode ?? null
+      },
+      link: {
+        uri:
+          event.linkUri ??
+          `https://premier.ticketek.com.au/events/${event.showCode}/venues/${event.venueCode ?? "RTP"}/performances/${event.id}`
+      }
+    }))
+  };
+}
+
 describe("ticketek wa source adapter", () => {
   it("parses Perth music listings and skips obvious venue pages and waitlists", () => {
     const parsed = parseTicketekSearchPage(
@@ -195,6 +239,7 @@ describe("ticketek wa source adapter", () => {
       locationText: "Riverside Theatre, Perth Convention and Exhibition Centre, Perth, WA",
       dateText: "Fri 12 Jun 2026",
       startsAt: "2026-06-12T04:00:00.000Z",
+      startsAtPrecision: "date",
       rawPayload: {
         query: "concerts perth",
         title: "Go Your Own Way",
@@ -226,6 +271,77 @@ describe("ticketek wa source adapter", () => {
       },
       artists: ["Go Your Own Way"]
     });
+  });
+
+  it("indexes exact start times from Ticketek's structured search API", () => {
+    const lookup = new Map<string, string | null>();
+
+    mergeTicketekSearchApiResponseIntoExactTimeLookup(
+      lookup,
+      buildTicketekSearchApiResponse({
+        events: [
+          {
+            id: "EPCE2026927",
+            title: "Bootleg Beatles",
+            subtitle: "Sat 7 Nov 2026 7:30pm",
+            dateTimeLocalized: "2026-11-07T19:30:00+08:00",
+            showCode: "BOOTLEGB26",
+            venueName: "Riverside Theatre, Perth Convention and Exhibition Centre",
+            venueCode: "RTP"
+          }
+        ]
+      })
+    );
+
+    expect(
+      lookup.get(
+        buildTicketekExactTimeLookupKey({
+          externalId: "BOOTLEGB26",
+          dateKey: "2026-11-07",
+          venueSlug: "riverside-theatre-perth-convention-and-exhibition-centre"
+        })
+      )
+    ).toBe("2026-11-07T11:30:00.000Z");
+  });
+
+  it("marks ambiguous same-day Ticketek API matches as unresolved instead of picking a wrong time", () => {
+    const lookup = new Map<string, string | null>();
+
+    mergeTicketekSearchApiResponseIntoExactTimeLookup(
+      lookup,
+      buildTicketekSearchApiResponse({
+        events: [
+          {
+            id: "EPCE2026801",
+            title: "Choirboys",
+            subtitle: "Sat 17 Oct 2026 7:00pm",
+            dateTimeLocalized: "2026-10-17T19:00:00+08:00",
+            showCode: "CHOIRBOY26",
+            venueName: "Astor Theatre",
+            venueCode: "AST"
+          },
+          {
+            id: "EPCE2026802",
+            title: "Choirboys",
+            subtitle: "Sat 17 Oct 2026 9:30pm",
+            dateTimeLocalized: "2026-10-17T21:30:00+08:00",
+            showCode: "CHOIRBOY26",
+            venueName: "Astor Theatre",
+            venueCode: "AST"
+          }
+        ]
+      })
+    );
+
+    expect(
+      lookup.get(
+        buildTicketekExactTimeLookupKey({
+          externalId: "CHOIRBOY26:AST",
+          dateKey: "2026-10-17",
+          venueSlug: "astor-theatre"
+        })
+      )
+    ).toBeNull();
   });
 
   it("keeps the first day from ranged Ticketek dates for Perth music listings", () => {
@@ -285,9 +401,38 @@ describe("ticketek wa source adapter", () => {
         })
       ]
     });
+    const titleSearchApiResponse = buildTicketekSearchApiResponse({
+      events: [
+        {
+          id: "EPCE2026927",
+          title: "Bootleg Beatles",
+          subtitle: "Sat 7 Nov 2026 7:30pm",
+          dateTimeLocalized: "2026-11-07T19:30:00+08:00",
+          showCode: "BOOTLEGB26",
+          venueName: "Riverside Theatre, Perth Convention and Exhibition Centre",
+          venueCode: "RTP"
+        }
+      ]
+    });
 
     const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
       const url = typeof input === "string" ? input : input.toString();
+
+      if (url === "https://ignition.ticketek.com.au/fanxsearch/api/search") {
+        const requestBody =
+          init && typeof init === "object" && "body" in init && typeof init.body === "string"
+            ? JSON.parse(init.body)
+            : null;
+        const payload =
+          requestBody?.searchTerm === "Bootleg Beatles"
+            ? titleSearchApiResponse
+            : buildTicketekSearchApiResponse({ events: [] });
+
+        return new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "content-type": "application/json; charset=utf-8" }
+        });
+      }
 
       if (url.includes("/search/SearchResults.aspx")) {
         const requestUrl = new URL(url);
@@ -336,7 +481,9 @@ describe("ticketek wa source adapter", () => {
     expect(result.gigs[0]).toMatchObject({
       sourceSlug: "ticketek-wa",
       externalId: "BOOTLEGB26",
-      title: "Bootleg Beatles"
+      title: "Bootleg Beatles",
+      startsAt: "2026-11-07T11:30:00.000Z",
+      startsAtPrecision: "exact"
     });
     expect(fetchMock).toHaveBeenCalled();
   });
