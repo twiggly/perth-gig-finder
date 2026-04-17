@@ -95,6 +95,15 @@ export interface ParsedTicketmasterDiscoverPage {
 
 class SkipTicketmasterEventError extends Error {}
 
+class TicketmasterBlockedError extends Error {
+  constructor(
+    readonly page: number,
+    readonly status: number
+  ) {
+    super(`Ticketmaster discover page ${page} failed with status ${status}`);
+  }
+}
+
 function parseJsonValue(value: string | null | undefined): JsonValue | null {
   if (!value) {
     return null;
@@ -489,6 +498,10 @@ async function fetchTicketmasterDiscoverPage(
   });
 
   if (!response.ok) {
+    if ([401, 403, 429].includes(response.status)) {
+      throw new TicketmasterBlockedError(page, response.status);
+    }
+
     throw new Error(
       `Ticketmaster discover page ${page} failed with status ${response.status}`
     );
@@ -504,19 +517,48 @@ export const ticketmasterAuSource: SourceAdapter = {
   priority: 10,
   isPublicListingSource: true,
   async fetchListings(fetchImpl = fetch): Promise<SourceAdapterResult> {
-    const firstPage = parseTicketmasterDiscoverPage(
-      await fetchTicketmasterDiscoverPage(1, fetchImpl)
-    );
+    let firstPage: ParsedTicketmasterDiscoverPage;
+
+    try {
+      firstPage = parseTicketmasterDiscoverPage(
+        await fetchTicketmasterDiscoverPage(1, fetchImpl)
+      );
+    } catch (error) {
+      if (error instanceof TicketmasterBlockedError) {
+        console.warn(
+          `[ticketmaster-au] discover page ${error.page} blocked with status ${error.status}; skipping source for this run`
+        );
+
+        return {
+          gigs: [],
+          failedCount: 0
+        };
+      }
+
+      throw error;
+    }
+
     const events = [...firstPage.events];
     let failedCount = firstPage.failedCount;
 
     for (let page = 2; page <= firstPage.totalPages; page += 1) {
-      const pageResult = parseTicketmasterDiscoverPage(
-        await fetchTicketmasterDiscoverPage(page, fetchImpl)
-      );
+      try {
+        const pageResult = parseTicketmasterDiscoverPage(
+          await fetchTicketmasterDiscoverPage(page, fetchImpl)
+        );
 
-      failedCount += pageResult.failedCount;
-      events.push(...pageResult.events);
+        failedCount += pageResult.failedCount;
+        events.push(...pageResult.events);
+      } catch (error) {
+        if (error instanceof TicketmasterBlockedError) {
+          console.warn(
+            `[ticketmaster-au] discover page ${error.page} blocked with status ${error.status}; keeping earlier Ticketmaster results only`
+          );
+          break;
+        }
+
+        throw error;
+      }
     }
 
     const gigs: NormalizedGig[] = [];
