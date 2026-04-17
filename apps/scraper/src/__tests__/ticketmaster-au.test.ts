@@ -239,4 +239,75 @@ describe("ticketmaster au source adapter", () => {
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("degrades gracefully when Ticketmaster blocks the first discover page", async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () =>
+      new Response("blocked", {
+        status: 403,
+        headers: { "content-type": "text/html; charset=utf-8" }
+      })
+    );
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const result = await ticketmasterAuSource.fetchListings(fetchMock);
+
+      expect(result).toEqual({
+        gigs: [],
+        failedCount: 0
+      });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("skipping source for this run")
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("keeps earlier Ticketmaster results if a later discover page is blocked", async () => {
+    const pageOne = buildDiscoverPage({
+      totalPages: 2,
+      payloads: [
+        JSON.stringify([
+          buildTicketmasterEvent({
+            url: "https://www.ticketmaster.com.au/luude-mt-claremont-13-06-2026/event/13006458EC58D955",
+            name: "Luude",
+            startDate: "2026-06-13T19:00:00",
+            venueName: "Perth HPC",
+            locality: "Mt Claremont",
+            performers: ["Luude"]
+          })
+        ])
+      ]
+    });
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = typeof input === "string" ? input : input.toString();
+
+      if (url.includes("page=2")) {
+        return new Response("blocked", {
+          status: 403,
+          headers: { "content-type": "text/html; charset=utf-8" }
+        });
+      }
+
+      return new Response(pageOne, {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" }
+      });
+    });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const result = await ticketmasterAuSource.fetchListings(fetchMock);
+
+      expect(result.failedCount).toBe(0);
+      expect(result.gigs).toHaveLength(1);
+      expect(result.gigs[0]?.externalId).toBe("13006458EC58D955");
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("keeping earlier Ticketmaster results only")
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });
