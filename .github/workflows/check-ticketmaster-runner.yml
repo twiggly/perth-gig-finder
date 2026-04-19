@@ -16,9 +16,14 @@ jobs:
     steps:
       - name: Check Ticketmaster self-hosted runner status
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RUNNER_MONITOR_TOKEN }}
           REPOSITORY: ${{ github.repository }}
         run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "RUNNER_MONITOR_TOKEN is not configured." >&2
+            exit 1
+          fi
+
           response="$(curl -fsSL \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
