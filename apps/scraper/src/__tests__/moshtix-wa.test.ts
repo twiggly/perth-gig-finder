@@ -408,6 +408,35 @@ describe("moshtix wa source adapter", () => {
     ).toThrow(/non-music/i);
   });
 
+  it("excludes WA listings that are outside Perth metro", () => {
+    expect(() =>
+      normalizeMoshtixEventPage({
+        listing: {
+          externalId: "193083",
+          title: "No Future: Hip Hop & RnB Night - Busselton",
+          eventUrl: "https://www.moshtix.com.au/v2/event/no-future-busselton/193083",
+          startsAt: "2026-05-01T12:00:00.000Z",
+          listingImageUrl: null,
+          teaser: "Regional club night",
+          rawPayload: {}
+        },
+        html: buildEventPage({
+          eventId: "193083",
+          title: "No Future: Hip Hop & RnB Night - Busselton",
+          eventUrl: "https://www.moshtix.com.au/v2/event/no-future-busselton/193083",
+          startDate: "2026-05-01T20:00:00",
+          endDate: "2026-05-02T00:00:00",
+          venueName: "Busselton Pavilion",
+          streetAddress: "55 Queen St",
+          locality: "Busselton",
+          region: "WA",
+          postalCode: "6280",
+          descriptionHtml: "<p>Regional club night.</p>"
+        })
+      })
+    ).toThrow(/outside Perth metro/i);
+  });
+
   it("fetches paginated WA results, enriches detail pages, and keeps the source non-public", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-06T16:30:00.000Z"));
@@ -448,6 +477,16 @@ describe("moshtix wa source adapter", () => {
           endDate: "2026-04-09T22:30:00",
           venueName: "Mojos Bar, North Fremantle",
           locality: "North Fremantle"
+        }),
+        buildSearchResult({
+          eventId: "193083",
+          title: "No Future: Hip Hop & RnB Night - Busselton",
+          eventUrl: "https://www.moshtix.com.au/v2/event/no-future-busselton/193083",
+          imageUrl: "https://static.moshtix.com.au/uploads/no-futurex140x140",
+          startDate: "2026-05-01T20:00:00",
+          endDate: "2026-05-02T00:00:00",
+          venueName: "Busselton Pavilion",
+          locality: "Busselton"
         })
       ]
     });
@@ -509,6 +548,24 @@ describe("moshtix wa source adapter", () => {
           }),
           { status: 200 }
         )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          buildEventPage({
+            eventId: "193083",
+            title: "No Future: Hip Hop & RnB Night - Busselton",
+            eventUrl: "https://www.moshtix.com.au/v2/event/no-future-busselton/193083",
+            startDate: "2026-05-01T20:00:00",
+            endDate: "2026-05-02T00:00:00",
+            venueName: "Busselton Pavilion",
+            streetAddress: "55 Queen St",
+            locality: "Busselton",
+            region: "WA",
+            postalCode: "6280",
+            descriptionHtml: "<p>Regional club night.</p>"
+          }),
+          { status: 200 }
+        )
       );
 
     try {
@@ -521,7 +578,7 @@ describe("moshtix wa source adapter", () => {
         "Doctor Jazz",
         "Mojos Songwriters Club"
       ]);
-      expect(fetchMock).toHaveBeenCalledTimes(5);
+      expect(fetchMock).toHaveBeenCalledTimes(6);
       expect(String(fetchMock.mock.calls[0]?.[0])).toContain("FromDate=07+Apr+2026");
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes("Page=2"))).toBe(true);
     } finally {

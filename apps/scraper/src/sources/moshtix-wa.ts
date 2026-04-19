@@ -21,6 +21,35 @@ const PERTH_OFFSET_SUFFIX = "+08:00";
 const LIVE_MUSIC_CATEGORY_ID = "2,";
 const LIVE_MUSIC_CATEGORY_NUMERIC_ID = 2;
 const REQUEST_TIMEOUT_MS = 10_000;
+const PERTH_METRO_LOCALITIES = new Set([
+  "perth",
+  "east perth",
+  "west perth",
+  "north perth",
+  "northbridge",
+  "burswood",
+  "subiaco",
+  "claremont",
+  "mt claremont",
+  "mount claremont",
+  "nedlands",
+  "leederville",
+  "mount lawley",
+  "inglewood",
+  "maylands",
+  "highgate",
+  "victoria park",
+  "como",
+  "south perth",
+  "fremantle",
+  "north fremantle",
+  "scarborough",
+  "joondalup",
+  "cannington",
+  "guildford",
+  "midland",
+  "lathlain"
+]);
 
 const NON_MUSIC_KEYWORDS = [
   "trivia",
@@ -323,6 +352,53 @@ function normalizeVenue(input: {
   };
 }
 
+function ensurePerthMetroVenue(input: {
+  venue: NormalizedVenue;
+  structuredEvent: MoshtixStructuredEvent | null;
+  eventData: MoshtixEventData | null;
+}): void {
+  const region = normalizeWhitespace(
+    input.structuredEvent?.location?.address?.addressRegion ??
+      input.eventData?.venue?.state ??
+      ""
+  ).toLowerCase();
+
+  if (region && region !== "wa") {
+    throw new SkipMoshtixListingError("Moshtix event is outside WA");
+  }
+
+  const localities = [
+    input.venue.suburb,
+    input.structuredEvent?.location?.address?.addressLocality
+  ]
+    .map((value) => normalizeWhitespace(value ?? "").toLowerCase())
+    .filter(Boolean);
+
+  if (localities.length > 0) {
+    if (!localities.some((locality) => PERTH_METRO_LOCALITIES.has(locality))) {
+      throw new SkipMoshtixListingError("Moshtix event is outside Perth metro");
+    }
+
+    return;
+  }
+
+  const locationHaystack = [
+    input.venue.name,
+    input.venue.address,
+    input.structuredEvent?.location?.name
+  ]
+    .map((value) => normalizeWhitespace(value ?? "").toLowerCase())
+    .filter(Boolean)
+    .join(" ");
+
+  if (
+    !locationHaystack ||
+    ![...PERTH_METRO_LOCALITIES].some((locality) => locationHaystack.includes(locality))
+  ) {
+    throw new SkipMoshtixListingError("Moshtix event is outside Perth metro");
+  }
+}
+
 function normalizeArtists(input: {
   title: string;
   structuredEvent: MoshtixStructuredEvent | null;
@@ -562,6 +638,7 @@ export function normalizeMoshtixEventPage(input: {
   }
 
   const venue = normalizeVenue({ structuredEvent, eventData });
+  ensurePerthMetroVenue({ venue, structuredEvent, eventData });
   const statusText = normalizeWhitespace($("#status-linked-section").text()) || null;
   const sourceUrl =
     normalizeUrl(
