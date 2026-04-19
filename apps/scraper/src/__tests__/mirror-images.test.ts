@@ -100,6 +100,13 @@ class MirrorOnlyStore implements GigStore {
     throw new Error("not implemented");
   }
 
+  async pruneStaleUpcomingSourceGigs(_input: {
+    sourceId: string;
+    retainedIdentityKeys: string[];
+  }): Promise<void> {
+    throw new Error("not implemented");
+  }
+
   async mirrorSourceGigImage(
     sourceGig: SourceGigRecord
   ): Promise<SourceGigImageMirrorResult> {

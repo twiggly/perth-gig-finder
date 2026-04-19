@@ -115,6 +115,10 @@ export interface GigStore {
     sourceGig: SourceGigRecord;
     shouldMirror: boolean;
   }>;
+  pruneStaleUpcomingSourceGigs(input: {
+    sourceId: string;
+    retainedIdentityKeys: string[];
+  }): Promise<void>;
   mirrorSourceGigImage(
     sourceGig: SourceGigRecord,
     fetchImpl?: typeof fetch

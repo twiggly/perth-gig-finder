@@ -117,6 +117,7 @@ export async function executeSourceRun(
     let updatedCount = 0;
     let failedCount = parseFailures;
     const errors: string[] = [];
+    const retainedIdentityKeys = new Set<string>();
 
     for (const gig of gigs) {
       try {
@@ -132,6 +133,8 @@ export async function executeSourceRun(
           }
         }, fetchImpl);
 
+        retainedIdentityKeys.add(gig.externalId ?? gig.checksum);
+
         if (outcome === "inserted") {
           insertedCount += 1;
         } else {
@@ -141,6 +144,13 @@ export async function executeSourceRun(
         failedCount += 1;
         errors.push(error instanceof Error ? error.message : "Unexpected gig error");
       }
+    }
+
+    if (failedCount === 0 && gigs.length > 0) {
+      await store.pruneStaleUpcomingSourceGigs({
+        sourceId: sourceRecord.id,
+        retainedIdentityKeys: [...retainedIdentityKeys]
+      });
     }
 
     if (parseFailures > 0) {
