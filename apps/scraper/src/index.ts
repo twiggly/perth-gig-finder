@@ -1,14 +1,15 @@
 import "dotenv/config";
 
 import { executeSourceRun } from "./run-source";
-import { sources } from "./sources";
+import { resolveSourcesToRun } from "./source-selection";
 import { SupabaseGigStore } from "./supabase-store";
 
 async function main(): Promise<void> {
   const store = new SupabaseGigStore();
   const results = [];
+  const selectedSources = resolveSourcesToRun();
 
-  for (const source of sources) {
+  for (const source of selectedSources) {
     results.push(await executeSourceRun(store, source));
   }
 

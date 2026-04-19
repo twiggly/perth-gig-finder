@@ -1,8 +1,8 @@
-name: Refresh Hosted Gigs
+name: Refresh Ticketmaster Self-Hosted
 
 on:
   schedule:
-    - cron: "17 */6 * * *"
+    - cron: "47 */6 * * *"
   workflow_dispatch:
 
 env:
@@ -12,12 +12,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: refresh-hosted-gigs
+  group: refresh-ticketmaster-self-hosted
   cancel-in-progress: false
 
 jobs:
-  scrape:
-    runs-on: ubuntu-latest
+  scrape-ticketmaster:
+    runs-on:
+      - self-hosted
+      - perth-gig-finder
+      - ticketmaster
     timeout-minutes: 45
     steps:
       - name: Check out repository
@@ -38,9 +41,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Scrape gig sources
+      - name: Scrape Ticketmaster AU
         env:
-          SCRAPER_EXCLUDE_SOURCE_SLUGS: ticketmaster-au
+          SCRAPER_SOURCE_SLUGS: ticketmaster-au
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: pnpm --filter @perth-gig-finder/scraper scrape
