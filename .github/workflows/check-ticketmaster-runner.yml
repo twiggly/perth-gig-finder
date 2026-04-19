@@ -1,0 +1,41 @@
+name: Check Ticketmaster Runner
+
+on:
+  schedule:
+    - cron: "13 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check Ticketmaster self-hosted runner status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          response="$(curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPOSITORY}/actions/runners")"
+
+          matching_runners="$(printf '%s' "${response}" | jq '[.runners[] | select(
+            .status == "online" and
+            ([.labels[].name] | index("perth-gig-finder")) and
+            ([.labels[].name] | index("ticketmaster"))
+          )]')"
+
+          count="$(printf '%s' "${matching_runners}" | jq 'length')"
+
+          if [ "${count}" -eq 0 ]; then
+            echo "No online self-hosted runner is available with the labels 'perth-gig-finder' and 'ticketmaster'." >&2
+            printf '%s\n' "${response}" | jq '.runners[] | {name, status, labels: [.labels[].name]}'
+            exit 1
+          fi
+
+          echo "Ticketmaster self-hosted runner is online:"
+          printf '%s\n' "${matching_runners}" | jq '.[] | {name, status, labels: [.labels[].name]}'

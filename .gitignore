@@ -17,3 +17,4 @@ apps/scraper/.env
 
 .supabase
 .vercel
+.codex

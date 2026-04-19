@@ -38,6 +38,7 @@ This file is for coding agents working in this repository. Keep it short, practi
 - Production and previews are deployed from Vercel.
 - Hosted data refresh runs through [/.github/workflows/refresh-hosted-gigs.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-hosted-gigs.yml).
 - `ticketmaster-au` refresh runs through [/.github/workflows/refresh-ticketmaster-self-hosted.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-ticketmaster-self-hosted.yml) on a self-hosted runner labeled `perth-gig-finder` and `ticketmaster`.
+- Runner health is monitored through [/.github/workflows/check-ticketmaster-runner.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/check-ticketmaster-runner.yml).
 - The hosted workflow:
   - runs `scrape` against hosted Supabase
   - runs `mirror-images` as best effort
