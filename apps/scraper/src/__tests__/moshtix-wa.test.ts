@@ -437,6 +437,64 @@ describe("moshtix wa source adapter", () => {
     ).toThrow(/outside Perth metro/i);
   });
 
+  it("allows valid East Fremantle gigs through the Perth-metro filter", () => {
+    const gig = normalizeMoshtixEventPage({
+      listing: {
+        externalId: "193084",
+        title: "Soul Night at the Duke",
+        eventUrl: "https://www.moshtix.com.au/v2/event/soul-night-at-the-duke/193084",
+        startsAt: "2026-05-08T12:00:00.000Z",
+        listingImageUrl: null,
+        teaser: "East Fremantle soul revue",
+        rawPayload: {}
+      },
+      html: buildEventPage({
+        eventId: "193084",
+        title: "Soul Night at the Duke",
+        eventUrl: "https://www.moshtix.com.au/v2/event/soul-night-at-the-duke/193084",
+        startDate: "2026-05-08T20:00:00",
+        endDate: "2026-05-08T23:00:00",
+        venueName: "The Duke of George",
+        streetAddress: "135 Duke St",
+        locality: "East Fremantle",
+        region: "WA",
+        postalCode: "6158",
+        descriptionHtml: "<p>Soul revue in East Fremantle.</p>"
+      })
+    });
+
+    expect(gig.venue.suburb).toBe("East Fremantle");
+  });
+
+  it("excludes touring placeholder venue records even when they mention WA", () => {
+    expect(() =>
+      normalizeMoshtixEventPage({
+        listing: {
+          externalId: "193085",
+          title: "Rum Jungle ‘Marginalia’ AU & NZ Tour",
+          eventUrl: "https://www.moshtix.com.au/v2/event/rum-jungle-marginalia/193085",
+          startsAt: "2026-06-26T11:00:00.000Z",
+          listingImageUrl: null,
+          teaser: "Touring placeholder listing",
+          rawPayload: {}
+        },
+        html: buildEventPage({
+          eventId: "193085",
+          title: "Rum Jungle ‘Marginalia’ AU & NZ Tour",
+          eventUrl: "https://www.moshtix.com.au/v2/event/rum-jungle-marginalia/193085",
+          startDate: "2026-06-26T19:00:00",
+          endDate: "2026-06-26T22:00:00",
+          venueName: "Various Venues (AU and NZ)",
+          streetAddress: "Touring Australia and New Zealand",
+          locality: "",
+          region: "WA",
+          postalCode: "",
+          descriptionHtml: "<p>Touring placeholder listing.</p>"
+        })
+      })
+    ).toThrow(/placeholder touring venue|outside Perth metro/i);
+  });
+
   it("fetches paginated WA results, enriches detail pages, and keeps the source non-public", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-06T16:30:00.000Z"));

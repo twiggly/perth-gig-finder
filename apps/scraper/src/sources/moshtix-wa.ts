@@ -42,6 +42,7 @@ const PERTH_METRO_LOCALITIES = new Set([
   "como",
   "south perth",
   "fremantle",
+  "east fremantle",
   "north fremantle",
   "scarborough",
   "joondalup",
@@ -65,6 +66,14 @@ const NON_MUSIC_KEYWORDS = [
   "karaoke",
   "bingo"
 ];
+const PLACEHOLDER_VENUE_KEYWORDS = [
+  "various venues",
+  "touring nationally",
+  "touring australia",
+  "touring australia and new zealand",
+  "touring au and nz"
+];
+const REGIONAL_TITLE_SUFFIX_PATTERN = /\s[-–]\s(?:albany|busselton|rockingham)\b/i;
 
 interface MoshtixStructuredAddress {
   streetAddress?: string;
@@ -353,10 +362,32 @@ function normalizeVenue(input: {
 }
 
 function ensurePerthMetroVenue(input: {
+  title: string;
   venue: NormalizedVenue;
   structuredEvent: MoshtixStructuredEvent | null;
   eventData: MoshtixEventData | null;
 }): void {
+  if (REGIONAL_TITLE_SUFFIX_PATTERN.test(input.title)) {
+    throw new SkipMoshtixListingError("Moshtix event is outside Perth metro");
+  }
+
+  const placeholderHaystack = [
+    input.venue.name,
+    input.venue.address,
+    input.structuredEvent?.location?.name,
+    input.eventData?.venue?.name
+  ]
+    .map((value) => normalizeWhitespace(value ?? "").toLowerCase())
+    .filter(Boolean)
+    .join(" ");
+
+  if (
+    placeholderHaystack &&
+    PLACEHOLDER_VENUE_KEYWORDS.some((keyword) => placeholderHaystack.includes(keyword))
+  ) {
+    throw new SkipMoshtixListingError("Moshtix event uses a placeholder touring venue");
+  }
+
   const region = normalizeWhitespace(
     input.structuredEvent?.location?.address?.addressRegion ??
       input.eventData?.venue?.state ??
@@ -638,7 +669,7 @@ export function normalizeMoshtixEventPage(input: {
   }
 
   const venue = normalizeVenue({ structuredEvent, eventData });
-  ensurePerthMetroVenue({ venue, structuredEvent, eventData });
+  ensurePerthMetroVenue({ title, venue, structuredEvent, eventData });
   const statusText = normalizeWhitespace($("#status-linked-section").text()) || null;
   const sourceUrl =
     normalizeUrl(

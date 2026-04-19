@@ -81,6 +81,12 @@ interface AttachedSourceGigRow extends SourceGigRow {
   created_at: string;
 }
 
+interface PrunableSourceGigRow {
+  id: string;
+  gig_id: string;
+  identity_key: string;
+}
+
 interface CanonicalGigSourceRow {
   source_id: string;
   source_url: string;
@@ -130,6 +136,7 @@ function isReadyMirroredSourceGig(row: SourceGigRow): boolean {
 
 const PERTH_UTC_OFFSET_MS = 8 * 60 * 60 * 1000;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const QUERY_CHUNK_SIZE = 100;
 
 function getPerthDayBounds(startsAt: string): { startsAtGte: string; startsAtLt: string } {
   const utcDate = new Date(startsAt);
@@ -145,6 +152,16 @@ function getPerthDayBounds(startsAt: string): { startsAtGte: string; startsAtLt:
     startsAtGte: new Date(dayStartUtcMs).toISOString(),
     startsAtLt: new Date(dayStartUtcMs + DAY_IN_MS).toISOString()
   };
+}
+
+function chunkValues<T>(values: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+
+  return chunks;
 }
 
 function chooseCanonicalTextField(
@@ -793,6 +810,66 @@ export class SupabaseGigStore implements GigStore {
       sourceGig: toSourceGigRecord(data, input.gig.sourceSlug),
       shouldMirror: Boolean(sourceImageUrl) && !unchangedReadyImage
     };
+  }
+
+  async pruneStaleUpcomingSourceGigs(input: {
+    sourceId: string;
+    retainedIdentityKeys: string[];
+  }): Promise<void> {
+    const { data: sourceGigData, error: sourceGigError } = await this.client
+      .from("source_gigs")
+      .select("id, gig_id, identity_key")
+      .eq("source_id", input.sourceId);
+
+    if (sourceGigError) {
+      throw new Error(
+        `Unable to load source gigs for pruning: ${sourceGigError.message ?? "unknown error"}`
+      );
+    }
+
+    const sourceGigRows = (sourceGigData as PrunableSourceGigRow[] | null) ?? [];
+
+    if (sourceGigRows.length === 0) {
+      return;
+    }
+
+    const gigIds = [...new Set(sourceGigRows.map((row) => row.gig_id))];
+    const gigRows: Array<{ id: string; status: GigStatus; starts_at: string }> = [];
+
+    for (const gigIdChunk of chunkValues(gigIds, QUERY_CHUNK_SIZE)) {
+      const { data: gigData, error: gigError } = await this.client
+        .from("gigs")
+        .select("id, status, starts_at")
+        .in("id", gigIdChunk);
+
+      if (gigError) {
+        throw new Error(
+          `Unable to load gigs for pruning stale source gigs: ${gigError.message ?? "unknown error"}`
+        );
+      }
+
+      gigRows.push(
+        ...(((gigData as Array<{ id: string; status: GigStatus; starts_at: string }> | null) ??
+          []))
+      );
+    }
+
+    const nowIsoValue = new Date().toISOString();
+    const activeUpcomingGigIds = new Set(
+      gigRows
+        .filter((gig) => gig.status === "active" && gig.starts_at >= nowIsoValue)
+        .map((gig) => gig.id)
+    );
+    const retainedIdentityKeys = new Set(input.retainedIdentityKeys);
+    const staleSourceGigIds = sourceGigRows
+      .filter(
+        (row) =>
+          activeUpcomingGigIds.has(row.gig_id) &&
+          !retainedIdentityKeys.has(row.identity_key)
+      )
+      .map((row) => row.id);
+
+    await this.deleteSourceGigsById(staleSourceGigIds);
   }
 
   async mirrorSourceGigImage(

@@ -479,6 +479,32 @@ class MemoryGigStore implements GigStore {
     };
   }
 
+  async pruneStaleUpcomingSourceGigs(input: {
+    sourceId: string;
+    retainedIdentityKeys: string[];
+  }): Promise<void> {
+    const retainedIdentityKeys = new Set(input.retainedIdentityKeys);
+    const nowIsoValue = new Date().toISOString();
+
+    for (const sourceGig of [...this.sourceGigs.values()]) {
+      if (sourceGig.sourceId !== input.sourceId) {
+        continue;
+      }
+
+      if (retainedIdentityKeys.has(sourceGig.identityKey)) {
+        continue;
+      }
+
+      const gig = this.gigs.get(sourceGig.gigId);
+
+      if (!gig || gig.status !== "active" || gig.startsAt < nowIsoValue) {
+        continue;
+      }
+
+      this.sourceGigs.delete(sourceGig.id);
+    }
+  }
+
   async mirrorSourceGigImage(
     sourceGig: SourceGigRecord
   ): Promise<SourceGigImageMirrorResult> {
@@ -1175,6 +1201,108 @@ describe("executeSourceRun", () => {
     await executeSourceRun(store, source);
 
     expect(store.gigs.size).toBe(2);
+  });
+
+  it("prunes stale upcoming source attachments after a clean rerun", async () => {
+    const store = new MemoryGigStore();
+    let gigs = [
+      createGigForSource({
+        sourceSlug: "moshtix-wa",
+        externalId: "doctor-jazz",
+        sourceUrl: "https://www.moshtix.com.au/v2/event/doctor-jazz/193078",
+        title: "Doctor Jazz",
+        status: "active",
+        venueName: "Mojos Bar",
+        venueSuburb: "North Fremantle",
+        venueAddress: "237 Queen Victoria St"
+      }),
+      createGigForSource({
+        sourceSlug: "moshtix-wa",
+        externalId: "regional-night",
+        sourceUrl: "https://www.moshtix.com.au/v2/event/regional-night/193083",
+        title: "Regional Night",
+        status: "active",
+        startsAt: "2026-05-01T12:00:00.000Z",
+        venueName: "Busselton Pavilion",
+        venueSuburb: "Busselton",
+        venueAddress: "55 Queen St"
+      })
+    ];
+    const source: SourceAdapter = {
+      slug: "moshtix-wa",
+      name: "Moshtix WA",
+      baseUrl: "https://www.moshtix.com.au/v2/search",
+      priority: 10,
+      isPublicListingSource: false,
+      async fetchListings() {
+        return {
+          gigs,
+          failedCount: 0
+        };
+      }
+    };
+
+    await executeSourceRun(store, source);
+    expect(store.sourceGigs.size).toBe(2);
+
+    gigs = [gigs[0]];
+    await executeSourceRun(store, source);
+
+    expect(store.sourceGigs.size).toBe(1);
+    expect([...store.sourceGigs.values()].map((sourceGig) => sourceGig.identityKey)).toEqual([
+      "doctor-jazz"
+    ]);
+  });
+
+  it("does not prune stale upcoming source attachments after a partial rerun", async () => {
+    const store = new MemoryGigStore();
+    let gigs = [
+      createGigForSource({
+        sourceSlug: "moshtix-wa",
+        externalId: "doctor-jazz",
+        sourceUrl: "https://www.moshtix.com.au/v2/event/doctor-jazz/193078",
+        title: "Doctor Jazz",
+        status: "active",
+        venueName: "Mojos Bar",
+        venueSuburb: "North Fremantle",
+        venueAddress: "237 Queen Victoria St"
+      }),
+      createGigForSource({
+        sourceSlug: "moshtix-wa",
+        externalId: "regional-night",
+        sourceUrl: "https://www.moshtix.com.au/v2/event/regional-night/193083",
+        title: "Regional Night",
+        status: "active",
+        startsAt: "2026-05-01T12:00:00.000Z",
+        venueName: "Busselton Pavilion",
+        venueSuburb: "Busselton",
+        venueAddress: "55 Queen St"
+      })
+    ];
+    let failedCount = 0;
+    const source: SourceAdapter = {
+      slug: "moshtix-wa",
+      name: "Moshtix WA",
+      baseUrl: "https://www.moshtix.com.au/v2/search",
+      priority: 10,
+      isPublicListingSource: false,
+      async fetchListings() {
+        return {
+          gigs,
+          failedCount
+        };
+      }
+    };
+
+    await executeSourceRun(store, source);
+    expect(store.sourceGigs.size).toBe(2);
+
+    gigs = [gigs[0]];
+    failedCount = 1;
+    const result = await executeSourceRun(store, source);
+
+    expect(result.status).toBe("partial");
+    expect(store.sourceGigs.size).toBe(2);
   });
 
   it("keeps gig ingestion successful when image mirroring fails", async () => {
