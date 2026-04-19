@@ -130,6 +130,7 @@ Good first pages:
 - Git-connected preview deployments are created from repository pushes.
 - Hosted preview and production deployments use the hosted Supabase project configured in Vercel.
 - Hosted data refresh runs through [/.github/workflows/refresh-hosted-gigs.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-hosted-gigs.yml).
+- `ticketmaster-au` runs separately through [/.github/workflows/refresh-ticketmaster-self-hosted.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-ticketmaster-self-hosted.yml) on a self-hosted runner labeled `perth-gig-finder` and `ticketmaster`, because GitHub-hosted runners are currently blocked with `403` responses.
 - The hosted refresh workflow:
   - scrapes source data into hosted Supabase
   - backfills mirrored images as best effort
