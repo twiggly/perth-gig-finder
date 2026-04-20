@@ -316,8 +316,38 @@ describe("humanitix perth music source adapter", () => {
       })
     });
 
+    const bridgertonBallGigs = normalizeHumanitixDetailPage({
+      eventUrl: "https://events.humanitix.com/bridgerton-ball-2026",
+      html: buildEventPage({
+        title: "The Bridgerton* Ball 2026",
+        canonicalUrl: "https://events.humanitix.com/bridgerton-ball-2026",
+        ogDescription: "An immersive ballroom evening with themed entertainment.",
+        imageUrl: "https://images.humanitix.com/i/bridgerton@seo-500.jpg",
+        twitterLocation: "Perth Town Hall, 601 Hay St, Perth WA 6000, Australia",
+        twitterDate: "Saturday 9th May 2026",
+        eventId: "bridgerton-ball",
+        structuredEvents: buildStructuredEvent({
+          title: "The Bridgerton* Ball 2026",
+          url: "https://events.humanitix.com/bridgerton-ball-2026",
+          startDate: "2026-05-09T18:30:00+0800",
+          endDate: "2026-05-09T22:30:00+0800",
+          venueName: "Perth Town Hall",
+          streetAddress: "601 Hay St, Perth WA 6000, Australia",
+          locality: "Perth",
+          postalCode: "6000",
+          description: "An immersive ballroom evening with themed entertainment.",
+          performers: [{ name: "Perth String Quartet" }]
+        }),
+        headings: ["Description", "Lineup"],
+        paragraphs: [
+          "Step into a themed ballroom experience with costumes, dancing, and society intrigue."
+        ]
+      })
+    });
+
     expect(cocktailGigs).toEqual([]);
     expect(recurringCommunityGigs).toEqual([]);
+    expect(bridgertonBallGigs).toEqual([]);
   });
 
   it("fans recurring Humanitix event pages into separate gigs", () => {

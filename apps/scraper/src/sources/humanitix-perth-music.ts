@@ -693,21 +693,43 @@ function normalizeVenue(
   };
 }
 
+function normalizeForKeywordMatch(value: string): string {
+  return normalizeWhitespace(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function buildKeywordPattern(keyword: string): RegExp {
-  const escapedKeyword = escapeRegex(keyword.trim()).replace(/\s+/g, "\\s+");
+  const normalizedKeyword = normalizeForKeywordMatch(keyword);
+
+  if (!normalizedKeyword) {
+    return /$a/;
+  }
+
+  const escapedKeyword = escapeRegex(normalizedKeyword).replace(/\s+/g, "\\s+");
   return new RegExp(`(?:^|\\b)${escapedKeyword}(?:\\b|$)`, "i");
 }
 
 function containsKeyword(haystack: string, keywords: string[]): boolean {
-  return keywords.some((keyword) => buildKeywordPattern(keyword).test(haystack));
+  const normalizedHaystack = normalizeForKeywordMatch(haystack);
+
+  if (!normalizedHaystack) {
+    return false;
+  }
+
+  return keywords.some((keyword) => buildKeywordPattern(keyword).test(normalizedHaystack));
 }
 
 function countKeywordMatches(haystack: string, keywords: string[]): number {
-  return keywords.filter((keyword) => buildKeywordPattern(keyword).test(haystack)).length;
+  const normalizedHaystack = normalizeForKeywordMatch(haystack);
+
+  if (!normalizedHaystack) {
+    return 0;
+  }
+
+  return keywords.filter((keyword) => buildKeywordPattern(keyword).test(normalizedHaystack)).length;
 }
 
 function isPerthMetroVenue(structuredEvent: HumanitixStructuredEvent, venue: NormalizedVenue): boolean {
