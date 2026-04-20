@@ -26,7 +26,7 @@ values (
   'https://www.moshtix.com.au/v2/search',
   10,
   true,
-  false
+  true
 )
 on conflict (slug) do update
 set

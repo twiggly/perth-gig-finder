@@ -749,7 +749,7 @@ export const moshtixWaSource: SourceAdapter = {
   name: "Moshtix WA",
   baseUrl: SOURCE_URL,
   priority: 10,
-  isPublicListingSource: false,
+  isPublicListingSource: true,
   async fetchListings(fetchImpl = fetch) {
     const gigs: NormalizedGig[] = [];
     const seenEventIds = new Set<string>();

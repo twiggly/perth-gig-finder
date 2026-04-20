@@ -943,7 +943,7 @@ describe("executeSourceRun", () => {
       name: "Moshtix WA",
       baseUrl: "https://www.moshtix.com.au/v2/search",
       priority: 10,
-      isPublicListingSource: false,
+      isPublicListingSource: true,
       async fetchListings() {
         return {
           gigs: [
@@ -1128,7 +1128,7 @@ describe("executeSourceRun", () => {
       name: "Moshtix WA",
       baseUrl: "https://www.moshtix.com.au/v2/search",
       priority: 10,
-      isPublicListingSource: false,
+      isPublicListingSource: true,
       async fetchListings() {
         return {
           gigs: [
@@ -1233,7 +1233,7 @@ describe("executeSourceRun", () => {
       name: "Moshtix WA",
       baseUrl: "https://www.moshtix.com.au/v2/search",
       priority: 10,
-      isPublicListingSource: false,
+      isPublicListingSource: true,
       async fetchListings() {
         return {
           gigs,
@@ -1285,7 +1285,7 @@ describe("executeSourceRun", () => {
       name: "Moshtix WA",
       baseUrl: "https://www.moshtix.com.au/v2/search",
       priority: 10,
-      isPublicListingSource: false,
+      isPublicListingSource: true,
       async fetchListings() {
         return {
           gigs,

@@ -111,7 +111,7 @@ Good first pages:
 - Sources live today:
   - `Milk Bar`
   - `Oztix WA` filtered down to Perth-metro music gigs
-  - `Moshtix WA`
+  - `Moshtix WA` filtered down to Perth-metro music gigs
   - `Ticketek WA` filtered down to Perth-metro live music results
   - `Ticketmaster AU` filtered down to direct Perth music listings
 - The homepage supports search, venue chips, day-by-day navigation, mirrored gig images, and mobile/trackpad-friendly browsing.
