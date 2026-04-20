@@ -110,6 +110,7 @@ Good first pages:
 
 - Sources live today:
   - `Milk Bar`
+  - `The Bird`
   - `Humanitix Perth Music` filtered down to strict Perth-metro gigs
   - `Oztix WA` filtered down to Perth-metro music gigs
   - `Moshtix WA` filtered down to Perth-metro music gigs
