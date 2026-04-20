@@ -504,6 +504,7 @@ export class SupabaseGigStore implements GigStore {
       venueId: string;
       startsAt: string;
       title: string;
+      excludeGigId?: string | null;
     }
   ): Promise<GigRecord | null> {
     const exactNormalizedTitle = normalizeTitleForMatch(input.title);
@@ -518,15 +519,18 @@ export class SupabaseGigStore implements GigStore {
       throw new Error(`Unable to query canonical gigs: ${error.message}`);
     }
 
-    const exactMatch = (data as GigRow[] | null)?.find(
+    const exactCandidates = ((data as GigRow[] | null) ?? []).filter(
+      (gig) => gig.id !== input.excludeGigId
+    );
+    const exactCandidate = exactCandidates.find(
       (gig) => normalizeTitleForMatch(gig.title) === exactNormalizedTitle
     );
 
-    if (exactMatch) {
+    if (exactCandidate) {
       return {
-        id: exactMatch.id,
-        slug: exactMatch.slug,
-        title: exactMatch.title
+        id: exactCandidate.id,
+        slug: exactCandidate.slug,
+        title: exactCandidate.title
       };
     }
 
@@ -542,7 +546,9 @@ export class SupabaseGigStore implements GigStore {
       throw new Error(`Unable to query canonical gigs by Perth day: ${dayError.message}`);
     }
 
-    const dayMatches = (dayData as GigRow[] | null) ?? [];
+    const dayMatches = ((dayData as GigRow[] | null) ?? []).filter(
+      (gig) => gig.id !== input.excludeGigId
+    );
     const exactCanonicalMatches = dayMatches.filter(
       (gig) => normalizeCanonicalTitleForMatch(gig.title) === canonicalTitle
     );

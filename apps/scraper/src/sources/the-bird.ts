@@ -334,7 +334,7 @@ export const theBirdSource: SourceAdapter = {
   slug: "the-bird",
   name: "The Bird",
   baseUrl: SOURCE_URL,
-  priority: 100,
+  priority: 50,
   isPublicListingSource: true,
   async fetchListings(fetchImpl = fetch) {
     const response = await fetchImpl(FEED_URL, {

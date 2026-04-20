@@ -97,6 +97,7 @@ export interface GigStore {
       venueId: string;
       startsAt: string;
       title: string;
+      excludeGigId?: string | null;
     }
   ): Promise<GigRecord | null>;
   saveGig(input: {

@@ -245,6 +245,7 @@ class MemoryGigStore implements GigStore {
       venueId: string;
       startsAt: string;
       title: string;
+      excludeGigId?: string | null;
     }
   ): Promise<GigRecord | null> {
     const normalizedTitle = normalizeTitleForMatch(input.title);
@@ -252,6 +253,7 @@ class MemoryGigStore implements GigStore {
 
     for (const gig of this.gigs.values()) {
       if (
+        gig.id !== input.excludeGigId &&
         gig.venueId === input.venueId &&
         gig.startsAt === input.startsAt &&
         gig.normalizedTitle === normalizedTitle
@@ -262,6 +264,7 @@ class MemoryGigStore implements GigStore {
 
     const canonicalMatches = [...this.gigs.values()].filter(
       (gig) =>
+        gig.id !== input.excludeGigId &&
         gig.venueId === input.venueId &&
         getPerthDayKey(gig.startsAt) === getPerthDayKey(input.startsAt) &&
         gig.canonicalTitle === canonicalTitle
@@ -277,6 +280,7 @@ class MemoryGigStore implements GigStore {
 
     const fuzzyMatches = [...this.gigs.values()].filter(
       (gig) =>
+        gig.id !== input.excludeGigId &&
         gig.venueId === input.venueId &&
         getPerthDayKey(gig.startsAt) === getPerthDayKey(input.startsAt) &&
         areCanonicalTitlesCompatible(gig.title, input.title)
@@ -1201,6 +1205,165 @@ describe("executeSourceRun", () => {
     await executeSourceRun(store, source);
 
     expect(store.gigs.size).toBe(2);
+  });
+
+  it("reattaches an existing source gig when a better canonical match appears on rerun", async () => {
+    const store = new MemoryGigStore();
+    const venue = {
+      id: randomUUID(),
+      slug: "the-bird",
+      name: "The Bird"
+    };
+    store.venues.set(venue.slug, venue);
+
+    const oztix = {
+      id: randomUUID(),
+      slug: "oztix-wa",
+      name: "Oztix WA",
+      baseUrl: "https://www.oztix.com.au/search?states%5B0%5D=WA&q=",
+      priority: 10,
+      isPublicListingSource: true
+    } satisfies SourceRecord;
+    const bird = {
+      id: randomUUID(),
+      slug: "the-bird",
+      name: "The Bird",
+      baseUrl: "https://www.williamstreetbird.com/comingup",
+      priority: 50,
+      isPublicListingSource: true
+    } satisfies SourceRecord;
+    store.sources.set(oztix.slug, oztix);
+    store.sources.set(bird.slug, bird);
+
+    const existingGigId = randomUUID();
+    const duplicateGigId = randomUUID();
+    const startsAt = "2026-04-25T08:00:00.000Z";
+
+    store.gigs.set(existingGigId, {
+      id: existingGigId,
+      slug: "the-bird-2026-04-25-sweet-16-carpark-party",
+      title: "Sweet 16 Carpark Party",
+      venueId: venue.id,
+      startsAt,
+      startsAtPrecision: "exact",
+      status: "active",
+      normalizedTitle: normalizeTitleForMatch("Sweet 16 Carpark Party"),
+      canonicalTitle: normalizeCanonicalTitleForMatch("Sweet 16 Carpark Party"),
+      sourceUrl: "https://tickets.oztix.com.au/outlet/event/sweet-16-carpark-party",
+      description: null,
+      ticketUrl: "https://tickets.oztix.com.au/outlet/event/sweet-16-carpark-party"
+    });
+    store.gigs.set(duplicateGigId, {
+      id: duplicateGigId,
+      slug: "the-bird-2026-04-25-the-bird-sweet-16th-carpark-birthday-party",
+      title: "THE BIRD SWEET 16th CARPARK BIRTHDAY PARTY",
+      venueId: venue.id,
+      startsAt,
+      startsAtPrecision: "exact",
+      status: "active",
+      normalizedTitle: normalizeTitleForMatch("THE BIRD SWEET 16th CARPARK BIRTHDAY PARTY"),
+      canonicalTitle: normalizeCanonicalTitleForMatch(
+        "THE BIRD SWEET 16th CARPARK BIRTHDAY PARTY"
+      ),
+      sourceUrl:
+        "https://www.williamstreetbird.com/comingup#2026-04-25-the-bird-sweet-16th-carpark-birthday-party",
+      description: null,
+      ticketUrl: null
+    });
+    store.sourceGigs.set(randomUUID(), {
+      id: randomUUID(),
+      gigId: existingGigId,
+      sourceSlug: "oztix-wa",
+      sourceId: oztix.id,
+      identityKey: "sweet-16-oztix",
+      externalId: "sweet-16-oztix",
+      checksum: "sweet-16-oztix-checksum",
+      sourceUrl: "https://tickets.oztix.com.au/outlet/event/sweet-16-carpark-party",
+      startsAtPrecision: "exact",
+      sourceImageUrl: "https://assets.oztix.com.au/image/sweet-16.png",
+      mirroredImagePath: "oztix-wa/sweet-16.webp",
+      imageMirrorStatus: "ready",
+      imageMirroredAt: new Date().toISOString(),
+      mirroredImageWidth: 1200,
+      mirroredImageHeight: 800
+    });
+    const birdSourceGigId = randomUUID();
+    store.sourceGigs.set(birdSourceGigId, {
+      id: birdSourceGigId,
+      gigId: duplicateGigId,
+      sourceSlug: "the-bird",
+      sourceId: bird.id,
+      identityKey: "2026-04-25-the-bird-sweet-16th-carpark-birthday-party",
+      externalId: "2026-04-25-the-bird-sweet-16th-carpark-birthday-party",
+      checksum: "sweet-16-bird-checksum",
+      sourceUrl:
+        "https://www.williamstreetbird.com/comingup#2026-04-25-the-bird-sweet-16th-carpark-birthday-party",
+      startsAtPrecision: "exact",
+      sourceImageUrl: null,
+      mirroredImagePath: null,
+      imageMirrorStatus: "missing",
+      imageMirroredAt: null,
+      mirroredImageWidth: null,
+      mirroredImageHeight: null
+    });
+
+    const source: SourceAdapter = {
+      slug: "the-bird",
+      name: "The Bird",
+      baseUrl: "https://www.williamstreetbird.com/comingup",
+      priority: 50,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "the-bird",
+              externalId: "2026-04-25-the-bird-sweet-16th-carpark-birthday-party",
+              sourceUrl:
+                "https://www.williamstreetbird.com/comingup#2026-04-25-the-bird-sweet-16th-carpark-birthday-party",
+              title: "THE BIRD SWEET 16th CARPARK BIRTHDAY PARTY",
+              status: "active",
+              startsAt,
+              venueName: "The Bird",
+              venueSuburb: "Northbridge",
+              venueAddress: "181 William Street"
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+
+    expect(
+      areCanonicalTitlesCompatible(
+        "THE BIRD SWEET 16th CARPARK BIRTHDAY PARTY",
+        "Sweet 16 Carpark Party"
+      )
+    ).toBe(true);
+    await expect(
+      store.findSourceGig(
+        bird.id,
+        "2026-04-25-the-bird-sweet-16th-carpark-birthday-party",
+        "sweet-16-bird-checksum"
+      )
+    ).resolves.toMatchObject({ gigId: duplicateGigId });
+    await expect(
+      store.findCanonicalGig({
+        venueId: venue.id,
+        startsAt,
+        title: "THE BIRD SWEET 16th CARPARK BIRTHDAY PARTY",
+        excludeGigId: duplicateGigId
+      })
+    ).resolves.toMatchObject({ id: existingGigId });
+
+    await executeSourceRun(store, source);
+
+    const attachedGigIds = new Set([...store.sourceGigs.values()].map((sourceGig) => sourceGig.gigId));
+
+    expect(attachedGigIds.size).toBe(1);
+    expect(
+      [...store.sourceGigs.values()].map((sourceGig) => sourceGig.sourceSlug).sort()
+    ).toEqual(["oztix-wa", "the-bird"]);
   });
 
   it("prunes stale upcoming source attachments after a clean rerun", async () => {
