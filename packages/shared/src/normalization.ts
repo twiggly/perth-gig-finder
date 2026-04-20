@@ -3,13 +3,30 @@ import { createHash } from "node:crypto";
 const NON_ALPHANUMERIC = /[^a-z0-9]+/g;
 const APOSTROPHES = /['’]/g;
 const STATUS_PREFIX = /^(cancelled|postponed)\s*[-:]\s*/i;
+const ORDINAL_SUFFIX = /\b(\d+)(st|nd|rd|th)\b/gi;
 const CANONICAL_TITLE_NOISE_PATTERNS = [
   /\balbum launch\b/gi,
+  /\bbirthday\b/gi,
   /\bin concert\b/gi,
   /\blive\b/gi,
   /\btour\b/gi,
   /\b20\d{2}\b/g
 ];
+const CANONICAL_TITLE_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "at",
+  "by",
+  "for",
+  "from",
+  "in",
+  "of",
+  "on",
+  "the",
+  "to",
+  "with"
+]);
 const VENUE_NAME_OVERRIDES = new Map<string, string>([
   ["clancys-fish-pub-freemantle", "Clancy's Fish Pub"],
   ["clancys-fish-pub-fremantle", "Clancy's Fish Pub"],
@@ -41,7 +58,9 @@ export function normalizeTitleForMatch(value: string): string {
 }
 
 export function normalizeCanonicalTitleForMatch(value: string): string {
-  let normalized = normalizeWhitespace(value).replace(STATUS_PREFIX, "");
+  let normalized = normalizeWhitespace(value)
+    .replace(STATUS_PREFIX, "")
+    .replace(ORDINAL_SUFFIX, "$1");
 
   for (const pattern of CANONICAL_TITLE_NOISE_PATTERNS) {
     normalized = normalized.replace(pattern, " ");
@@ -78,10 +97,28 @@ export function areCanonicalTitlesCompatible(left: string, right: string): boole
     return true;
   }
 
-  const smallerSize = Math.min(leftSet.size, rightSet.size);
-  const largerSize = Math.max(leftSet.size, rightSet.size);
+  const significantLeft = new Set(
+    leftTokens.filter((token) => !CANONICAL_TITLE_STOP_WORDS.has(token))
+  );
+  const significantRight = new Set(
+    rightTokens.filter((token) => !CANONICAL_TITLE_STOP_WORDS.has(token))
+  );
+  let significantOverlap = 0;
 
-  return overlap === smallerSize && overlap >= 3 && largerSize - smallerSize <= 1;
+  for (const token of significantLeft) {
+    if (significantRight.has(token)) {
+      significantOverlap += 1;
+    }
+  }
+
+  const smallerSize = Math.min(significantLeft.size, significantRight.size);
+  const largerSize = Math.max(significantLeft.size, significantRight.size);
+
+  return (
+    significantOverlap === smallerSize &&
+    significantOverlap >= 3 &&
+    largerSize - smallerSize <= 2
+  );
 }
 
 export function normalizeVenueName(value: string): string {

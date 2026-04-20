@@ -51,16 +51,16 @@ async function processGig(
 ): Promise<"inserted" | "updated"> {
   const venue = await store.upsertVenue(gig);
   const existingSourceGig = await store.findSourceGig(source.id, gig.externalId, gig.checksum);
-  const matchedGig = existingSourceGig
-    ? { id: existingSourceGig.gigId }
-    : await store.findCanonicalGig({
-        venueId: venue.id,
-        startsAt: gig.startsAt,
-        title: gig.title
-      });
+  const matchedGig = await store.findCanonicalGig({
+    venueId: venue.id,
+    startsAt: gig.startsAt,
+    title: gig.title,
+    excludeGigId: existingSourceGig?.gigId ?? null
+  });
+  const targetGigId = matchedGig?.id ?? existingSourceGig?.gigId ?? null;
 
   const result = await store.saveGig({
-    existingGigId: matchedGig?.id ?? null,
+    existingGigId: targetGigId,
     gig: {
       ...gig,
       venue: {
