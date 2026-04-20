@@ -41,6 +41,7 @@ describe("resolveSourcesToRun", () => {
     });
 
     expect(selected.map((source) => source.slug)).toEqual([
+      "humanitix-perth-music",
       "milk-bar",
       "oztix-wa",
       "ticketek-wa"
