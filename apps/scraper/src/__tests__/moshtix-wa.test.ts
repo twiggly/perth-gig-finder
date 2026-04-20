@@ -629,7 +629,7 @@ describe("moshtix wa source adapter", () => {
     try {
       const result = await moshtixWaSource.fetchListings(fetchMock);
 
-      expect(moshtixWaSource.isPublicListingSource).toBe(false);
+      expect(moshtixWaSource.isPublicListingSource).toBe(true);
       expect(result.failedCount).toBe(0);
       expect(result.gigs).toHaveLength(2);
       expect(result.gigs.map((gig) => gig.title)).toEqual([
