@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 
 import {
+  areCanonicalTitlesCompatible,
   buildGigChecksum,
   normalizeVenueName,
   normalizeVenueWebsiteUrl,
@@ -16,8 +17,11 @@ import {
 import type { SourceAdapter, SourceAdapterResult } from "../types";
 
 const SOURCE_URL = "https://www.williamstreetbird.com/comingup";
+const WHATSON_URL = "https://www.williamstreetbird.com/whatson";
 const FEED_URL =
   "https://script.google.com/macros/s/AKfycbxdagRDbsT5jS3IG1w9Kl7N0qia6piKKcp8BE_n4y9n9XYItKKgXmYHX6XX70fDmMP5pw/exec";
+const WHATSON_FEED_URL =
+  "https://script.google.com/macros/s/AKfycbzzgynedUsONCcojblT4OlkSN8rhGlCQ7sW5j4izIwA8pK7sKWpEOCCuonK7RqiX-Ee/exec";
 const REQUEST_TIMEOUT_MS = 15_000;
 const LINKED_EVENT_TIMEOUT_MS = 10_000;
 const DEFAULT_START_HOUR = 12;
@@ -35,6 +39,51 @@ export interface TheBirdFeedRow {
   Info?: string;
   "Ticket Link"?: string;
 }
+
+export interface TheBirdWhatsOnRow {
+  Date?: string;
+  Day?: string;
+  Time?: string;
+  Price?: string | number;
+  Vibe?: string;
+  Title?: string;
+  Featuring?: string;
+  Description?: string;
+  "Ticket Link"?: string;
+}
+
+const THE_BIRD_WEEKLY_NON_MUSIC_PATTERNS = [
+  /\bimprov\b/i,
+  /\bdnd\b/i,
+  /\bcomedy\b/i,
+  /\btrivia\b/i,
+  /\bquiz\b/i
+];
+
+const THE_BIRD_WEEKLY_MUSIC_PATTERNS = [
+  /\blive music\b/i,
+  /\bsingle launch\b/i,
+  /\bep launch\b/i,
+  /\balbum launch\b/i,
+  /\bjazz\b/i,
+  /\bnoise\b/i,
+  /\bambient\b/i,
+  /\belectronic\b/i,
+  /\btechno\b/i,
+  /\bdance\b/i,
+  /\bfunk\b/i,
+  /\bsoul\b/i,
+  /\bindie\b/i,
+  /\balt\b/i,
+  /\brock\b/i,
+  /\bmetal\b/i,
+  /\bparty\b/i,
+  /\bdj\b/i,
+  /\bdrum(?: and| &) bass\b/i,
+  /\bdnb\b/i,
+  /\bcourtyard\b/i,
+  /\bcarpark\b/i
+];
 
 function normalizeUrl(value: string | null | undefined): string | null {
   if (!value) {
@@ -77,13 +126,15 @@ function isPlaceholderRow(row: TheBirdFeedRow): boolean {
 
 function parseDateParts(value: string): { year: number; month: number; day: number } {
   const trimmed = normalizeWhitespace(value);
-  const match = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const match = trimmed.match(/^(\d{2})([/.])(\d{2})\2(\d{2}|\d{4})$/);
 
   if (!match) {
     throw new Error(`Invalid The Bird date: ${value}`);
   }
 
-  const [, dayText, monthText, yearText] = match;
+  const [, dayText, , monthText, rawYearText] = match;
+  const yearText =
+    rawYearText.length === 2 ? `20${rawYearText}` : rawYearText;
   const year = Number(yearText);
   const month = Number(monthText);
   const day = Number(dayText);
@@ -334,7 +385,11 @@ function buildVenue(): NormalizedVenue {
   };
 }
 
-function buildSyntheticIdentity(parts: { year: number; month: number; day: number }, title: string): {
+function buildSyntheticIdentity(
+  parts: { year: number; month: number; day: number },
+  title: string,
+  sourceUrlBase = SOURCE_URL
+): {
   externalId: string;
   sourceUrl: string;
 } {
@@ -342,30 +397,35 @@ function buildSyntheticIdentity(parts: { year: number; month: number; day: numbe
 
   return {
     externalId: identity,
-    sourceUrl: `${SOURCE_URL}#${identity}`
+    sourceUrl: `${sourceUrlBase}#${identity}`
   };
 }
 
-export function normalizeTheBirdRow(row: TheBirdFeedRow): NormalizedGig | null {
-  if (isBlankRow(row) || isPlaceholderRow(row)) {
-    return null;
-  }
-
-  const title = normalizeWhitespace(row["Event Title"] ?? "");
+function buildTheBirdGig(input: {
+  title: string;
+  description: string | null;
+  dateText: string;
+  ticketUrl: string | null;
+  timeText: string | null;
+  artists: string[];
+  rawPayload: JsonObject;
+  sourceUrlBase?: string;
+}): NormalizedGig | null {
+  const title = normalizeWhitespace(input.title);
 
   if (!title) {
     return null;
   }
 
-  const dateParts = parseDateParts(row.Date ?? "");
+  const dateParts = parseDateParts(input.dateText);
 
   if (isPastLocalDate(dateParts)) {
     return null;
   }
 
   const venue = buildVenue();
-  const description = normalizeWhitespace(row.Info ?? "") || null;
-  const time = parseTheBirdStartTime(description);
+  const description = input.description;
+  const time = parseTheBirdStartTime(input.timeText ?? description);
   const startsAt = time
     ? buildPerthDateTime({
         ...dateParts,
@@ -378,14 +438,13 @@ export function normalizeTheBirdRow(row: TheBirdFeedRow): NormalizedGig | null {
         minute: 0
       });
   const startsAtPrecision = time?.startsAtPrecision ?? "date";
-  const { externalId, sourceUrl } = buildSyntheticIdentity(dateParts, title);
-  const ticketUrl = normalizeTicketUrl(row["Ticket Link"]);
+  const { externalId, sourceUrl } = buildSyntheticIdentity(
+    dateParts,
+    title,
+    input.sourceUrlBase
+  );
   const rawPayload: JsonObject = {
-    Date: row.Date ?? "",
-    Day: row.Day ?? "",
-    "Event Title": row["Event Title"] ?? "",
-    Info: row.Info ?? "",
-    "Ticket Link": row["Ticket Link"] ?? "",
+    ...input.rawPayload,
     derivedExternalId: externalId,
     derivedSourceUrl: sourceUrl,
     derivedStartsAt: startsAt,
@@ -403,9 +462,9 @@ export function normalizeTheBirdRow(row: TheBirdFeedRow): NormalizedGig | null {
     startsAt,
     startsAtPrecision,
     endsAt: null,
-    ticketUrl,
+    ticketUrl: input.ticketUrl,
     venue,
-    artists: [title],
+    artists: input.artists.length > 0 ? input.artists : [title],
     rawPayload,
     checksum: buildGigChecksum({
       sourceSlug: "the-bird",
@@ -415,6 +474,31 @@ export function normalizeTheBirdRow(row: TheBirdFeedRow): NormalizedGig | null {
       sourceUrl
     })
   };
+}
+
+export function normalizeTheBirdRow(row: TheBirdFeedRow): NormalizedGig | null {
+  if (isBlankRow(row) || isPlaceholderRow(row)) {
+    return null;
+  }
+
+  const description = normalizeWhitespace(row.Info ?? "") || null;
+
+  return buildTheBirdGig({
+    title: row["Event Title"] ?? "",
+    description,
+    dateText: row.Date ?? "",
+    ticketUrl: normalizeTicketUrl(row["Ticket Link"]),
+    timeText: description,
+    artists: [normalizeWhitespace(row["Event Title"] ?? "")].filter(Boolean),
+    rawPayload: {
+      Date: row.Date ?? "",
+      Day: row.Day ?? "",
+      "Event Title": row["Event Title"] ?? "",
+      Info: row.Info ?? "",
+      "Ticket Link": row["Ticket Link"] ?? "",
+      feedSurface: "comingup"
+    }
+  });
 }
 
 export function parseTheBirdFeedRows(rows: TheBirdFeedRow[]): SourceAdapterResult {
@@ -434,6 +518,220 @@ export function parseTheBirdFeedRows(rows: TheBirdFeedRow[]): SourceAdapterResul
   }
 
   return { gigs, failedCount };
+}
+
+function parseTheBirdFeaturingArtists(
+  value: string | null | undefined,
+  title: string
+): string[] {
+  const normalized = normalizeWhitespace(value ?? "");
+
+  if (!normalized || /^presented by\b/i.test(normalized)) {
+    return [];
+  }
+
+  const artists = normalized
+    .split(",")
+    .map((artist) => normalizeWhitespace(artist))
+    .filter(Boolean);
+  const uniqueBySlug = new Map<string, string>();
+
+  for (const artist of artists) {
+    const artistSlug = slugify(artist);
+
+    if (!artistSlug || artistSlug === slugify(title) || uniqueBySlug.has(artistSlug)) {
+      continue;
+    }
+
+    uniqueBySlug.set(artistSlug, artist);
+  }
+
+  return [...uniqueBySlug.values()];
+}
+
+function isTheBirdWeeklyMusicRow(row: TheBirdWhatsOnRow): boolean {
+  const title = normalizeWhitespace(row.Title ?? "");
+  const featuringArtists = parseTheBirdFeaturingArtists(row.Featuring, title);
+  const combined = normalizeWhitespace(
+    [
+      row.Title ?? "",
+      row.Vibe ?? "",
+      row.Description ?? "",
+      row.Featuring ?? ""
+    ].join(" ")
+  );
+
+  if (!combined) {
+    return false;
+  }
+
+  if (THE_BIRD_WEEKLY_NON_MUSIC_PATTERNS.some((pattern) => pattern.test(combined))) {
+    return false;
+  }
+
+  if (THE_BIRD_WEEKLY_MUSIC_PATTERNS.some((pattern) => pattern.test(combined))) {
+    return true;
+  }
+
+  return featuringArtists.length >= 2;
+}
+
+export function normalizeTheBirdWhatsOnRow(row: TheBirdWhatsOnRow): NormalizedGig | null {
+  const title = normalizeWhitespace(row.Title ?? "");
+
+  if (!title || !normalizeWhitespace(row.Date ?? "")) {
+    return null;
+  }
+
+  if (!isTheBirdWeeklyMusicRow(row)) {
+    return null;
+  }
+
+  const description = normalizeWhitespace(row.Description ?? "") || null;
+  const artists = parseTheBirdFeaturingArtists(row.Featuring, title);
+
+  return buildTheBirdGig({
+    title,
+    description,
+    dateText: row.Date ?? "",
+    ticketUrl: normalizeTicketUrl(row["Ticket Link"]),
+    timeText: normalizeWhitespace(row.Time ?? "") || null,
+    artists,
+    sourceUrlBase: WHATSON_URL,
+    rawPayload: {
+      Date: row.Date ?? "",
+      Day: row.Day ?? "",
+      Time: row.Time ?? "",
+      Price: row.Price ?? null,
+      Vibe: row.Vibe ?? "",
+      Title: row.Title ?? "",
+      Featuring: row.Featuring ?? "",
+      Description: row.Description ?? "",
+      "Ticket Link": row["Ticket Link"] ?? "",
+      feedSurface: "whatson"
+    }
+  });
+}
+
+export function parseTheBirdWhatsOnRows(rows: TheBirdWhatsOnRow[]): SourceAdapterResult {
+  const gigs: NormalizedGig[] = [];
+  let failedCount = 0;
+
+  for (const row of rows) {
+    try {
+      const normalized = normalizeTheBirdWhatsOnRow(row);
+
+      if (normalized) {
+        gigs.push(normalized);
+      }
+    } catch {
+      failedCount += 1;
+    }
+  }
+
+  return { gigs, failedCount };
+}
+
+function hasLineupArtists(gig: NormalizedGig): boolean {
+  const normalizedTitle = slugify(gig.title);
+
+  return gig.artists.some((artist) => {
+    const normalizedArtist = slugify(artist);
+    return Boolean(normalizedArtist) && normalizedArtist !== normalizedTitle;
+  });
+}
+
+function chooseLongerText(
+  current: string | null,
+  candidate: string | null
+): string | null {
+  if (!current) {
+    return candidate;
+  }
+
+  if (!candidate) {
+    return current;
+  }
+
+  return candidate.length > current.length ? candidate : current;
+}
+
+function mergeTheBirdGigs(current: NormalizedGig, candidate: NormalizedGig): NormalizedGig {
+  const prefersCandidateTime =
+    current.startsAtPrecision !== "exact" && candidate.startsAtPrecision === "exact";
+  const startsAt = prefersCandidateTime ? candidate.startsAt : current.startsAt;
+  const startsAtPrecision = prefersCandidateTime
+    ? candidate.startsAtPrecision
+    : current.startsAtPrecision;
+  const description = chooseLongerText(current.description, candidate.description);
+  const artists =
+    hasLineupArtists(current) || !hasLineupArtists(candidate)
+      ? current.artists
+      : candidate.artists;
+  const currentRawPayload =
+    current.rawPayload && typeof current.rawPayload === "object" && !Array.isArray(current.rawPayload)
+      ? current.rawPayload
+      : {};
+  const candidateRawPayload =
+    candidate.rawPayload &&
+    typeof candidate.rawPayload === "object" &&
+    !Array.isArray(candidate.rawPayload)
+      ? candidate.rawPayload
+      : {};
+
+  return {
+    ...current,
+    description,
+    startsAt,
+    startsAtPrecision,
+    ticketUrl: current.ticketUrl ?? candidate.ticketUrl,
+    imageUrl: current.imageUrl ?? candidate.imageUrl,
+    artists,
+    rawPayload: {
+      ...currentRawPayload,
+      mergedWeeklyFeed: candidateRawPayload,
+      derivedMergedFeedSurfaces: ["comingup", "whatson"]
+    },
+    checksum: buildGigChecksum({
+      sourceSlug: "the-bird",
+      startsAt,
+      title: current.title,
+      venueSlug: current.venue.slug,
+      sourceUrl: current.sourceUrl
+    })
+  };
+}
+
+function mergeTheBirdFeedResults(
+  primary: SourceAdapterResult,
+  candidate: SourceAdapterResult
+): SourceAdapterResult {
+  const gigs = [...primary.gigs];
+
+  for (const gig of candidate.gigs) {
+    const existingIndex = gigs.findIndex((existingGig) => {
+      if (existingGig.externalId === gig.externalId) {
+        return true;
+      }
+
+      return (
+        existingGig.startsAt.slice(0, 10) === gig.startsAt.slice(0, 10) &&
+        areCanonicalTitlesCompatible(existingGig.title, gig.title)
+      );
+    });
+
+    if (existingIndex === -1) {
+      gigs.push(gig);
+      continue;
+    }
+
+    gigs[existingIndex] = mergeTheBirdGigs(gigs[existingIndex]!, gig);
+  }
+
+  return {
+    gigs,
+    failedCount: primary.failedCount + candidate.failedCount
+  };
 }
 
 async function enrichTheBirdGigImage(
@@ -506,7 +804,24 @@ export const theBirdSource: SourceAdapter = {
       throw new Error("The Bird feed payload was not an array");
     }
 
-    const parsed = parseTheBirdFeedRows(payload as TheBirdFeedRow[]);
+    const weeklyResponse = await fetchImpl(WHATSON_FEED_URL, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    });
+
+    if (!weeklyResponse.ok) {
+      throw new Error(`The Bird weekly feed returned status ${weeklyResponse.status}`);
+    }
+
+    const weeklyPayload = (await weeklyResponse.json()) as unknown;
+
+    if (!Array.isArray(weeklyPayload)) {
+      throw new Error("The Bird weekly feed payload was not an array");
+    }
+
+    const parsed = mergeTheBirdFeedResults(
+      parseTheBirdFeedRows(payload as TheBirdFeedRow[]),
+      parseTheBirdWhatsOnRows(weeklyPayload as TheBirdWhatsOnRow[])
+    );
     const gigs: NormalizedGig[] = [];
 
     for (const gig of parsed.gigs) {
