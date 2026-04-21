@@ -41,6 +41,13 @@ export function GigCard({ gig, isOpen, onClose, onToggle }: GigCardProps) {
   const hasRenderableImage = hasRenderableGigImage(gig) && Boolean(imageUrl);
   const imageWidth = hasRenderableImage ? gig.image_width! : undefined;
   const imageHeight = hasRenderableImage ? gig.image_height! : undefined;
+  const surfaceClassName = [
+    "gig-card__surface",
+    isActionable ? "gig-card__surface--interactive" : "gig-card__surface--static",
+    hasRenderableImage ? "" : "gig-card__surface--no-media"
+  ]
+    .filter(Boolean)
+    .join(" ");
   const articleClassName = [
     "gig-card",
     isActionable ? "gig-card--interactive" : "",
@@ -81,8 +88,8 @@ export function GigCard({ gig, isOpen, onClose, onToggle }: GigCardProps) {
 
   const content = (
     <>
-      <div className="gig-card__media">
-        {hasRenderableImage && imageUrl ? (
+      {hasRenderableImage && imageUrl ? (
+        <div className="gig-card__media">
           <Image
             alt={`${gig.title} poster`}
             className="gig-card__media-image"
@@ -93,12 +100,8 @@ export function GigCard({ gig, isOpen, onClose, onToggle }: GigCardProps) {
             style={{ height: "auto", width: "100%" }}
             width={imageWidth}
           />
-        ) : (
-          <div aria-hidden="true" className="gig-card__media-fallback">
-            <span>Perth Gig Finder</span>
-          </div>
-        )}
-      </div>
+        </div>
+      ) : null}
       <div className="gig-card__body">
         <h2>{gig.title}</h2>
         <p className="gig-card__venue">{formatVenueLine(gig)}</p>
@@ -114,14 +117,14 @@ export function GigCard({ gig, isOpen, onClose, onToggle }: GigCardProps) {
           aria-expanded={isOpen}
           aria-haspopup="dialog"
           aria-label={`Open links for ${gig.title}`}
-          className="gig-card__surface gig-card__surface--interactive"
+          className={surfaceClassName}
           onClick={onToggle}
           type="button"
         >
           {content}
         </button>
       ) : (
-        <div className="gig-card__surface gig-card__surface--static">{content}</div>
+        <div className={surfaceClassName}>{content}</div>
       )}
       {isOpen ? (
         <div

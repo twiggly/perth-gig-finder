@@ -597,6 +597,10 @@ code {
   text-align: left;
 }
 
+.gig-card__surface--no-media {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .gig-card__surface--interactive {
   cursor: pointer;
   transition:
@@ -652,31 +656,6 @@ code {
   clip-path: inset(0 round 1.05rem);
 }
 
-.gig-card__media-fallback {
-  display: grid;
-  width: 100%;
-  aspect-ratio: 2 / 1;
-  place-items: end start;
-  padding: 1rem;
-  overflow: hidden;
-  border-radius: 1.05rem;
-  background:
-    radial-gradient(circle at top left, rgba(249, 90, 55, 0.3), transparent 36%),
-    linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(11, 9, 16, 0.78));
-}
-
-.gig-card__media-fallback span {
-  padding: 0.4rem 0.65rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  background: rgba(11, 9, 16, 0.42);
-  color: rgba(248, 242, 232, 0.82);
-  font-family: var(--font-display), sans-serif;
-  font-size: 0.74rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
 .gig-card__body {
   display: grid;
   gap: 0.6rem;
@@ -719,6 +698,10 @@ code {
   background: rgba(16, 12, 22, 0.98);
   box-shadow: var(--shadow);
   backdrop-filter: blur(18px);
+}
+
+.gig-card__surface--no-media + .gig-card__popover {
+  left: var(--gig-card-padding);
 }
 
 .gig-card__actions {
