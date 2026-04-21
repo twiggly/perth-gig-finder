@@ -132,6 +132,7 @@ Good first pages:
 - Git-connected preview deployments are created from repository pushes.
 - Hosted preview and production deployments use the hosted Supabase project configured in Vercel.
 - Hosted data refresh runs through [/.github/workflows/refresh-hosted-gigs.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-hosted-gigs.yml).
+- Hosted artist provenance repairs run through [/.github/workflows/repair-hosted-artists.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/repair-hosted-artists.yml).
 - `ticketmaster-au` runs separately through [/.github/workflows/refresh-ticketmaster-self-hosted.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-ticketmaster-self-hosted.yml) on a self-hosted runner labeled `perth-gig-finder` and `ticketmaster`, because GitHub-hosted runners are currently blocked with `403` responses.
 - Runner health is monitored by [/.github/workflows/check-ticketmaster-runner.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/check-ticketmaster-runner.yml), which fails if no matching self-hosted Ticketmaster runner is online.
 - The runner health workflow reads the GitHub runners API through the `RUNNER_MONITOR_TOKEN` repository secret.
@@ -201,6 +202,12 @@ pnpm verify
    pnpm scrape
    ```
 
+7. Recompute source-level artist provenance for active and upcoming gigs after parser changes when needed:
+
+   ```bash
+   pnpm --filter @perth-gig-finder/scraper repair-artists
+   ```
+
 ### Local web servers
 
 - Dev server:
@@ -238,6 +245,19 @@ pnpm verify
 
   ```bash
   pnpm verify
+  ```
+
+- Scraper-only verification:
+
+  ```bash
+  pnpm --filter @perth-gig-finder/scraper test
+  pnpm --filter @perth-gig-finder/scraper build
+  ```
+
+- Artist provenance backfill after source-parser changes:
+
+  ```bash
+  pnpm --filter @perth-gig-finder/scraper repair-artists
   ```
 
 ### Troubleshooting

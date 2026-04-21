@@ -295,7 +295,8 @@ describe("moshtix wa source adapter", () => {
         address: "237 Queen Victoria St, North Fremantle WA 6159",
         websiteUrl: "https://www.mojosbar.com.au/"
       },
-      artists: ["Doctor Jazz"]
+      artists: ["Doctor Jazz"],
+      artistExtractionKind: "structured"
     });
   });
 

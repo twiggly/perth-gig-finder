@@ -61,7 +61,8 @@ describe("the bird source adapter", () => {
         address: "181 William Street, Northbridge WA 6003",
         websiteUrl: "https://www.williamstreetbird.com/"
       },
-      artists: ["Dani Dray 'Tell Me' Single Launch"]
+      artists: [],
+      artistExtractionKind: "unknown"
     });
   });
 
@@ -107,7 +108,8 @@ describe("the bird source adapter", () => {
       title: "ALT//THURSDAYS",
       startsAt: "2026-04-23T10:30:00.000Z",
       startsAtPrecision: "exact",
-      artists: ["Melānija", "Esper", "softwarebodyIV", "tarsier", "big trouble little china"]
+      artists: ["Melānija", "Esper", "softwarebodyIV", "tarsier", "big trouble little china"],
+      artistExtractionKind: "explicit_lineup"
     });
   });
 

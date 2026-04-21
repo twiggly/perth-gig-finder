@@ -103,7 +103,7 @@ async function processGig(
     await store.mirrorSourceGigImage(sourceGigResult.sourceGig, fetchImpl);
   }
 
-  await store.replaceGigArtists(result.gig.id, gig.artists);
+  await store.syncGigArtistsFromSourceGigs([result.gig.id]);
 
   return result.inserted ? "inserted" : "updated";
 }

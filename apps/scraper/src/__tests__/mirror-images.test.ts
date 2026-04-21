@@ -153,7 +153,7 @@ class MirrorOnlyStore implements GigStore {
       : [...this.sourceGigs.values()].filter(shouldMirrorImage);
   }
 
-  async replaceGigArtists(_gigId: string, _artists: string[]): Promise<void> {
+  async syncGigArtistsFromSourceGigs(_gigIds: string[]): Promise<void> {
     throw new Error("not implemented");
   }
 }
@@ -166,6 +166,8 @@ describe("mirrorPendingSourceGigImages", () => {
       sourceSlug: "oztix-wa",
       identityKey: "doctor-jazz",
       startsAtPrecision: "exact",
+      artistNames: [],
+      artistExtractionKind: "unknown",
       sourceImageUrl: "https://assets.oztix.com.au/image/doctor-jazz.png",
       mirroredImagePath: null,
       imageMirrorStatus: "failed",
@@ -199,6 +201,8 @@ describe("mirrorPendingSourceGigImages", () => {
         sourceSlug: "oztix-wa",
         identityKey: "portrait-night",
         startsAtPrecision: "exact",
+        artistNames: [],
+        artistExtractionKind: "unknown",
         sourceImageUrl: "https://assets.oztix.com.au/image/portrait-night.png",
         mirroredImagePath: "oztix-wa/portrait-night/mirrored.png",
         imageMirrorStatus: "ready",
@@ -230,6 +234,8 @@ describe("mirrorPendingSourceGigImages", () => {
         sourceSlug: "oztix-wa",
         identityKey: "michael-vdelli",
         startsAtPrecision: "exact",
+        artistNames: [],
+        artistExtractionKind: "unknown",
         sourceImageUrl: "https://assets.oztix.com.au/image/michael-vdelli.png",
         mirroredImagePath: "oztix-wa/michael-vdelli/mirrored.png",
         imageMirrorStatus: "ready",

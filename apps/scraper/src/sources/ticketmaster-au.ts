@@ -11,6 +11,7 @@ import {
   type StartsAtPrecision
 } from "@perth-gig-finder/shared";
 
+import { createArtistExtraction, unknownArtistExtraction } from "../artist-utils";
 import type { SourceAdapter, SourceAdapterResult } from "../types";
 
 const SOURCE_ORIGIN = "https://www.ticketmaster.com.au";
@@ -253,6 +254,10 @@ function getPerformerNames(event: TicketmasterCityEvent): string[] {
   }
 
   return names;
+}
+
+export function extractTicketmasterArtists(event: TicketmasterCityEvent) {
+  return createArtistExtraction(getPerformerNames(event), "structured");
 }
 
 function inferStatus(event: TicketmasterCityEvent): GigStatus {
@@ -499,7 +504,7 @@ export function normalizeTicketmasterEvent(
   const externalId = extractExternalId(sourceUrl, event.id);
   const { startsAt, startsAtPrecision } = normalizeStartsAt(event.dates?.startDate);
   const venue = buildVenue(event.venue);
-  const artists = getPerformerNames(event);
+  const artistExtraction = extractTicketmasterArtists(event);
 
   return {
     sourceSlug: "ticketmaster-au",
@@ -514,7 +519,8 @@ export function normalizeTicketmasterEvent(
     endsAt: normalizeEndsAt(event.dates?.endDate),
     ticketUrl: sourceUrl,
     venue,
-    artists: artists.length > 0 ? artists : [title],
+    artists: artistExtraction.artists,
+    artistExtractionKind: artistExtraction.artistExtractionKind,
     rawPayload: event as JsonObject,
     checksum: buildGigChecksum({
       sourceSlug: "ticketmaster-au",
@@ -626,5 +632,13 @@ export const ticketmasterAuSource: SourceAdapter = {
       gigs,
       failedCount
     };
+  },
+  repairArtists(rawPayload) {
+    const event =
+      rawPayload && typeof rawPayload === "object" && !Array.isArray(rawPayload)
+        ? (rawPayload as TicketmasterCityEvent)
+        : null;
+
+    return event ? extractTicketmasterArtists(event) : unknownArtistExtraction();
   }
 };

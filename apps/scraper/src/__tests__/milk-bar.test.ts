@@ -42,7 +42,8 @@ describe("milk bar source adapter", () => {
       status: "active",
       startsAt: "2026-04-10T11:30:00.000Z",
       startsAtPrecision: "exact",
-      artists: ["Time"]
+      artists: ["Time"],
+      artistExtractionKind: "structured"
     });
     expect(parsed.gigs[1]).toMatchObject({
       externalId: "319bc90e-b8b5-4d98-b79f-c3317150658b",

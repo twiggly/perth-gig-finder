@@ -1,4 +1,6 @@
 import type {
+  ArtistExtractionKind,
+  JsonValue,
   NormalizedGig,
   ScrapeRunResult,
   ScrapeRunStatus,
@@ -17,6 +19,10 @@ export interface SourceAdapter {
   priority: number;
   isPublicListingSource: boolean;
   fetchListings(fetchImpl?: typeof fetch): Promise<SourceAdapterResult>;
+  repairArtists?(rawPayload: JsonValue): {
+    artists: string[];
+    artistExtractionKind: ArtistExtractionKind;
+  };
 }
 
 export interface SourceRecord {
@@ -47,6 +53,8 @@ export interface SourceGigRecord {
   sourceSlug: string;
   identityKey: string;
   startsAtPrecision: StartsAtPrecision;
+  artistNames: string[];
+  artistExtractionKind: ArtistExtractionKind;
   sourceImageUrl: string | null;
   mirroredImagePath: string | null;
   imageMirrorStatus: ImageMirrorStatus;
@@ -131,7 +139,7 @@ export interface GigStore {
     fetchImpl?: typeof fetch
   ): Promise<SourceGigImageMirrorResult>;
   listSourceGigsNeedingImageMirror(force?: boolean): Promise<SourceGigRecord[]>;
-  replaceGigArtists(gigId: string, artists: string[]): Promise<void>;
+  syncGigArtistsFromSourceGigs(gigIds: string[]): Promise<void>;
 }
 
 export interface SourceExecutionResult extends ScrapeRunResult {

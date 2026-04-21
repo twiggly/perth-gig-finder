@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
     "mirror-images": "tsx src/mirror-images.ts",
+    "repair-artists": "tsx src/repair-artists.ts",
     "scrape": "tsx src/index.ts",
     "test": "node ../../scripts/check-node-version.mjs && vitest run"
   },

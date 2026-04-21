@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  type ArtistExtractionKind,
   areCanonicalTitlesCompatible,
   buildGigChecksum,
   buildGigSlug,
@@ -14,6 +15,10 @@ import {
 } from "@perth-gig-finder/shared";
 import { describe, expect, it } from "vitest";
 
+import {
+  normalizeArtistNames,
+  selectCanonicalArtistNames
+} from "../artist-utils";
 import { buildMirroredImagePath, shouldMirrorImage } from "../image-mirror";
 import { executeSourceRun } from "../run-source";
 import type {
@@ -84,6 +89,7 @@ class MemoryGigStore implements GigStore {
       externalId: string | null;
       checksum: string;
       sourceUrl: string;
+      lastSeenAt: string;
     }
   >();
   readonly artists = new Map<string, string>();
@@ -199,6 +205,7 @@ class MemoryGigStore implements GigStore {
       externalId: string | null;
       checksum: string;
       sourceUrl: string;
+      lastSeenAt: string;
     }
   > {
     return [...this.sourceGigs.values()].filter(
@@ -452,6 +459,7 @@ class MemoryGigStore implements GigStore {
       externalId: string | null;
       checksum: string;
       sourceUrl: string;
+      lastSeenAt: string;
     } = {
       id: existing?.id ?? randomUUID(),
       gigId: input.gigId,
@@ -461,6 +469,8 @@ class MemoryGigStore implements GigStore {
       checksum: input.gig.checksum,
       identityKey: input.gig.externalId ?? input.gig.checksum,
       startsAtPrecision: input.gig.startsAtPrecision,
+      artistNames: normalizeArtistNames(input.gig.artists),
+      artistExtractionKind: input.gig.artistExtractionKind,
       sourceUrl: input.gig.sourceUrl,
       sourceImageUrl,
       mirroredImagePath: unchangedReadyImage ? existing?.mirroredImagePath ?? null : null,
@@ -471,7 +481,8 @@ class MemoryGigStore implements GigStore {
         : unchangedReadyImage
           ? "ready"
           : "pending",
-      imageMirroredAt: unchangedReadyImage ? existing?.imageMirroredAt ?? null : null
+      imageMirroredAt: unchangedReadyImage ? existing?.imageMirroredAt ?? null : null,
+      lastSeenAt: new Date().toISOString()
     };
 
     this.sourceGigs.set(nextRecord.id, nextRecord);
@@ -515,6 +526,7 @@ class MemoryGigStore implements GigStore {
   }): Promise<void> {
     const retainedIdentityKeys = new Set(input.retainedIdentityKeys);
     const nowIsoValue = new Date().toISOString();
+    const affectedGigIds = new Set<string>();
 
     for (const sourceGig of [...this.sourceGigs.values()]) {
       if (sourceGig.sourceId !== input.sourceId) {
@@ -532,6 +544,11 @@ class MemoryGigStore implements GigStore {
       }
 
       this.sourceGigs.delete(sourceGig.id);
+      affectedGigIds.add(sourceGig.gigId);
+    }
+
+    if (affectedGigIds.size > 0) {
+      await this.syncGigArtistsFromSourceGigs([...affectedGigIds]);
     }
   }
 
@@ -612,22 +629,30 @@ class MemoryGigStore implements GigStore {
       : [...this.sourceGigs.values()].filter(shouldMirrorImage);
   }
 
-  async replaceGigArtists(gigId: string, artists: string[]): Promise<void> {
-    const uniqueArtistsBySlug = new Map<string, string>();
+  async syncGigArtistsFromSourceGigs(gigIds: string[]): Promise<void> {
+    const uniqueGigIds = [...new Set(gigIds)];
 
-    for (const artist of artists) {
-      const normalizedArtist = artist.trim();
-      const artistSlug = slugify(normalizedArtist);
+    for (const gigId of uniqueGigIds) {
+      const candidates = [...this.sourceGigs.values()]
+        .filter((sourceGig) => sourceGig.gigId === gigId)
+        .map((sourceGig) => ({
+          artists: sourceGig.artistNames,
+          artistExtractionKind: sourceGig.artistExtractionKind,
+          priority: this.sources.get(sourceGig.sourceSlug)?.priority ?? 0,
+          lastSeenAt: sourceGig.lastSeenAt
+        }));
+      const canonicalArtists = selectCanonicalArtistNames(candidates);
 
-      if (!normalizedArtist || !artistSlug || uniqueArtistsBySlug.has(artistSlug)) {
-        continue;
+      for (const artist of canonicalArtists) {
+        const artistSlug = slugify(artist);
+
+        if (artistSlug) {
+          this.artists.set(artistSlug, artist);
+        }
       }
 
-      uniqueArtistsBySlug.set(artistSlug, normalizedArtist);
-      this.artists.set(artistSlug, normalizedArtist);
+      this.gigArtists.set(gigId, canonicalArtists);
     }
-
-    this.gigArtists.set(gigId, [...uniqueArtistsBySlug.values()]);
   }
 }
 
@@ -652,6 +677,7 @@ function createGigForSource(input: {
   startsAtPrecision?: StartsAtPrecision;
   imageUrl?: string | null;
   artists?: string[];
+  artistExtractionKind?: ArtistExtractionKind;
   venueName?: string;
   venueSuburb?: string | null;
   venueAddress?: string | null;
@@ -683,6 +709,7 @@ function createGigForSource(input: {
       websiteUrl: venueWebsiteUrl
     },
     artists: input.artists ?? ["Time"],
+    artistExtractionKind: input.artistExtractionKind ?? "structured",
     rawPayload: { EventName: input.title },
     checksum: buildGigChecksum({
       sourceSlug: input.sourceSlug,
@@ -816,13 +843,16 @@ describe("executeSourceRun", () => {
       checksum: "duplicate-checksum",
       identityKey: "art-of-dysfunction-b",
       startsAtPrecision: "exact",
+      artistNames: [],
+      artistExtractionKind: "unknown",
       sourceUrl: "https://tickets.oztix.com.au/outlet/event/art-of-dysfunction-b",
       sourceImageUrl: null,
       mirroredImagePath: null,
       imageMirrorStatus: "missing",
       imageMirroredAt: null,
       mirroredImageWidth: null,
-      mirroredImageHeight: null
+      mirroredImageHeight: null,
+      lastSeenAt: new Date().toISOString()
     });
 
     expect(store.sourceGigs.size).toBe(2);
@@ -1306,12 +1336,15 @@ describe("executeSourceRun", () => {
       checksum: "sweet-16-oztix-checksum",
       sourceUrl: "https://tickets.oztix.com.au/outlet/event/sweet-16-carpark-party",
       startsAtPrecision: "exact",
+      artistNames: [],
+      artistExtractionKind: "unknown",
       sourceImageUrl: "https://assets.oztix.com.au/image/sweet-16.png",
       mirroredImagePath: "oztix-wa/sweet-16.webp",
       imageMirrorStatus: "ready",
       imageMirroredAt: new Date().toISOString(),
       mirroredImageWidth: 1200,
-      mirroredImageHeight: 800
+      mirroredImageHeight: 800,
+      lastSeenAt: new Date().toISOString()
     });
     const birdSourceGigId = randomUUID();
     store.sourceGigs.set(birdSourceGigId, {
@@ -1325,12 +1358,15 @@ describe("executeSourceRun", () => {
       sourceUrl:
         "https://www.williamstreetbird.com/comingup#2026-04-25-the-bird-sweet-16th-carpark-birthday-party",
       startsAtPrecision: "exact",
+      artistNames: [],
+      artistExtractionKind: "unknown",
       sourceImageUrl: null,
       mirroredImagePath: null,
       imageMirrorStatus: "missing",
       imageMirroredAt: null,
       mirroredImageWidth: null,
-      mirroredImageHeight: null
+      mirroredImageHeight: null,
+      lastSeenAt: new Date().toISOString()
     });
 
     const source: SourceAdapter = {
@@ -1631,5 +1667,167 @@ describe("executeSourceRun", () => {
 
     expect(store.artists.size).toBe(1);
     expect([...store.gigArtists.values()][0]).toEqual(["DJ HMC"]);
+  });
+
+  it("does not let an unknown artist source overwrite better canonical artists", async () => {
+    const store = new MemoryGigStore();
+    const primarySource: SourceAdapter = {
+      slug: "the-bird",
+      name: "The Bird",
+      baseUrl: "https://www.williamstreetbird.com/comingup",
+      priority: 50,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "the-bird",
+              externalId: "class-of-orb",
+              sourceUrl: "https://www.williamstreetbird.com/comingup#class-of-orb",
+              title: "Class of Orb : Reunion",
+              status: "active",
+              venueName: "The Bird",
+              venueSuburb: "Northbridge",
+              venueAddress: "181 William Street",
+              artists: ["Class of Orb"],
+              artistExtractionKind: "explicit_lineup"
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+    const weakerSource: SourceAdapter = {
+      slug: "ticketek-wa",
+      name: "Ticketek WA",
+      baseUrl: "https://premier.ticketek.com.au/",
+      priority: 10,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "ticketek-wa",
+              externalId: "class-of-orb-ticketek",
+              sourceUrl: "https://premier.ticketek.com.au/Shows/Show.aspx?sh=CLASSORB26",
+              title: "Class of Orb : Reunion",
+              status: "active",
+              venueName: "The Bird",
+              venueSuburb: "Northbridge",
+              venueAddress: "181 William Street",
+              artists: [],
+              artistExtractionKind: "unknown"
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+
+    await executeSourceRun(store, primarySource);
+    await executeSourceRun(store, weakerSource);
+
+    expect([...store.gigArtists.values()][0]).toEqual(["Class of Orb"]);
+  });
+
+  it("keeps canonical artists empty when every attached source is unknown", async () => {
+    const store = new MemoryGigStore();
+    const source: SourceAdapter = {
+      slug: "ticketek-wa",
+      name: "Ticketek WA",
+      baseUrl: "https://premier.ticketek.com.au/",
+      priority: 10,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "ticketek-wa",
+              externalId: "bootleg-beatles",
+              sourceUrl: "https://premier.ticketek.com.au/Shows/Show.aspx?sh=BOOTLEGB26",
+              title: "Bootleg Beatles",
+              status: "active",
+              artists: [],
+              artistExtractionKind: "unknown"
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+
+    await executeSourceRun(store, source);
+
+    expect([...store.gigArtists.values()][0]).toEqual([]);
+  });
+
+  it("chooses canonical artists by extraction kind, then priority, then artist count, then recency", () => {
+    expect(
+      selectCanonicalArtistNames([
+        {
+          artists: ["Later Structured"],
+          artistExtractionKind: "structured",
+          priority: 10,
+          lastSeenAt: "2026-04-21T10:00:00.000Z"
+        },
+        {
+          artists: ["Headline Artist", "Support Artist"],
+          artistExtractionKind: "explicit_lineup",
+          priority: 100,
+          lastSeenAt: "2026-04-21T11:00:00.000Z"
+        }
+      ])
+    ).toEqual(["Later Structured"]);
+
+    expect(
+      selectCanonicalArtistNames([
+        {
+          artists: ["Low Priority Artist"],
+          artistExtractionKind: "parsed_text",
+          priority: 10,
+          lastSeenAt: "2026-04-21T10:00:00.000Z"
+        },
+        {
+          artists: ["High Priority Artist"],
+          artistExtractionKind: "parsed_text",
+          priority: 50,
+          lastSeenAt: "2026-04-21T09:00:00.000Z"
+        }
+      ])
+    ).toEqual(["High Priority Artist"]);
+
+    expect(
+      selectCanonicalArtistNames([
+        {
+          artists: ["Solo Artist"],
+          artistExtractionKind: "parsed_text",
+          priority: 10,
+          lastSeenAt: "2026-04-21T10:00:00.000Z"
+        },
+        {
+          artists: ["Artist One", "Artist Two"],
+          artistExtractionKind: "parsed_text",
+          priority: 10,
+          lastSeenAt: "2026-04-21T09:00:00.000Z"
+        }
+      ])
+    ).toEqual(["Artist One", "Artist Two"]);
+
+    expect(
+      selectCanonicalArtistNames([
+        {
+          artists: ["Earlier Artist"],
+          artistExtractionKind: "parsed_text",
+          priority: 10,
+          lastSeenAt: "2026-04-21T09:00:00.000Z"
+        },
+        {
+          artists: ["Later Artist"],
+          artistExtractionKind: "parsed_text",
+          priority: 10,
+          lastSeenAt: "2026-04-21T10:00:00.000Z"
+        }
+      ])
+    ).toEqual(["Later Artist"]);
   });
 });

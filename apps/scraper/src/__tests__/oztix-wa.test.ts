@@ -198,7 +198,8 @@ describe("oztix wa source adapter", () => {
       status: "active",
       startsAt: "2026-04-07T10:30:00.000Z",
       startsAtPrecision: "exact",
-      artists: ["Doctor Jazz"]
+      artists: ["Doctor Jazz"],
+      artistExtractionKind: "structured"
     });
     expect(parsed.gigs[1]).toMatchObject({
       title: "TIGHTARSE TUESDAY: TRAFFIC LIGHT PARTY?? ?? ??",

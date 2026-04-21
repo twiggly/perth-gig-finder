@@ -206,7 +206,8 @@ describe("humanitix perth music source adapter", () => {
         slug: "fremantle-buffalo-club",
         address: "54 High St, Fremantle WA 6160, Australia"
       },
-      artists: ["Adrian Hoffmann", "Aidan Kelly", "Chris Fox"]
+      artists: ["Adrian Hoffmann", "Aidan Kelly", "Chris Fox"],
+      artistExtractionKind: "structured"
     });
   });
 
@@ -239,6 +240,46 @@ describe("humanitix perth music source adapter", () => {
     expect(gigs).toHaveLength(1);
     expect(gigs[0]?.startsAt).toBe("2026-08-07T04:00:00.000Z");
     expect(gigs[0]?.startsAtPrecision).toBe("date");
+  });
+
+  it("keeps performer names while dropping sentence-like Humanitix performer descriptions", () => {
+    const gigs = normalizeHumanitixDetailPage({
+      eventUrl: "https://events.humanitix.com/georgina-dacheff-single-launch",
+      html: buildEventPage({
+        title: "Georgina Dacheff Single Launch: KNOWING NO THING",
+        canonicalUrl: "https://events.humanitix.com/georgina-dacheff-single-launch",
+        ogDescription: "A single launch with support from Savanah Solomon.",
+        imageUrl: "https://images.humanitix.com/i/georgina@seo-500.jpg",
+        twitterLocation: "The Bird, 181 William St, Northbridge WA 6003, Australia",
+        twitterDate: "Friday 24th April 2026",
+        eventId: "georgina-launch",
+        structuredEvents: buildStructuredEvent({
+          title: "Georgina Dacheff Single Launch: KNOWING NO THING",
+          url: "https://events.humanitix.com/georgina-dacheff-single-launch",
+          startDate: "2026-04-24T19:30:00+0800",
+          venueName: "The Bird",
+          streetAddress: "181 William St, Northbridge WA 6003, Australia",
+          locality: "Northbridge",
+          postalCode: "6003",
+          performers: [
+            {
+              name: "·· Georgina Dacheff ··",
+              description:
+                "Georgina Dacheff is an indie-folk musician and singer-songwriter from Perth, Western Australia."
+            },
+            {
+              name: "·· Savanah Solomon ··",
+              description:
+                "Savanah Solomon is an Australian folk artist whose songwriting is rooted in story, place and emotional truth."
+            }
+          ]
+        })
+      })
+    });
+
+    expect(gigs).toHaveLength(1);
+    expect(gigs[0]?.artists).toEqual(["·· Georgina Dacheff ··", "·· Savanah Solomon ··"]);
+    expect(gigs[0]?.artistExtractionKind).toBe("structured");
   });
 
   it("rejects noisy non-gig Humanitix events", () => {
