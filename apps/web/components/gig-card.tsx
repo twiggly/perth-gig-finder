@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import Image from "next/image";
 
 import { getGigActions } from "@/lib/gig-actions";
+import { formatGigCardArtists } from "@/lib/gig-card-artists";
 import {
   getRenderableGigImageUrl,
   hasRenderableGigImage,
@@ -39,6 +40,7 @@ export function GigCard({ gig, isOpen, onClose, onToggle }: GigCardProps) {
   const isActionable = actions.length > 0;
   const imageUrl = getRenderableGigImageUrl(gig);
   const hasRenderableImage = hasRenderableGigImage(gig) && Boolean(imageUrl);
+  const artistLine = formatGigCardArtists(gig.title, gig.artist_names);
   const imageWidth = hasRenderableImage ? gig.image_width! : undefined;
   const imageHeight = hasRenderableImage ? gig.image_height! : undefined;
   const surfaceClassName = [
@@ -104,6 +106,7 @@ export function GigCard({ gig, isOpen, onClose, onToggle }: GigCardProps) {
       ) : null}
       <div className="gig-card__body">
         <h2>{gig.title}</h2>
+        {artistLine ? <p className="gig-card__artists">{artistLine}</p> : null}
         <p className="gig-card__venue">{formatVenueLine(gig)}</p>
         <p className="gig-card__time">{formatGigDate(gig.starts_at)}</p>
       </div>

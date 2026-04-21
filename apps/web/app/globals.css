@@ -677,6 +677,16 @@ code {
   font-size: 1.02rem;
 }
 
+.gig-card__artists {
+  display: -webkit-box;
+  overflow: hidden;
+  color: rgba(248, 242, 232, 0.78);
+  font-size: 0.96rem;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .gig-card__venue,
 .gig-card__time {
   color: var(--muted);
