@@ -116,6 +116,12 @@ export interface GigStore {
     sourceGig: SourceGigRecord;
     shouldMirror: boolean;
   }>;
+  prepareSourceGigReattachment(input: {
+    sourceGigId: string;
+    currentGigId: string;
+    targetGigId: string;
+    sourceId: string;
+  }): Promise<void>;
   pruneStaleUpcomingSourceGigs(input: {
     sourceId: string;
     retainedIdentityKeys: string[];

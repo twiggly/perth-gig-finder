@@ -76,6 +76,11 @@ interface SourceGigRow {
   mirrored_image_height: number | null;
 }
 
+interface GigAttachmentRow {
+  id: string;
+  source_id: string;
+}
+
 interface AttachedSourceGigRow extends SourceGigRow {
   last_seen_at: string;
   created_at: string;
@@ -499,6 +504,18 @@ export class SupabaseGigStore implements GigStore {
     }
   }
 
+  private async deleteGigsById(ids: string[]): Promise<void> {
+    if (ids.length === 0) {
+      return;
+    }
+
+    const { error } = await this.client.from("gigs").delete().in("id", ids);
+
+    if (error) {
+      throw new Error(`Unable to delete orphaned gigs: ${error.message}`);
+    }
+  }
+
   async findCanonicalGig(
     input: {
       venueId: string;
@@ -816,6 +833,42 @@ export class SupabaseGigStore implements GigStore {
       sourceGig: toSourceGigRecord(data, input.gig.sourceSlug),
       shouldMirror: Boolean(sourceImageUrl) && !unchangedReadyImage
     };
+  }
+
+  async prepareSourceGigReattachment(input: {
+    sourceGigId: string;
+    currentGigId: string;
+    targetGigId: string;
+    sourceId: string;
+  }): Promise<void> {
+    if (input.currentGigId === input.targetGigId) {
+      return;
+    }
+
+    const { data, error } = await this.client
+      .from("source_gigs")
+      .select("id, source_id")
+      .eq("gig_id", input.currentGigId)
+      .returns<GigAttachmentRow[]>();
+
+    if (error) {
+      throw new Error(
+        `Unable to inspect source gig reattachment state: ${error.message}`
+      );
+    }
+
+    const attachedSourceGigs = data ?? [];
+
+    if (
+      attachedSourceGigs.length !== 1 ||
+      attachedSourceGigs[0]?.id !== input.sourceGigId ||
+      attachedSourceGigs[0]?.source_id !== input.sourceId
+    ) {
+      return;
+    }
+
+    await this.deleteSourceGigsById([input.sourceGigId]);
+    await this.deleteGigsById([input.currentGigId]);
   }
 
   async pruneStaleUpcomingSourceGigs(input: {

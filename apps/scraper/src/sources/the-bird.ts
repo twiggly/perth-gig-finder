@@ -1,3 +1,5 @@
+import * as cheerio from "cheerio";
+
 import {
   buildGigChecksum,
   normalizeVenueName,
@@ -17,6 +19,7 @@ const SOURCE_URL = "https://www.williamstreetbird.com/comingup";
 const FEED_URL =
   "https://script.google.com/macros/s/AKfycbxdagRDbsT5jS3IG1w9Kl7N0qia6piKKcp8BE_n4y9n9XYItKKgXmYHX6XX70fDmMP5pw/exec";
 const REQUEST_TIMEOUT_MS = 15_000;
+const LINKED_EVENT_TIMEOUT_MS = 10_000;
 const DEFAULT_START_HOUR = 12;
 const PERTH_OFFSET_SUFFIX = "+08:00";
 const VENUE_NAME = "The Bird";
@@ -216,6 +219,109 @@ function normalizeTicketUrl(value: string | null | undefined): string | null {
   return normalizeUrl(normalized);
 }
 
+function isHumanitixHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return normalized === "humanitix.com" || normalized.endsWith(".humanitix.com");
+}
+
+export function normalizeTheBirdLinkedEventUrl(value: string | null | undefined): string | null {
+  const ticketUrl = normalizeTicketUrl(value);
+
+  if (!ticketUrl) {
+    return null;
+  }
+
+  try {
+    const url = new URL(ticketUrl);
+
+    if (!isHumanitixHost(url.hostname)) {
+      return null;
+    }
+
+    url.hash = "";
+    url.search = "";
+
+    if (url.pathname.endsWith("/tickets")) {
+      url.pathname = url.pathname.slice(0, -"/tickets".length);
+    }
+
+    if (url.pathname !== "/" && url.pathname.endsWith("/")) {
+      url.pathname = url.pathname.slice(0, -1);
+    }
+
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonValue(value: string | null | undefined): JsonObject | string | Array<JsonObject | string> | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value) as JsonObject | string | Array<JsonObject | string>;
+  } catch {
+    return null;
+  }
+}
+
+function findImageUrlInJson(value: unknown): string | null {
+  if (typeof value === "string") {
+    return normalizeUrl(value);
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const imageUrl = findImageUrlInJson(item);
+
+      if (imageUrl) {
+        return imageUrl;
+      }
+    }
+
+    return null;
+  }
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const directImageUrl =
+    findImageUrlInJson(record.image) ??
+    findImageUrlInJson(record.thumbnailUrl);
+
+  if (directImageUrl) {
+    return directImageUrl;
+  }
+
+  for (const nestedValue of Object.values(record)) {
+    const imageUrl = findImageUrlInJson(nestedValue);
+
+    if (imageUrl) {
+      return imageUrl;
+    }
+  }
+
+  return null;
+}
+
+export function extractTheBirdLinkedImageUrl(html: string): string | null {
+  const $ = cheerio.load(html);
+
+  return (
+    normalizeUrl($("meta[property='og:image']").attr("content")) ??
+    normalizeUrl($("meta[name='twitter:image']").attr("content")) ??
+    findImageUrlInJson(
+      $("script[type='application/ld+json']")
+        .toArray()
+        .map((element) => parseJsonValue($(element).html()))
+    )
+  );
+}
+
 function buildVenue(): NormalizedVenue {
   const venueName = normalizeVenueName(VENUE_NAME);
 
@@ -330,6 +436,55 @@ export function parseTheBirdFeedRows(rows: TheBirdFeedRow[]): SourceAdapterResul
   return { gigs, failedCount };
 }
 
+async function enrichTheBirdGigImage(
+  gig: NormalizedGig,
+  fetchImpl: typeof fetch
+): Promise<NormalizedGig> {
+  if (gig.imageUrl || !gig.ticketUrl) {
+    return gig;
+  }
+
+  const linkedEventUrl = normalizeTheBirdLinkedEventUrl(gig.ticketUrl);
+
+  if (!linkedEventUrl) {
+    return gig;
+  }
+
+  try {
+    const response = await fetchImpl(linkedEventUrl, {
+      signal: AbortSignal.timeout(LINKED_EVENT_TIMEOUT_MS)
+    });
+
+    if (!response.ok) {
+      return gig;
+    }
+
+    const html = await response.text();
+    const imageUrl = extractTheBirdLinkedImageUrl(html);
+
+    if (!imageUrl) {
+      return gig;
+    }
+
+    const rawPayload =
+      gig.rawPayload && typeof gig.rawPayload === "object" && !Array.isArray(gig.rawPayload)
+        ? gig.rawPayload
+        : {};
+
+    return {
+      ...gig,
+      imageUrl,
+      rawPayload: {
+        ...rawPayload,
+        derivedLinkedImageUrl: imageUrl,
+        derivedLinkedImageSourceUrl: linkedEventUrl
+      }
+    };
+  } catch {
+    return gig;
+  }
+}
+
 export const theBirdSource: SourceAdapter = {
   slug: "the-bird",
   name: "The Bird",
@@ -351,6 +506,16 @@ export const theBirdSource: SourceAdapter = {
       throw new Error("The Bird feed payload was not an array");
     }
 
-    return parseTheBirdFeedRows(payload as TheBirdFeedRow[]);
+    const parsed = parseTheBirdFeedRows(payload as TheBirdFeedRow[]);
+    const gigs: NormalizedGig[] = [];
+
+    for (const gig of parsed.gigs) {
+      gigs.push(await enrichTheBirdGigImage(gig, fetchImpl));
+    }
+
+    return {
+      gigs,
+      failedCount: parsed.failedCount
+    };
   }
 };
