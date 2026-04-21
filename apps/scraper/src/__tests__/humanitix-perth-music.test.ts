@@ -278,7 +278,7 @@ describe("humanitix perth music source adapter", () => {
     });
 
     expect(gigs).toHaveLength(1);
-    expect(gigs[0]?.artists).toEqual(["·· Georgina Dacheff ··", "·· Savanah Solomon ··"]);
+    expect(gigs[0]?.artists).toEqual(["Georgina Dacheff", "Savanah Solomon"]);
     expect(gigs[0]?.artistExtractionKind).toBe("structured");
   });
 
