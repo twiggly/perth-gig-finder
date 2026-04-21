@@ -597,10 +597,6 @@ code {
   text-align: left;
 }
 
-.gig-card__surface--no-media {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .gig-card__surface--interactive {
   cursor: pointer;
   transition:
@@ -664,6 +660,10 @@ code {
   padding: 0.3rem 0.45rem 0.3rem 0;
 }
 
+.gig-card__surface--no-media .gig-card__body {
+  grid-column: 2;
+}
+
 .gig-card h2 {
   margin: 0;
   font-family: var(--font-display), sans-serif;
@@ -698,10 +698,6 @@ code {
   background: rgba(16, 12, 22, 0.98);
   box-shadow: var(--shadow);
   backdrop-filter: blur(18px);
-}
-
-.gig-card__surface--no-media + .gig-card__popover {
-  left: var(--gig-card-padding);
 }
 
 .gig-card__actions {
