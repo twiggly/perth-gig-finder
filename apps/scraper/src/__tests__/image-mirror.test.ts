@@ -17,6 +17,8 @@ function createSourceGig(overrides: Partial<SourceGigRecord> = {}): SourceGigRec
     sourceSlug: "oztix-wa",
     identityKey: "doctor-jazz",
     startsAtPrecision: "exact",
+    artistNames: [],
+    artistExtractionKind: "unknown",
     sourceImageUrl: "https://assets.oztix.com.au/image/doctor-jazz.png",
     mirroredImagePath: null,
     imageMirrorStatus: "pending",

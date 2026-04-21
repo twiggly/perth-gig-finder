@@ -12,6 +12,7 @@ import {
   type NormalizedVenue
 } from "@perth-gig-finder/shared";
 
+import { createArtistExtraction } from "../artist-utils";
 import { queryAlgolia } from "../algolia";
 import type { SourceAdapter, SourceAdapterResult } from "../types";
 
@@ -272,18 +273,8 @@ function normalizeCategories(hit: OztixHit): string[] {
     .filter(Boolean);
 }
 
-function normalizeArtists(hit: OztixHit): string[] {
-  const artists = collectNamedArtists(hit);
-
-  if (artists.length > 0) {
-    return [...new Set(artists)];
-  }
-
-  if (hit.EventName) {
-    return [normalizeWhitespace(hit.EventName)];
-  }
-
-  return [];
+export function extractOztixArtists(hit: OztixHit) {
+  return createArtistExtraction(collectNamedArtists(hit), "structured");
 }
 
 export function isPerthMetroHit(hit: OztixHit): boolean {
@@ -379,6 +370,7 @@ export function normalizeOztixHit(hit: OztixHit): NormalizedGig {
   const description = toPlainText(
     [hit.SpecialGuests, hit.EventDescription].filter(Boolean).join("\n\n")
   );
+  const artistExtraction = extractOztixArtists(hit);
 
   return {
     sourceSlug: "oztix-wa",
@@ -393,7 +385,8 @@ export function normalizeOztixHit(hit: OztixHit): NormalizedGig {
     endsAt: normalizeUtcDate(hit.DateEnd),
     ticketUrl: sourceUrl,
     venue,
-    artists: normalizeArtists(hit),
+    artists: artistExtraction.artists,
+    artistExtractionKind: artistExtraction.artistExtractionKind,
     rawPayload: JSON.parse(JSON.stringify(hit)) as JsonObject,
     checksum: buildGigChecksum({
       sourceSlug: "oztix-wa",
@@ -458,5 +451,8 @@ export const oztixWaSource: SourceAdapter = {
   async fetchListings(fetchImpl = fetch) {
     const hits = await fetchOztixHits(fetchImpl);
     return parseOztixHits(hits);
+  },
+  repairArtists(rawPayload) {
+    return extractOztixArtists(rawPayload as OztixHit);
   }
 };

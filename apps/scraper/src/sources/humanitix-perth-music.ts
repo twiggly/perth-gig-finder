@@ -14,6 +14,7 @@ import {
   type StartsAtPrecision
 } from "@perth-gig-finder/shared";
 
+import { createArtistExtraction, unknownArtistExtraction } from "../artist-utils";
 import type { SourceAdapter, SourceAdapterResult } from "../types";
 
 const SOURCE_ORIGIN = "https://humanitix.com";
@@ -777,43 +778,68 @@ function isOfflineEvent(structuredEvent: HumanitixStructuredEvent): boolean {
 }
 
 function splitArtistNames(value: string): string[] {
-  return value
-    .split(/[\n,]/)
+  const normalized = value.trim();
+
+  if (!normalized) {
+    return [];
+  }
+
+  const looksLikeSentenceText =
+    /[.?!]/.test(normalized) || /\b(is|are|from|with|presents)\b/i.test(normalized);
+  const splitter = looksLikeSentenceText ? /[\n•]+/ : /[\n,•]+/;
+
+  return normalized
+    .split(splitter)
     .map((entry) => normalizeWhitespace(entry))
     .filter(Boolean);
 }
 
-function collectArtists(structuredEvent: HumanitixStructuredEvent): string[] {
+function isLikelyArtistName(value: string): boolean {
+  if (!value) {
+    return false;
+  }
+
+  if (value.length > 80) {
+    return false;
+  }
+
+  if (/[.?!,]/.test(value) || /https?:\/\//i.test(value) || /@/.test(value)) {
+    return false;
+  }
+
+  const wordCount = value.split(/\s+/).filter(Boolean).length;
+
+  if (wordCount > 8) {
+    return false;
+  }
+
+  return !/\b(is|are|from|with|and carried|writing|performs|supported|building|offering|reflects|creating|co-creates|beyond the stage|crowned|journey|grounded|audiences)\b/i.test(
+    value
+  );
+}
+
+export function extractHumanitixArtists(structuredEvent: HumanitixStructuredEvent) {
   const candidates = [
     structuredEvent.performers,
     structuredEvent.performer
   ].flatMap((value) => (Array.isArray(value) ? value : value ? [value] : []));
-  const seen = new Set<string>();
   const artists: string[] = [];
 
   for (const performer of candidates) {
     const performerName = normalizeWhitespace(performer.name ?? "");
 
     if (performerName && !performerName.toLowerCase().endsWith("including:")) {
-      const key = performerName.toLowerCase();
-
-      if (!seen.has(key)) {
-        seen.add(key);
-        artists.push(performerName);
-      }
+      artists.push(performerName);
     }
 
     for (const name of splitArtistNames(performer.description ?? "")) {
-      const key = name.toLowerCase();
-
-      if (!seen.has(key)) {
-        seen.add(key);
+      if (isLikelyArtistName(name)) {
         artists.push(name);
       }
     }
   }
 
-  return artists;
+  return createArtistExtraction(artists, "structured");
 }
 
 function isGenericDescription(value: string | null | undefined): boolean {
@@ -1016,14 +1042,14 @@ export function normalizeHumanitixDetailPage(input: {
       continue;
     }
 
-    const artists = collectArtists(structuredEvent);
+    const artistExtraction = extractHumanitixArtists(structuredEvent);
     const description = getPreferredDescription(structuredEvent, meta);
 
     if (
       !isStrictMusicGig({
         title,
         description,
-        artists,
+        artists: artistExtraction.artists,
         headings: meta.headings,
         pageText: meta.pageText
       })
@@ -1049,7 +1075,8 @@ export function normalizeHumanitixDetailPage(input: {
       endsAt: normalizeOptionalDate(structuredEvent.endDate),
       ticketUrl: getTicketUrl(structuredEvent, sourceUrl),
       venue,
-      artists,
+      artists: artistExtraction.artists,
+      artistExtractionKind: artistExtraction.artistExtractionKind,
       rawPayload: JSON.parse(
         JSON.stringify({
           structuredEvent,
@@ -1171,5 +1198,17 @@ export const humanitixPerthMusicSource: SourceAdapter = {
       gigs,
       failedCount
     };
+  },
+  repairArtists(rawPayload) {
+    const payload =
+      rawPayload && typeof rawPayload === "object" && !Array.isArray(rawPayload)
+        ? (rawPayload as {
+            structuredEvent?: HumanitixStructuredEvent;
+          })
+        : {};
+
+    return payload.structuredEvent
+      ? extractHumanitixArtists(payload.structuredEvent)
+      : unknownArtistExtraction();
   }
 };

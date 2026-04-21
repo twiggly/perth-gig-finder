@@ -16,6 +16,11 @@ export interface NormalizedVenue {
 
 export type GigStatus = "active" | "cancelled" | "postponed";
 export type StartsAtPrecision = "exact" | "date";
+export type ArtistExtractionKind =
+  | "structured"
+  | "explicit_lineup"
+  | "parsed_text"
+  | "unknown";
 
 export interface NormalizedGig {
   sourceSlug: string;
@@ -31,6 +36,7 @@ export interface NormalizedGig {
   ticketUrl: string | null;
   venue: NormalizedVenue;
   artists: string[];
+  artistExtractionKind: ArtistExtractionKind;
   rawPayload: JsonValue;
   checksum: string;
 }

@@ -1,11 +1,13 @@
 import {
   areCanonicalTitlesCompatible,
+  type ArtistExtractionKind,
   buildGigSlug,
   normalizeCanonicalTitleForMatch,
   normalizeTitleForMatch,
   slugify,
   slugifyVenueName,
   type GigStatus,
+  type JsonValue,
   type NormalizedGig,
   type StartsAtPrecision
 } from "@perth-gig-finder/shared";
@@ -16,10 +18,15 @@ import {
   mirrorSourceImage,
   shouldMirrorImage
 } from "./image-mirror";
+import {
+  normalizeArtistNames,
+  selectCanonicalArtistNames
+} from "./artist-utils";
 import type {
   GigRecord,
   GigStore,
   ImageMirrorStatus,
+  SourceAdapter,
   SourceGigImageMirrorResult,
   SourceGigRecord,
   SourceRecord,
@@ -68,6 +75,8 @@ interface SourceGigRow {
   gig_id: string;
   identity_key: string;
   starts_at_precision: StartsAtPrecision;
+  artist_names: string[];
+  artist_extraction_kind: ArtistExtractionKind;
   source_image_url: string | null;
   mirrored_image_path: string | null;
   image_mirror_status: ImageMirrorStatus;
@@ -98,6 +107,14 @@ interface CanonicalGigSourceRow {
   starts_at_precision: StartsAtPrecision;
 }
 
+interface CanonicalGigArtistRow {
+  gig_id: string;
+  source_id: string;
+  artist_names: string[] | null;
+  artist_extraction_kind: ArtistExtractionKind;
+  last_seen_at: string;
+}
+
 interface SourceGigSourceRow {
   id: string;
   slug?: string;
@@ -111,6 +128,15 @@ interface CanonicalGigSourceState {
   priority: number;
 }
 
+interface RepairableSourceGigRow {
+  id: string;
+  gig_id: string;
+  source_id: string;
+  raw_payload: JsonValue;
+  artist_names: string[] | null;
+  artist_extraction_kind: ArtistExtractionKind;
+}
+
 function toSourceGigRecord(
   row: SourceGigRow,
   sourceSlug: string
@@ -121,6 +147,8 @@ function toSourceGigRecord(
     sourceSlug,
     identityKey: row.identity_key,
     startsAtPrecision: row.starts_at_precision,
+    artistNames: row.artist_names ?? [],
+    artistExtractionKind: row.artist_extraction_kind,
     sourceImageUrl: row.source_image_url,
     mirroredImagePath: row.mirrored_image_path,
     imageMirrorStatus: row.image_mirror_status,
@@ -420,6 +448,74 @@ export class SupabaseGigStore implements GigStore {
     }));
   }
 
+  private async listCanonicalGigArtistCandidatesByGigId(
+    gigIds: string[]
+  ): Promise<Map<string, CanonicalGigArtistRow[]>> {
+    const uniqueGigIds = [...new Set(gigIds)];
+
+    if (uniqueGigIds.length === 0) {
+      return new Map();
+    }
+
+    const rows: CanonicalGigArtistRow[] = [];
+
+    for (const gigIdChunk of chunkValues(uniqueGigIds, QUERY_CHUNK_SIZE)) {
+      const { data, error } = await this.client
+        .from("source_gigs")
+        .select("gig_id, source_id, artist_names, artist_extraction_kind, last_seen_at")
+        .in("gig_id", gigIdChunk);
+
+      if (error) {
+        throw new Error(
+          `Unable to load canonical gig artist candidates: ${error.message ?? "unknown error"}`
+        );
+      }
+
+      rows.push(...(((data as CanonicalGigArtistRow[] | null) ?? [])));
+    }
+
+    const grouped = new Map<string, CanonicalGigArtistRow[]>();
+
+    for (const row of rows) {
+      const existing = grouped.get(row.gig_id) ?? [];
+      existing.push(row);
+      grouped.set(row.gig_id, existing);
+    }
+
+    return grouped;
+  }
+
+  private async buildSourcePriorityById(
+    sourceIds: string[]
+  ): Promise<Map<string, number>> {
+    const uniqueSourceIds = [...new Set(sourceIds)];
+
+    if (uniqueSourceIds.length === 0) {
+      return new Map();
+    }
+
+    const sourceRows: SourceGigSourceRow[] = [];
+
+    for (const sourceIdChunk of chunkValues(uniqueSourceIds, QUERY_CHUNK_SIZE)) {
+      const { data, error } = await this.client
+        .from("sources")
+        .select("id, priority")
+        .in("id", sourceIdChunk);
+
+      if (error) {
+        throw new Error(
+          `Unable to load source priorities for artist sync: ${error.message ?? "unknown error"}`
+        );
+      }
+
+      sourceRows.push(...(((data as SourceGigSourceRow[] | null) ?? [])));
+    }
+
+    return new Map(
+      sourceRows.map((source) => [source.id, source.priority ?? 0])
+    );
+  }
+
   async findSourceGig(
     sourceId: string,
     externalId: string | null,
@@ -428,7 +524,7 @@ export class SupabaseGigStore implements GigStore {
     let query = this.client
       .from("source_gigs")
       .select(
-        "id, source_id, gig_id, identity_key, starts_at_precision, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height"
+        "id, source_id, gig_id, identity_key, starts_at_precision, artist_names, artist_extraction_kind, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height"
       )
       .eq("source_id", sourceId)
       .limit(1);
@@ -455,7 +551,7 @@ export class SupabaseGigStore implements GigStore {
     const { data, error } = await this.client
       .from("source_gigs")
       .select(
-        "id, source_id, gig_id, identity_key, starts_at_precision, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height, last_seen_at, created_at"
+        "id, source_id, gig_id, identity_key, starts_at_precision, artist_names, artist_extraction_kind, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height, last_seen_at, created_at"
       )
       .eq("source_id", sourceId)
       .eq("gig_id", gigId)
@@ -795,6 +891,8 @@ export class SupabaseGigStore implements GigStore {
       external_id: input.gig.externalId,
       source_url: input.gig.sourceUrl,
       starts_at_precision: input.gig.startsAtPrecision,
+      artist_names: normalizeArtistNames(input.gig.artists),
+      artist_extraction_kind: input.gig.artistExtractionKind,
       source_image_url: sourceImageUrl,
       mirrored_image_path: unchangedReadyImage ? existing?.mirroredImagePath ?? null : null,
       mirrored_image_width: unchangedReadyImage
@@ -818,7 +916,7 @@ export class SupabaseGigStore implements GigStore {
       : this.client.from("source_gigs").insert(payload);
     const { data, error } = await mutation
       .select(
-        "id, source_id, gig_id, identity_key, starts_at_precision, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height"
+        "id, source_id, gig_id, identity_key, starts_at_precision, artist_names, artist_extraction_kind, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height"
       )
       .single<SourceGigRow>();
 
@@ -920,15 +1018,17 @@ export class SupabaseGigStore implements GigStore {
         .map((gig) => gig.id)
     );
     const retainedIdentityKeys = new Set(input.retainedIdentityKeys);
-    const staleSourceGigIds = sourceGigRows
-      .filter(
-        (row) =>
-          activeUpcomingGigIds.has(row.gig_id) &&
-          !retainedIdentityKeys.has(row.identity_key)
-      )
-      .map((row) => row.id);
+    const staleSourceGigRows = sourceGigRows.filter(
+      (row) =>
+        activeUpcomingGigIds.has(row.gig_id) &&
+        !retainedIdentityKeys.has(row.identity_key)
+    );
+    const staleSourceGigIds = staleSourceGigRows.map((row) => row.id);
 
     await this.deleteSourceGigsById(staleSourceGigIds);
+    await this.syncGigArtistsFromSourceGigs(
+      [...new Set(staleSourceGigRows.map((row) => row.gig_id))]
+    );
   }
 
   async mirrorSourceGigImage(
@@ -996,7 +1096,7 @@ export class SupabaseGigStore implements GigStore {
     const { data, error } = await this.client
       .from("source_gigs")
       .select(
-        "id, source_id, gig_id, identity_key, starts_at_precision, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height"
+        "id, source_id, gig_id, identity_key, starts_at_precision, artist_names, artist_extraction_kind, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height"
       )
       .not("source_image_url", "is", null)
       .order("last_seen_at", { ascending: false });
@@ -1035,23 +1135,18 @@ export class SupabaseGigStore implements GigStore {
     return force ? sourceGigs : sourceGigs.filter(shouldMirrorImage);
   }
 
-  async replaceGigArtists(gigId: string, artists: string[]): Promise<void> {
+  private async writeGigArtists(gigId: string, artists: string[]): Promise<void> {
+    const normalizedArtists = normalizeArtistNames(artists);
     const uniqueArtistsBySlug = new Map<string, string>();
 
-    for (const artist of artists) {
-      const normalizedArtist = artist.trim();
-
-      if (!normalizedArtist) {
-        continue;
-      }
-
-      const artistSlug = slugify(normalizedArtist);
+    for (const artist of normalizedArtists) {
+      const artistSlug = slugify(artist);
 
       if (!artistSlug || uniqueArtistsBySlug.has(artistSlug)) {
         continue;
       }
 
-      uniqueArtistsBySlug.set(artistSlug, normalizedArtist);
+      uniqueArtistsBySlug.set(artistSlug, artist);
     }
 
     const { error: deleteError } = await this.client
@@ -1100,5 +1195,190 @@ export class SupabaseGigStore implements GigStore {
     if (joinError) {
       throw new Error(`Unable to create gig artist rows: ${joinError.message}`);
     }
+  }
+
+  async syncGigArtistsFromSourceGigs(gigIds: string[]): Promise<void> {
+    const uniqueGigIds = [...new Set(gigIds)];
+
+    if (uniqueGigIds.length === 0) {
+      return;
+    }
+
+    const candidatesByGigId = await this.listCanonicalGigArtistCandidatesByGigId(uniqueGigIds);
+    const sourcePriorityById = await this.buildSourcePriorityById(
+      [...new Set(
+        [...candidatesByGigId.values()]
+          .flat()
+          .map((candidate) => candidate.source_id)
+      )]
+    );
+
+    for (const gigId of uniqueGigIds) {
+      const candidates = (candidatesByGigId.get(gigId) ?? []).map((candidate) => ({
+        artists: candidate.artist_names ?? [],
+        artistExtractionKind: candidate.artist_extraction_kind,
+        priority: sourcePriorityById.get(candidate.source_id) ?? 0,
+        lastSeenAt: candidate.last_seen_at
+      }));
+
+      await this.writeGigArtists(gigId, selectCanonicalArtistNames(candidates));
+    }
+  }
+
+  async repairActiveUpcomingSourceGigArtists(
+    sources: readonly SourceAdapter[]
+  ): Promise<
+    Array<{
+      sourceSlug: string;
+      status: "success" | "partial" | "failed";
+      discoveredCount: number;
+      updatedCount: number;
+      failedCount: number;
+    }>
+  > {
+    const sourceRecords = await Promise.all(
+      sources.map((source) =>
+        this.ensureSource({
+          slug: source.slug,
+          name: source.name,
+          baseUrl: source.baseUrl,
+          priority: source.priority,
+          isPublicListingSource: source.isPublicListingSource
+        })
+      )
+    );
+    const sourceById = new Map(
+      sourceRecords.map((record) => [record.id, sources.find((source) => source.slug === record.slug)!])
+    );
+    const nowIsoValue = new Date().toISOString();
+    const { data: activeGigData, error: activeGigError } = await this.client
+      .from("gigs")
+      .select("id")
+      .eq("status", "active")
+      .gte("starts_at", nowIsoValue);
+
+    if (activeGigError) {
+      throw new Error(
+        `Unable to load active gigs for artist repair: ${activeGigError.message ?? "unknown error"}`
+      );
+    }
+
+    const activeGigIds = ((activeGigData as Array<{ id: string }> | null) ?? []).map(
+      (gig) => gig.id
+    );
+
+    if (activeGigIds.length === 0) {
+      return sources.map((source) => ({
+        sourceSlug: source.slug,
+        status: "success",
+        discoveredCount: 0,
+        updatedCount: 0,
+        failedCount: 0
+      }));
+    }
+
+    const sourceIds = sourceRecords.map((record) => record.id);
+    const repairableRows: RepairableSourceGigRow[] = [];
+
+    for (const gigIdChunk of chunkValues(activeGigIds, QUERY_CHUNK_SIZE)) {
+      const { data, error } = await this.client
+        .from("source_gigs")
+        .select(
+          "id, gig_id, source_id, raw_payload, artist_names, artist_extraction_kind"
+        )
+        .in("gig_id", gigIdChunk)
+        .in("source_id", sourceIds);
+
+      if (error) {
+        throw new Error(
+          `Unable to load source gigs for artist repair: ${error.message ?? "unknown error"}`
+        );
+      }
+
+      repairableRows.push(...(((data as RepairableSourceGigRow[] | null) ?? [])));
+    }
+
+    const resultsBySlug = new Map<
+      string,
+      {
+        sourceSlug: string;
+        discoveredCount: number;
+        updatedCount: number;
+        failedCount: number;
+      }
+    >(
+      sources.map((source) => [
+        source.slug,
+        {
+          sourceSlug: source.slug,
+          discoveredCount: 0,
+          updatedCount: 0,
+          failedCount: 0
+        }
+      ])
+    );
+    const touchedGigIds = new Set<string>();
+
+    for (const row of repairableRows) {
+      const source = sourceById.get(row.source_id);
+
+      if (!source) {
+        continue;
+      }
+
+      const result = resultsBySlug.get(source.slug)!;
+      result.discoveredCount += 1;
+
+      try {
+        const extraction = source.repairArtists
+          ? source.repairArtists(row.raw_payload)
+          : {
+              artists: [],
+              artistExtractionKind: "unknown" as const
+            };
+        const normalizedArtists = normalizeArtistNames(extraction.artists);
+        const nextKind =
+          normalizedArtists.length === 0 ? "unknown" : extraction.artistExtractionKind;
+        const currentArtists = normalizeArtistNames(row.artist_names ?? []);
+
+        if (
+          nextKind === row.artist_extraction_kind &&
+          currentArtists.length === normalizedArtists.length &&
+          currentArtists.every((artist, index) => artist === normalizedArtists[index])
+        ) {
+          touchedGigIds.add(row.gig_id);
+          continue;
+        }
+
+        const { error } = await this.client
+          .from("source_gigs")
+          .update({
+            artist_names: normalizedArtists,
+            artist_extraction_kind: nextKind
+          })
+          .eq("id", row.id);
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        result.updatedCount += 1;
+        touchedGigIds.add(row.gig_id);
+      } catch {
+        result.failedCount += 1;
+      }
+    }
+
+    await this.syncGigArtistsFromSourceGigs([...touchedGigIds]);
+
+    return [...resultsBySlug.values()].map((result) => ({
+      ...result,
+      status:
+        result.updatedCount === 0 && result.failedCount > 0
+          ? "failed"
+          : result.failedCount > 0
+            ? "partial"
+            : "success"
+    }));
   }
 }

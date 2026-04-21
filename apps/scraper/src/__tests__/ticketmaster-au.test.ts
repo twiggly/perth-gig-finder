@@ -60,7 +60,7 @@ function buildTicketmasterCityEvent(input: {
     limitedAvailability: false,
     eventChangeStatus: "none",
     virtual: false,
-    artists: (input.performers ?? [input.title]).map((performer) => ({
+    artists: (input.performers ?? []).map((performer) => ({
       name: performer,
       imageUrls: input.artistImageUrl
         ? {
@@ -144,6 +144,22 @@ describe("ticketmaster au source adapter", () => {
 
     expect(normalized.startsAt).toBe("2026-11-06T04:00:00.000Z");
     expect(normalized.startsAtPrecision).toBe("date");
+  });
+
+  it("stores unknown artists when Ticketmaster does not expose performers", () => {
+    const normalized = normalizeTicketmasterEvent(
+      buildTicketmasterCityEvent({
+        id: "1300NOPERFORMERS",
+        url: "https://www.ticketmaster.com.au/example-perth/event/1300NOPERFORMERS",
+        title: "Perth Event With No Performer Data",
+        startDate: "2026-11-06T11:00:00Z",
+        venueName: "Kings Park",
+        locality: "West Perth"
+      })
+    );
+
+    expect(normalized.artists).toEqual([]);
+    expect(normalized.artistExtractionKind).toBe("unknown");
   });
 
   it("fetches Ticketmaster city events, enriches from popular images, and skips partner entries", async () => {

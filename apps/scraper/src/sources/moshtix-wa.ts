@@ -13,6 +13,7 @@ import {
   type NormalizedVenue
 } from "@perth-gig-finder/shared";
 
+import { createArtistExtraction } from "../artist-utils";
 import type { SourceAdapter, SourceAdapterResult } from "../types";
 
 const SOURCE_URL = "https://www.moshtix.com.au/v2/search";
@@ -430,12 +431,11 @@ function ensurePerthMetroVenue(input: {
   }
 }
 
-function normalizeArtists(input: {
-  title: string;
+export function extractMoshtixArtists(input: {
   structuredEvent: MoshtixStructuredEvent | null;
   eventData: MoshtixEventData | null;
   venue: NormalizedVenue;
-}): string[] {
+}) {
   const venueNames = new Set(
     [input.venue.name, input.eventData?.venue?.name, input.eventData?.client?.name]
       .map((value) => normalizeWhitespace(value ?? "").toLowerCase())
@@ -458,11 +458,7 @@ function normalizeArtists(input: {
       return !normalized.includes("homepage gallery");
     });
 
-  if (candidates.length === 0) {
-    return [input.title];
-  }
-
-  return [...new Map(candidates.map((artist) => [artist.toLowerCase(), artist])).values()];
+  return createArtistExtraction(candidates, "structured");
 }
 
 function normalizeStatus(input: {
@@ -677,6 +673,11 @@ export function normalizeMoshtixEventPage(input: {
         $("#event-summary-block").attr("data-event-link") ??
         input.listing.eventUrl
     ) ?? input.listing.eventUrl;
+  const artistExtraction = extractMoshtixArtists({
+    structuredEvent,
+    eventData,
+    venue
+  });
 
   return {
     sourceSlug: "moshtix-wa",
@@ -707,12 +708,8 @@ export function normalizeMoshtixEventPage(input: {
           input.listing.eventUrl
       ) ?? input.listing.eventUrl,
     venue,
-    artists: normalizeArtists({
-      title,
-      structuredEvent,
-      eventData,
-      venue
-    }),
+    artists: artistExtraction.artists,
+    artistExtractionKind: artistExtraction.artistExtractionKind,
     rawPayload: JSON.parse(
       JSON.stringify({
         listing: input.listing.rawPayload,
@@ -798,5 +795,24 @@ export const moshtixWaSource: SourceAdapter = {
       gigs,
       failedCount
     };
+  },
+  repairArtists(rawPayload) {
+    const payload =
+      rawPayload && typeof rawPayload === "object" && !Array.isArray(rawPayload)
+        ? (rawPayload as {
+            eventData?: MoshtixEventData | null;
+            structuredEvent?: MoshtixStructuredEvent | null;
+          })
+        : {};
+    const venue = normalizeVenue({
+      structuredEvent: payload.structuredEvent ?? null,
+      eventData: payload.eventData ?? null
+    });
+
+    return extractMoshtixArtists({
+      structuredEvent: payload.structuredEvent ?? null,
+      eventData: payload.eventData ?? null,
+      venue
+    });
   }
 };

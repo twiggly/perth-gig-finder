@@ -23,6 +23,7 @@ This file is for coding agents working in this repository. Keep it short, practi
 - Start local infra with `pnpm supabase:start`.
 - Reset local data with `pnpm supabase:reset`.
 - Run the scraper locally with `pnpm scrape`.
+- Recompute source-level artist provenance with `pnpm --filter @perth-gig-finder/scraper repair-artists`.
 - Start the local web app with `pnpm web:dev`.
 - Start the production-style local preview with `pnpm web:preview`.
 
@@ -32,11 +33,14 @@ This file is for coding agents working in this repository. Keep it short, practi
 - Full check: `pnpm verify`
 - Web-only build: `pnpm --filter @perth-gig-finder/web build`
 - Scraper-only tests: `pnpm --filter @perth-gig-finder/scraper test`
+- Scraper-only build: `pnpm --filter @perth-gig-finder/scraper build`
+- Artist provenance backfill: `pnpm --filter @perth-gig-finder/scraper repair-artists`
 
 ## Hosted Operations
 
 - Production and previews are deployed from Vercel.
 - Hosted data refresh runs through [/.github/workflows/refresh-hosted-gigs.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-hosted-gigs.yml).
+- Hosted artist provenance repairs run through [/.github/workflows/repair-hosted-artists.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/repair-hosted-artists.yml).
 - `ticketmaster-au` refresh runs through [/.github/workflows/refresh-ticketmaster-self-hosted.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-ticketmaster-self-hosted.yml) on a self-hosted runner labeled `perth-gig-finder` and `ticketmaster`.
 - Runner health is monitored through [/.github/workflows/check-ticketmaster-runner.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/check-ticketmaster-runner.yml).
 - The runner health workflow depends on the `RUNNER_MONITOR_TOKEN` repository secret so it can read the GitHub runners API.

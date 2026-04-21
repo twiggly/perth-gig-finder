@@ -12,6 +12,7 @@ import {
   type StartsAtPrecision
 } from "@perth-gig-finder/shared";
 
+import { unknownArtistExtraction } from "../artist-utils";
 import type { SourceAdapter, SourceAdapterResult } from "../types";
 
 const SOURCE_ORIGIN = "https://premier.ticketek.com.au";
@@ -804,6 +805,7 @@ export function normalizeTicketekListing(listing: TicketekSearchListing): Normal
   const status = inferStatus(
     [listing.title, listing.subtitle, listing.summary].filter(Boolean).join(" ")
   );
+  const artistExtraction = unknownArtistExtraction();
 
   return {
     sourceSlug: "ticketek-wa",
@@ -818,7 +820,8 @@ export function normalizeTicketekListing(listing: TicketekSearchListing): Normal
     endsAt: null,
     ticketUrl: listing.ticketUrl,
     venue,
-    artists: [listing.title],
+    artists: artistExtraction.artists,
+    artistExtractionKind: artistExtraction.artistExtractionKind,
     rawPayload: listing.rawPayload,
     checksum: buildGigChecksum({
       sourceSlug: "ticketek-wa",
@@ -1011,5 +1014,8 @@ export const ticketekWaSource: SourceAdapter = {
       );
 
     return { gigs, failedCount };
+  },
+  repairArtists() {
+    return unknownArtistExtraction();
   }
 };

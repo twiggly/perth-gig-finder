@@ -269,7 +269,8 @@ describe("ticketek wa source adapter", () => {
         suburb: "Perth",
         slug: "riverside-theatre-perth-convention-and-exhibition-centre"
       },
-      artists: ["Go Your Own Way"]
+      artists: [],
+      artistExtractionKind: "unknown"
     });
   });
 

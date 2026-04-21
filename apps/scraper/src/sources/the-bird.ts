@@ -14,6 +14,11 @@ import {
   type StartsAtPrecision
 } from "@perth-gig-finder/shared";
 
+import {
+  createArtistExtraction,
+  getArtistExtractionKindRank,
+  unknownArtistExtraction
+} from "../artist-utils";
 import type { SourceAdapter, SourceAdapterResult } from "../types";
 
 const SOURCE_URL = "https://www.williamstreetbird.com/comingup";
@@ -464,7 +469,8 @@ function buildTheBirdGig(input: {
     endsAt: null,
     ticketUrl: input.ticketUrl,
     venue,
-    artists: input.artists.length > 0 ? input.artists : [title],
+    artists: input.artists,
+    artistExtractionKind: input.artists.length > 0 ? "explicit_lineup" : "unknown",
     rawPayload,
     checksum: buildGigChecksum({
       sourceSlug: "the-bird",
@@ -489,7 +495,7 @@ export function normalizeTheBirdRow(row: TheBirdFeedRow): NormalizedGig | null {
     dateText: row.Date ?? "",
     ticketUrl: normalizeTicketUrl(row["Ticket Link"]),
     timeText: description,
-    artists: [normalizeWhitespace(row["Event Title"] ?? "")].filter(Boolean),
+    artists: [],
     rawPayload: {
       Date: row.Date ?? "",
       Day: row.Day ?? "",
@@ -520,7 +526,7 @@ export function parseTheBirdFeedRows(rows: TheBirdFeedRow[]): SourceAdapterResul
   return { gigs, failedCount };
 }
 
-function parseTheBirdFeaturingArtists(
+export function parseTheBirdFeaturingArtists(
   value: string | null | undefined,
   title: string
 ): string[] {
@@ -546,7 +552,7 @@ function parseTheBirdFeaturingArtists(
     uniqueBySlug.set(artistSlug, artist);
   }
 
-  return [...uniqueBySlug.values()];
+  return createArtistExtraction([...uniqueBySlug.values()], "explicit_lineup").artists;
 }
 
 function isTheBirdWeeklyMusicRow(row: TheBirdWhatsOnRow): boolean {
@@ -632,13 +638,13 @@ export function parseTheBirdWhatsOnRows(rows: TheBirdWhatsOnRow[]): SourceAdapte
   return { gigs, failedCount };
 }
 
-function hasLineupArtists(gig: NormalizedGig): boolean {
-  const normalizedTitle = slugify(gig.title);
-
-  return gig.artists.some((artist) => {
-    const normalizedArtist = slugify(artist);
-    return Boolean(normalizedArtist) && normalizedArtist !== normalizedTitle;
-  });
+function hasKnownLineupArtists(gig: NormalizedGig): boolean {
+  return (
+    gig.artistExtractionKind !== "unknown" &&
+    getArtistExtractionKindRank(gig.artistExtractionKind) >=
+      getArtistExtractionKindRank("explicit_lineup") &&
+    gig.artists.length > 0
+  );
 }
 
 function chooseLongerText(
@@ -665,9 +671,13 @@ function mergeTheBirdGigs(current: NormalizedGig, candidate: NormalizedGig): Nor
     : current.startsAtPrecision;
   const description = chooseLongerText(current.description, candidate.description);
   const artists =
-    hasLineupArtists(current) || !hasLineupArtists(candidate)
+    hasKnownLineupArtists(current) || !hasKnownLineupArtists(candidate)
       ? current.artists
       : candidate.artists;
+  const artistExtractionKind =
+    hasKnownLineupArtists(current) || !hasKnownLineupArtists(candidate)
+      ? current.artistExtractionKind
+      : candidate.artistExtractionKind;
   const currentRawPayload =
     current.rawPayload && typeof current.rawPayload === "object" && !Array.isArray(current.rawPayload)
       ? current.rawPayload
@@ -687,6 +697,7 @@ function mergeTheBirdGigs(current: NormalizedGig, candidate: NormalizedGig): Nor
     ticketUrl: current.ticketUrl ?? candidate.ticketUrl,
     imageUrl: current.imageUrl ?? candidate.imageUrl,
     artists,
+    artistExtractionKind,
     rawPayload: {
       ...currentRawPayload,
       mergedWeeklyFeed: candidateRawPayload,
@@ -832,5 +843,37 @@ export const theBirdSource: SourceAdapter = {
       gigs,
       failedCount: parsed.failedCount
     };
+  },
+  repairArtists(rawPayload) {
+    const payload =
+      rawPayload && typeof rawPayload === "object" && !Array.isArray(rawPayload)
+        ? (rawPayload as {
+            mergedWeeklyFeed?: {
+              Featuring?: string;
+              Title?: string;
+            };
+            Featuring?: string;
+            Title?: string;
+            "Event Title"?: string;
+          })
+        : {};
+    const weeklyTitle = normalizeWhitespace(payload.mergedWeeklyFeed?.Title ?? "");
+
+    if (payload.mergedWeeklyFeed) {
+      return createArtistExtraction(
+        parseTheBirdFeaturingArtists(
+          payload.mergedWeeklyFeed.Featuring,
+          weeklyTitle || normalizeWhitespace(payload["Event Title"] ?? payload.Title ?? "")
+        ),
+        "explicit_lineup"
+      );
+    }
+
+    const title = normalizeWhitespace(payload.Title ?? payload["Event Title"] ?? "");
+    const artists = parseTheBirdFeaturingArtists(payload.Featuring, title);
+
+    return artists.length > 0
+      ? createArtistExtraction(artists, "explicit_lineup")
+      : unknownArtistExtraction();
   }
 };

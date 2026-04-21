@@ -10,6 +10,7 @@ import {
   type NormalizedVenue
 } from "@perth-gig-finder/shared";
 
+import { createArtistExtraction } from "../artist-utils";
 import { queryAlgolia } from "../algolia";
 import type { SourceAdapter, SourceAdapterResult } from "../types";
 
@@ -119,25 +120,18 @@ function normalizeVenue(hit: MilkBarHit): NormalizedVenue {
   };
 }
 
-function normalizeArtists(hit: MilkBarHit): string[] {
+export function extractMilkBarArtists(hit: MilkBarHit) {
   const fromBands = Array.isArray(hit.Bands) ? hit.Bands : [];
   const fromPerformances = Array.isArray(hit.Performances)
     ? hit.Performances.map((performance) => performance.Name ?? "")
     : [];
 
-  const artists = [...fromBands, ...fromPerformances]
-    .map((artist) => normalizeWhitespace(artist))
-    .filter(Boolean);
-
-  if (artists.length > 0) {
-    return [...new Set(artists)];
-  }
-
-  if (hit.EventName) {
-    return [normalizeWhitespace(hit.EventName)];
-  }
-
-  return [];
+  return createArtistExtraction(
+    [...fromBands, ...fromPerformances]
+      .map((artist) => normalizeWhitespace(artist))
+      .filter(Boolean),
+    "structured"
+  );
 }
 
 function normalizeGigStatus(hit: MilkBarHit, title: string): GigStatus {
@@ -173,6 +167,7 @@ export function normalizeMilkBarHit(hit: MilkBarHit): NormalizedGig {
   const description = toPlainText(
     [hit.SpecialGuests, hit.EventDescription].filter(Boolean).join("\n\n")
   );
+  const artistExtraction = extractMilkBarArtists(hit);
 
   return {
     sourceSlug: "milk-bar",
@@ -187,7 +182,8 @@ export function normalizeMilkBarHit(hit: MilkBarHit): NormalizedGig {
     endsAt: normalizeUtcDate(hit.DateEnd),
     ticketUrl: sourceUrl,
     venue,
-    artists: normalizeArtists(hit),
+    artists: artistExtraction.artists,
+    artistExtractionKind: artistExtraction.artistExtractionKind,
     rawPayload: JSON.parse(JSON.stringify(hit)) as JsonObject,
     checksum: buildGigChecksum({
       sourceSlug: "milk-bar",
@@ -254,5 +250,8 @@ export const milkBarSource: SourceAdapter = {
     const hits = await fetchMilkBarHits(config, fetchImpl);
 
     return parseMilkBarHits(hits);
+  },
+  repairArtists(rawPayload) {
+    return extractMilkBarArtists(rawPayload as MilkBarHit);
   }
 };
