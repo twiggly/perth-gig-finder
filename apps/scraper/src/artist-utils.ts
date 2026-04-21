@@ -23,11 +23,36 @@ const ARTIST_EXTRACTION_KIND_RANK: Record<ArtistExtractionKind, number> = {
   unknown: 0
 };
 
+const LEADING_ARTIST_DECORATION = /^[`"'“”‘’•·●▪▫◆◇★☆*~_=|:;,.!?/\\-]+/u;
+const TRAILING_ARTIST_DECORATION = /[`"'“”‘’•·●▪▫◆◇★☆*~_=|:;,.!?/\\-]+$/u;
+
+function cleanArtistName(artist: string): string {
+  let normalizedArtist = normalizeWhitespace(artist);
+
+  if (!normalizedArtist) {
+    return "";
+  }
+
+  while (true) {
+    const cleaned = normalizeWhitespace(
+      normalizedArtist
+        .replace(LEADING_ARTIST_DECORATION, "")
+        .replace(TRAILING_ARTIST_DECORATION, "")
+    );
+
+    if (!cleaned || cleaned === normalizedArtist) {
+      return cleaned || normalizedArtist;
+    }
+
+    normalizedArtist = cleaned;
+  }
+}
+
 export function normalizeArtistNames(artists: string[]): string[] {
   const uniqueArtistsBySlug = new Map<string, string>();
 
   for (const artist of artists) {
-    const normalizedArtist = normalizeWhitespace(artist);
+    const normalizedArtist = cleanArtistName(artist);
 
     if (!normalizedArtist) {
       continue;

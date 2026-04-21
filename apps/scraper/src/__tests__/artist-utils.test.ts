@@ -15,6 +15,24 @@ describe("artist utils", () => {
     ]);
   });
 
+  it("strips decorative wrappers from artist names before deduping", () => {
+    expect(
+      normalizeArtistNames([
+        "·· Georgina Dacheff ··",
+        "\"Georgina Dacheff\"",
+        " -- Savanah Solomon -- "
+      ])
+    ).toEqual(["Georgina Dacheff", "Savanah Solomon"]);
+  });
+
+  it("preserves meaningful internal punctuation in artist names", () => {
+    expect(normalizeArtistNames(["P!NK", "alt-J", "AC/DC"])).toEqual([
+      "P!NK",
+      "alt-J",
+      "AC/DC"
+    ]);
+  });
+
   it("returns unknown when extraction produces no usable artists", () => {
     expect(createArtistExtraction(["", "   "], "structured")).toEqual(
       unknownArtistExtraction()
