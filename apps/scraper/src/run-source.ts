@@ -57,6 +57,20 @@ async function processGig(
     title: gig.title,
     excludeGigId: existingSourceGig?.gigId ?? null
   });
+
+  if (
+    existingSourceGig &&
+    matchedGig &&
+    matchedGig.id !== existingSourceGig.gigId
+  ) {
+    await store.prepareSourceGigReattachment({
+      sourceGigId: existingSourceGig.id,
+      currentGigId: existingSourceGig.gigId,
+      targetGigId: matchedGig.id,
+      sourceId: source.id
+    });
+  }
+
   const targetGigId = matchedGig?.id ?? existingSourceGig?.gigId ?? null;
 
   const result = await store.saveGig({

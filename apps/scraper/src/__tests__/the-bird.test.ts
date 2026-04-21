@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  extractTheBirdLinkedImageUrl,
+  normalizeTheBirdLinkedEventUrl,
   normalizeTheBirdRow,
   parseTheBirdFeedRows,
   parseTheBirdStartTime,
@@ -81,6 +83,32 @@ describe("the bird source adapter", () => {
     expect(blank?.ticketUrl).toBeNull();
   });
 
+  it("canonicalizes Humanitix ticket links to the linked event page", () => {
+    expect(
+      normalizeTheBirdLinkedEventUrl(
+        "https://events.humanitix.com/class-of-orb-reunion/tickets?utm_source=bird"
+      )
+    ).toBe("https://events.humanitix.com/class-of-orb-reunion");
+    expect(
+      normalizeTheBirdLinkedEventUrl(
+        "https://tickets.oztix.com.au/outlet/event/bc602244-415d-45de-86ac-a0a4b99940c0"
+      )
+    ).toBeNull();
+  });
+
+  it("extracts a linked event poster from Humanitix HTML", () => {
+    expect(
+      extractTheBirdLinkedImageUrl(`
+        <html>
+          <head>
+            <meta property="og:image" content="https://images.humanitix.com/i/ece78d93-d240-44ae-ba00-ada24312a1cb.jpg@seo-500.jpg" />
+          </head>
+          <body></body>
+        </html>
+      `)
+    ).toBe("https://images.humanitix.com/i/ece78d93-d240-44ae-ba00-ada24312a1cb.jpg@seo-500.jpg");
+  });
+
   it("falls back to date precision when no clear time exists", () => {
     const normalized = normalizeTheBirdRow({
       Date: "15/05/2026",
@@ -156,6 +184,57 @@ describe("the bird source adapter", () => {
     expect(result.gigs).toHaveLength(1);
     expect(result.failedCount).toBe(0);
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("enriches Bird gigs with posters from linked Humanitix event pages", async () => {
+    const rows: TheBirdFeedRow[] = [
+      {
+        Date: "03/05/2026",
+        Day: "SUNDAY",
+        "Event Title": "Class of Orb : Reunion",
+        Info: "",
+        "Ticket Link": "https://events.humanitix.com/class-of-orb-reunion/tickets"
+      }
+    ];
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const url = String(input);
+
+      if (url.includes("script.google.com/macros")) {
+        return new Response(JSON.stringify(rows), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (url === "https://events.humanitix.com/class-of-orb-reunion") {
+        return new Response(
+          `
+            <html>
+              <head>
+                <meta property="og:image" content="https://images.humanitix.com/i/ece78d93-d240-44ae-ba00-ada24312a1cb.jpg@seo-500.jpg" />
+              </head>
+            </html>
+          `,
+          {
+            status: 200,
+            headers: { "content-type": "text/html" }
+          }
+        );
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    const result = await theBirdSource.fetchListings(fetchMock);
+
+    expect(result.failedCount).toBe(0);
+    expect(result.gigs).toHaveLength(1);
+    expect(result.gigs[0]).toMatchObject({
+      title: "Class of Orb : Reunion",
+      imageUrl: "https://images.humanitix.com/i/ece78d93-d240-44ae-ba00-ada24312a1cb.jpg@seo-500.jpg",
+      ticketUrl: "https://events.humanitix.com/class-of-orb-reunion/tickets"
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("is registered in the shared source list", () => {

@@ -100,6 +100,15 @@ class MirrorOnlyStore implements GigStore {
     throw new Error("not implemented");
   }
 
+  async prepareSourceGigReattachment(_input: {
+    sourceGigId: string;
+    currentGigId: string;
+    targetGigId: string;
+    sourceId: string;
+  }): Promise<void> {
+    throw new Error("not implemented");
+  }
+
   async pruneStaleUpcomingSourceGigs(_input: {
     sourceId: string;
     retainedIdentityKeys: string[];

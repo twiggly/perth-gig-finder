@@ -483,6 +483,32 @@ class MemoryGigStore implements GigStore {
     };
   }
 
+  async prepareSourceGigReattachment(input: {
+    sourceGigId: string;
+    currentGigId: string;
+    targetGigId: string;
+    sourceId: string;
+  }): Promise<void> {
+    if (input.currentGigId === input.targetGigId) {
+      return;
+    }
+
+    const attachedSourceGigs = [...this.sourceGigs.values()].filter(
+      (sourceGig) => sourceGig.gigId === input.currentGigId
+    );
+
+    if (
+      attachedSourceGigs.length !== 1 ||
+      attachedSourceGigs[0]?.id !== input.sourceGigId ||
+      attachedSourceGigs[0]?.sourceId !== input.sourceId
+    ) {
+      return;
+    }
+
+    this.sourceGigs.delete(input.sourceGigId);
+    this.gigs.delete(input.currentGigId);
+  }
+
   async pruneStaleUpcomingSourceGigs(input: {
     sourceId: string;
     retainedIdentityKeys: string[];
@@ -1361,6 +1387,7 @@ describe("executeSourceRun", () => {
     const attachedGigIds = new Set([...store.sourceGigs.values()].map((sourceGig) => sourceGig.gigId));
 
     expect(attachedGigIds.size).toBe(1);
+    expect(store.gigs.size).toBe(1);
     expect(
       [...store.sourceGigs.values()].map((sourceGig) => sourceGig.sourceSlug).sort()
     ).toEqual(["oztix-wa", "the-bird"]);
