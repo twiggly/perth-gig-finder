@@ -96,7 +96,9 @@ class MemoryGigStore implements GigStore {
   readonly gigArtists = new Map<string, string[]>();
   readonly mirroredImagePaths = new Map<string, string>();
   readonly mirroredImageCalls: string[] = [];
+  readonly syncArtistCallBatches: string[][] = [];
   readonly failingImageUrls = new Set<string>();
+  syncGigArtistsError: string | null = null;
   imageBucketEnsured = false;
 
   async ensureSource(input: {
@@ -419,7 +421,6 @@ class MemoryGigStore implements GigStore {
   }): Promise<{
     inserted: boolean;
     sourceGig: SourceGigRecord;
-    shouldMirror: boolean;
   }> {
     const preferredIdentityKey = input.gig.externalId ?? input.gig.checksum;
     const existingByIdentity = await this.findSourceGig(
@@ -489,8 +490,7 @@ class MemoryGigStore implements GigStore {
 
     return {
       inserted: !existing,
-      sourceGig: nextRecord,
-      shouldMirror: Boolean(sourceImageUrl) && !unchangedReadyImage
+      sourceGig: nextRecord
     };
   }
 
@@ -631,6 +631,11 @@ class MemoryGigStore implements GigStore {
 
   async syncGigArtistsFromSourceGigs(gigIds: string[]): Promise<void> {
     const uniqueGigIds = [...new Set(gigIds)];
+    this.syncArtistCallBatches.push(uniqueGigIds);
+
+    if (this.syncGigArtistsError) {
+      throw new Error(this.syncGigArtistsError);
+    }
 
     for (const gigId of uniqueGigIds) {
       const candidates = [...this.sourceGigs.values()]
@@ -746,7 +751,75 @@ describe("executeSourceRun", () => {
     expect(secondRun.updatedCount).toBe(1);
     expect(store.gigs.size).toBe(1);
     expect(store.sourceGigs.size).toBe(1);
-    expect(store.imageBucketEnsured).toBe(true);
+    expect(store.imageBucketEnsured).toBe(false);
+  });
+
+  it("syncs canonical artists once per source run using all touched gig ids", async () => {
+    const store = new MemoryGigStore();
+    const source: SourceAdapter = {
+      slug: "oztix-wa",
+      name: "Oztix WA",
+      baseUrl: "https://www.oztix.com.au/search?states%5B0%5D=WA&q=",
+      priority: 10,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "oztix-wa",
+              externalId: "doctor-jazz",
+              sourceUrl: "https://tickets.oztix.com.au/outlet/event/doctor-jazz",
+              title: "Doctor Jazz",
+              status: "active",
+              artists: ["Doctor Jazz"]
+            }),
+            createGigForSource({
+              sourceSlug: "oztix-wa",
+              externalId: "noise-complaints",
+              sourceUrl:
+                "https://tickets.oztix.com.au/outlet/event/noise-complaints",
+              title: "Noise Complaints 1st Bday!",
+              status: "active",
+              startsAt: "2026-04-11T11:30:00.000Z",
+              artists: ["Noise Complaints"]
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+
+    await executeSourceRun(store, source);
+
+    expect(store.syncArtistCallBatches).toHaveLength(1);
+    expect(store.syncArtistCallBatches[0]).toHaveLength(2);
+  });
+
+  it("records a partial run when batched canonical artist sync fails after gig writes", async () => {
+    const store = new MemoryGigStore();
+    store.syncGigArtistsError = "artist sync unavailable";
+    const source: SourceAdapter = {
+      slug: "milk-bar",
+      name: "Milk Bar",
+      baseUrl: "https://milkbarperth.com.au/gigs/",
+      priority: 100,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [createGig("Doctor Jazz")],
+          failedCount: 0
+        };
+      }
+    };
+
+    const result = await executeSourceRun(store, source);
+
+    expect(result.status).toBe("partial");
+    expect(result.discoveredCount).toBe(1);
+    expect(result.insertedCount).toBe(1);
+    expect(result.failedCount).toBe(0);
+    expect(result.errorMessage).toContain("Unable to sync canonical artists");
+    expect(store.gigs.size).toBe(1);
   });
 
   it("reuses one source attachment when the same source emits duplicate listings for one gig", async () => {
@@ -1531,10 +1604,9 @@ describe("executeSourceRun", () => {
     expect(store.sourceGigs.size).toBe(2);
   });
 
-  it("keeps gig ingestion successful when image mirroring fails", async () => {
+  it("marks source images pending during scrape instead of mirroring inline", async () => {
     const store = new MemoryGigStore();
     const imageUrl = "https://assets.oztix.com.au/image/doctor-jazz.png";
-    store.failingImageUrls.add(imageUrl);
     const source: SourceAdapter = {
       slug: "oztix-wa",
       name: "Oztix WA",
@@ -1563,10 +1635,12 @@ describe("executeSourceRun", () => {
 
     expect(result.status).toBe("success");
     expect(result.insertedCount).toBe(1);
-    expect(sourceGig?.imageMirrorStatus).toBe("failed");
+    expect(sourceGig?.imageMirrorStatus).toBe("pending");
+    expect(sourceGig?.mirroredImagePath).toBeNull();
+    expect(store.mirroredImageCalls).toEqual([]);
   });
 
-  it("skips remirroring when the stored image URL is already ready", async () => {
+  it("preserves ready mirror metadata when the stored image URL is already ready", async () => {
     const store = new MemoryGigStore();
     const source: SourceAdapter = {
       slug: "oztix-wa",
@@ -1592,14 +1666,22 @@ describe("executeSourceRun", () => {
     };
 
     await executeSourceRun(store, source);
-    await executeSourceRun(store, source);
+    const pendingSourceGig = [...store.sourceGigs.values()][0];
 
-    expect(store.mirroredImageCalls).toEqual([
-      "https://assets.oztix.com.au/image/doctor-jazz.png"
-    ]);
+    expect(pendingSourceGig?.imageMirrorStatus).toBe("pending");
+
+    await store.mirrorSourceGigImage(pendingSourceGig!);
+
+    const firstPath = [...store.sourceGigs.values()][0]?.mirroredImagePath;
+    await executeSourceRun(store, source);
+    const secondSourceGig = [...store.sourceGigs.values()][0];
+
+    expect(store.mirroredImageCalls).toEqual(["https://assets.oztix.com.au/image/doctor-jazz.png"]);
+    expect(secondSourceGig?.imageMirrorStatus).toBe("ready");
+    expect(secondSourceGig?.mirroredImagePath).toBe(firstPath);
   });
 
-  it("remirrors when the source image URL changes", async () => {
+  it("marks an existing ready mirror pending again when the source image URL changes", async () => {
     const store = new MemoryGigStore();
     let imageUrl = "https://assets.oztix.com.au/image/doctor-jazz-v1.png";
     const source: SourceAdapter = {
@@ -1626,16 +1708,17 @@ describe("executeSourceRun", () => {
     };
 
     await executeSourceRun(store, source);
+    await store.mirrorSourceGigImage([...store.sourceGigs.values()][0]!);
     const firstPath = [...store.sourceGigs.values()][0]?.mirroredImagePath;
     imageUrl = "https://assets.oztix.com.au/image/doctor-jazz-v2.png";
     await executeSourceRun(store, source);
-    const secondPath = [...store.sourceGigs.values()][0]?.mirroredImagePath;
+    const sourceGig = [...store.sourceGigs.values()][0];
 
-    expect(store.mirroredImageCalls).toEqual([
-      "https://assets.oztix.com.au/image/doctor-jazz-v1.png",
-      "https://assets.oztix.com.au/image/doctor-jazz-v2.png"
-    ]);
-    expect(firstPath).not.toBe(secondPath);
+    expect(store.mirroredImageCalls).toEqual(["https://assets.oztix.com.au/image/doctor-jazz-v1.png"]);
+    expect(firstPath).not.toBeNull();
+    expect(sourceGig?.sourceImageUrl).toBe("https://assets.oztix.com.au/image/doctor-jazz-v2.png");
+    expect(sourceGig?.imageMirrorStatus).toBe("pending");
+    expect(sourceGig?.mirroredImagePath).toBeNull();
   });
 
   it("dedupes repeated artist names by slug before storing joins", async () => {

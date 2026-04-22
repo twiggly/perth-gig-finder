@@ -17,14 +17,16 @@ function buildPartialResult(input: {
   insertedCount: number;
   updatedCount: number;
   failedCount: number;
+  hadPostProcessingError: boolean;
   errorMessage: string | null;
 }): SourceExecutionResult {
   const finishedAt = nowIso();
   const processedCount = input.insertedCount + input.updatedCount;
+  const hasErrors = input.failedCount > 0 || input.hadPostProcessingError;
   const status =
-    processedCount === 0 && input.failedCount > 0
+    processedCount === 0 && hasErrors
       ? "failed"
-      : input.failedCount > 0
+      : hasErrors
         ? "partial"
         : "success";
 
@@ -46,9 +48,8 @@ function buildPartialResult(input: {
 async function processGig(
   store: GigStore,
   source: { id: string; priority: number },
-  gig: NormalizedGig,
-  fetchImpl: typeof fetch
-): Promise<"inserted" | "updated"> {
+  gig: NormalizedGig
+): Promise<{ outcome: "inserted" | "updated"; gigId: string }> {
   const venue = await store.upsertVenue(gig);
   const existingSourceGig = await store.findSourceGig(source.id, gig.externalId, gig.checksum);
   const matchedGig = await store.findCanonicalGig({
@@ -87,7 +88,7 @@ async function processGig(
     sourcePriority: source.priority
   });
 
-  const sourceGigResult = await store.upsertSourceGig({
+  await store.upsertSourceGig({
     sourceId: source.id,
     gigId: result.gig.id,
     gig: {
@@ -99,13 +100,10 @@ async function processGig(
     }
   });
 
-  if (sourceGigResult.shouldMirror) {
-    await store.mirrorSourceGigImage(sourceGigResult.sourceGig, fetchImpl);
-  }
-
-  await store.syncGigArtistsFromSourceGigs([result.gig.id]);
-
-  return result.inserted ? "inserted" : "updated";
+  return {
+    outcome: result.inserted ? "inserted" : "updated",
+    gigId: result.gig.id
+  };
 }
 
 export async function executeSourceRun(
@@ -120,7 +118,6 @@ export async function executeSourceRun(
     priority: source.priority,
     isPublicListingSource: source.isPublicListingSource
   });
-  await store.ensureImageBucket();
 
   const startedAt = nowIso();
   const runId = await store.startScrapeRun(sourceRecord.id, startedAt);
@@ -132,10 +129,12 @@ export async function executeSourceRun(
     let failedCount = parseFailures;
     const errors: string[] = [];
     const retainedIdentityKeys = new Set<string>();
+    const touchedGigIds = new Set<string>();
+    let hadPostProcessingError = false;
 
     for (const gig of gigs) {
       try {
-        const outcome = await processGig(store, sourceRecord, {
+        const result = await processGig(store, sourceRecord, {
           ...gig,
           venue: {
             ...gig.venue,
@@ -145,11 +144,12 @@ export async function executeSourceRun(
               title: gig.venue.name
             })
           }
-        }, fetchImpl);
+        });
 
         retainedIdentityKeys.add(gig.externalId ?? gig.checksum);
+        touchedGigIds.add(result.gigId);
 
-        if (outcome === "inserted") {
+        if (result.outcome === "inserted") {
           insertedCount += 1;
         } else {
           updatedCount += 1;
@@ -161,10 +161,32 @@ export async function executeSourceRun(
     }
 
     if (failedCount === 0 && gigs.length > 0) {
-      await store.pruneStaleUpcomingSourceGigs({
-        sourceId: sourceRecord.id,
-        retainedIdentityKeys: [...retainedIdentityKeys]
-      });
+      try {
+        await store.pruneStaleUpcomingSourceGigs({
+          sourceId: sourceRecord.id,
+          retainedIdentityKeys: [...retainedIdentityKeys]
+        });
+      } catch (error) {
+        hadPostProcessingError = true;
+        errors.push(
+          error instanceof Error
+            ? `Unable to prune stale source gigs: ${error.message}`
+            : "Unable to prune stale source gigs"
+        );
+      }
+    }
+
+    if (touchedGigIds.size > 0) {
+      try {
+        await store.syncGigArtistsFromSourceGigs([...touchedGigIds]);
+      } catch (error) {
+        hadPostProcessingError = true;
+        errors.push(
+          error instanceof Error
+            ? `Unable to sync canonical artists: ${error.message}`
+            : "Unable to sync canonical artists"
+        );
+      }
     }
 
     if (parseFailures > 0) {
@@ -182,6 +204,7 @@ export async function executeSourceRun(
       insertedCount,
       updatedCount,
       failedCount,
+      hadPostProcessingError,
       errorMessage
     });
 

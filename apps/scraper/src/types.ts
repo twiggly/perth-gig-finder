@@ -122,7 +122,6 @@ export interface GigStore {
   }): Promise<{
     inserted: boolean;
     sourceGig: SourceGigRecord;
-    shouldMirror: boolean;
   }>;
   prepareSourceGigReattachment(input: {
     sourceGigId: string;
