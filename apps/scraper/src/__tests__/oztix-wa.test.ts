@@ -4,10 +4,12 @@ import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  extractOztixArtists,
   isMusicGigHit,
   isPerthMetroHit,
   normalizeOztixHit,
   oztixWaSource,
+  parseOztixSpecialGuests,
   parseOztixHits
 } from "../sources/oztix-wa";
 
@@ -176,6 +178,66 @@ describe("oztix wa source adapter", () => {
       name: "Clancy's Fish Pub",
       slug: "clancys-fish-pub",
       suburb: "City Beach"
+    });
+  });
+
+  it("parses special guest lineups from Oztix guest text", () => {
+    expect(
+      parseOztixSpecialGuests(
+        'starring VOODOO PEOPLE - RENEGADES OF ROCK - THE BROWN STUDY BAND - SCAR TISSUE'
+      )
+    ).toEqual([
+      "VOODOO PEOPLE",
+      "RENEGADES OF ROCK",
+      "THE BROWN STUDY BAND",
+      "SCAR TISSUE"
+    ]);
+
+    expect(
+      parseOztixSpecialGuests(
+        "with special guests, The Aquabats! and The Suicide Machines"
+      )
+    ).toEqual(["The Aquabats!", "The Suicide Machines"]);
+
+    expect(
+      parseOztixSpecialGuests("OBSCURA (GER) FALLUJAH (USA)^ ASHEN (WA) + ANOXIA (NSW)")
+    ).toEqual(["OBSCURA (GER)", "FALLUJAH (USA)", "ASHEN (WA)", "ANOXIA (NSW)"]);
+
+    expect(parseOztixSpecialGuests("with guests TBC")).toEqual([]);
+    expect(parseOztixSpecialGuests("plus special guests")).toEqual([]);
+  });
+
+  it("uses parsed special guests when Oztix has no structured artist arrays", () => {
+    expect(
+      extractOztixArtists({
+        EventName: "FREOPALOOZA",
+        SpecialGuests:
+          'starring VOODOO PEOPLE - RENEGADES OF ROCK - THE BROWN STUDY BAND - SCAR TISSUE',
+        Bands: [],
+        Performances: []
+      })
+    ).toEqual({
+      artists: [
+        "VOODOO PEOPLE",
+        "RENEGADES OF ROCK",
+        "THE BROWN STUDY BAND",
+        "SCAR TISSUE"
+      ],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
+  it("adds parsed support acts to structured Oztix headliners", () => {
+    expect(
+      extractOztixArtists({
+        EventName: "Less Than Jake - 'Circus Down Under' Tour",
+        Bands: ["Less Than Jake"],
+        Performances: [{ Name: "Less Than Jake" }],
+        SpecialGuests: "with special guests, The Aquabats! and The Suicide Machines"
+      })
+    ).toEqual({
+      artists: ["Less Than Jake", "The Aquabats!", "The Suicide Machines"],
+      artistExtractionKind: "structured"
     });
   });
 
