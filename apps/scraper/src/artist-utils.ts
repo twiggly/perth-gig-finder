@@ -23,8 +23,8 @@ const ARTIST_EXTRACTION_KIND_RANK: Record<ArtistExtractionKind, number> = {
   unknown: 0
 };
 
-const LEADING_ARTIST_DECORATION = /^[`"'“”‘’•·●▪▫◆◇★☆*~_=|:;,.!?/\\-]+/u;
-const TRAILING_ARTIST_DECORATION = /[`"'“”‘’•·●▪▫◆◇★☆*~_=|:;,.!?/\\-]+$/u;
+const LEADING_ARTIST_DECORATION = /^[`"'“”‘’•·●▪▫◆◇★☆*~_=|:;,./\\-]+/u;
+const TRAILING_ARTIST_DECORATION = /[`"'“”‘’•·●▪▫◆◇★☆*~_=|:;,./\\-]+$/u;
 
 function cleanArtistName(artist: string): string {
   let normalizedArtist = normalizeWhitespace(artist);

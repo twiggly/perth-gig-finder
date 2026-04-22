@@ -26,10 +26,11 @@ describe("artist utils", () => {
   });
 
   it("preserves meaningful internal punctuation in artist names", () => {
-    expect(normalizeArtistNames(["P!NK", "alt-J", "AC/DC"])).toEqual([
+    expect(normalizeArtistNames(["P!NK", "alt-J", "AC/DC", "The Aquabats!"])).toEqual([
       "P!NK",
       "alt-J",
-      "AC/DC"
+      "AC/DC",
+      "The Aquabats!"
     ]);
   });
 

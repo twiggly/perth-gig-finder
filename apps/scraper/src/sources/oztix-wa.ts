@@ -70,6 +70,12 @@ const NON_MUSIC_CATEGORY_KEYWORDS = [
   "podcast"
 ];
 
+const SPECIAL_GUEST_PREFIX_PATTERN =
+  /^(?:with|plus)?\s*special guests?[:,]?\s*|^(?:with|plus)\s+guests?[:,]?\s*|^starring\s+|^featuring\s+|^feat\.?\s+/i;
+const GENERIC_SPECIAL_GUEST_PATTERN =
+  /^(?:special guests?|guests?)\s*(?:tba|tbc)?$|^(?:tba|tbc|to be announced|more to be announced)$/i;
+const SPECIAL_GUEST_SEPARATOR_PATTERN = /\s*(?:,|\+|\^|\||\s-\s)\s*/;
+
 interface OztixVenue {
   Name?: string;
   Address?: string;
@@ -261,10 +267,43 @@ function collectNamedArtists(hit: OztixHit): string[] {
     ? hit.Performances.map((performance) => performance.Name ?? "")
     : [];
   const fromTourName = hit.TourName ? [hit.TourName] : [];
+  const fromSpecialGuests = parseOztixSpecialGuests(hit.SpecialGuests);
 
-  return [...fromBands, ...fromPerformances, ...fromTourName]
+  return [...fromBands, ...fromPerformances, ...fromTourName, ...fromSpecialGuests]
     .map((artist) => normalizeWhitespace(artist))
     .filter(Boolean);
+}
+
+function normalizeSpecialGuestToken(value: string): string {
+  let normalized = normalizeWhitespace(value);
+
+  while (SPECIAL_GUEST_PREFIX_PATTERN.test(normalized)) {
+    normalized = normalizeWhitespace(normalized.replace(SPECIAL_GUEST_PREFIX_PATTERN, ""));
+  }
+
+  return normalized.replace(/\s+and\s+/gi, ", ");
+}
+
+export function parseOztixSpecialGuests(value: string | null | undefined): string[] {
+  const normalized = normalizeSpecialGuestToken(value ?? "").replace(
+    /\)\s+(?=[A-Z0-9][A-Z0-9 "'&!./:-]{0,80}\([A-Z]{2,}\))/g,
+    "), "
+  );
+
+  if (!normalized) {
+    return [];
+  }
+
+  const candidates = normalized
+    .split(SPECIAL_GUEST_SEPARATOR_PATTERN)
+    .flatMap((token) => token.split(/\s*,\s*/))
+    .map((token) =>
+      normalizeWhitespace(token).replace(/^["'“”‘’]+|["'“”‘’]+$/g, "")
+    )
+    .filter(Boolean)
+    .filter((token) => !GENERIC_SPECIAL_GUEST_PATTERN.test(token));
+
+  return createArtistExtraction(candidates, "parsed_text").artists;
 }
 
 function normalizeCategories(hit: OztixHit): string[] {
@@ -274,7 +313,20 @@ function normalizeCategories(hit: OztixHit): string[] {
 }
 
 export function extractOztixArtists(hit: OztixHit) {
-  return createArtistExtraction(collectNamedArtists(hit), "structured");
+  const structuredArtists = [
+    ...(Array.isArray(hit.Bands) ? hit.Bands : []),
+    ...(Array.isArray(hit.Performances)
+      ? hit.Performances.map((performance) => performance.Name ?? "")
+      : []),
+    ...(hit.TourName ? [hit.TourName] : [])
+  ]
+    .map((artist) => normalizeWhitespace(artist))
+    .filter(Boolean);
+  const parsedSpecialGuests = parseOztixSpecialGuests(hit.SpecialGuests);
+  const combinedArtists = [...structuredArtists, ...parsedSpecialGuests];
+  const extractionKind = structuredArtists.length > 0 ? "structured" : "parsed_text";
+
+  return createArtistExtraction(combinedArtists, extractionKind);
 }
 
 export function isPerthMetroHit(hit: OztixHit): boolean {
