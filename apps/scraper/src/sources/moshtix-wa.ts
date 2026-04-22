@@ -22,6 +22,7 @@ const PERTH_OFFSET_SUFFIX = "+08:00";
 const LIVE_MUSIC_CATEGORY_ID = "2,";
 const LIVE_MUSIC_CATEGORY_NUMERIC_ID = 2;
 const REQUEST_TIMEOUT_MS = 10_000;
+const DETAIL_FETCH_BATCH_SIZE = 6;
 const PERTH_METRO_LOCALITIES = new Set([
   "perth",
   "east perth",
@@ -75,6 +76,16 @@ const PLACEHOLDER_VENUE_KEYWORDS = [
   "touring au and nz"
 ];
 const REGIONAL_TITLE_SUFFIX_PATTERN = /\s[-–]\s(?:albany|busselton|rockingham)\b/i;
+const EARLY_SKIP_KEYWORD_PATTERNS = [
+  /\btrivia\b/i,
+  /\bquiz\b/i,
+  /\bkaraoke\b/i,
+  /\bbingo\b/i,
+  /\bcomedy\b/i,
+  /\bworkshop(?:s)?\b/i,
+  /\bflea market\b/i,
+  /\bmarkets?\b/i
+];
 
 interface MoshtixStructuredAddress {
   streetAddress?: string;
@@ -145,6 +156,11 @@ interface MoshtixSearchListing {
   listingImageUrl: string | null;
   teaser: string | null;
   rawPayload: JsonObject;
+}
+
+interface MoshtixListingFetchResult {
+  gig: NormalizedGig | null;
+  failedCount: number;
 }
 
 export interface ParsedMoshtixSearchPage {
@@ -521,6 +537,15 @@ function isClearlyNonMusicEvent(title: string, description: string | null): bool
   return NON_MUSIC_KEYWORDS.some((keyword) => haystack.includes(keyword));
 }
 
+function shouldSkipSearchListingBeforeDetailFetch(listing: MoshtixSearchListing): boolean {
+  if (REGIONAL_TITLE_SUFFIX_PATTERN.test(listing.title)) {
+    return true;
+  }
+
+  const haystack = `${listing.title} ${listing.teaser ?? ""}`;
+  return EARLY_SKIP_KEYWORD_PATTERNS.some((pattern) => pattern.test(haystack));
+}
+
 async function fetchWithTimeout(
   fetchImpl: typeof fetch,
   input: string
@@ -741,6 +766,42 @@ async function fetchSearchPage(
   return parseMoshtixSearchPage(await response.text());
 }
 
+async function fetchMoshtixListingDetails(
+  fetchImpl: typeof fetch,
+  listing: MoshtixSearchListing
+): Promise<MoshtixListingFetchResult> {
+  try {
+    const response = await fetchWithTimeout(fetchImpl, listing.eventUrl);
+
+    if (!response.ok) {
+      return {
+        gig: null,
+        failedCount: 1
+      };
+    }
+
+    return {
+      gig: normalizeMoshtixEventPage({
+        listing,
+        html: await response.text()
+      }),
+      failedCount: 0
+    };
+  } catch (error) {
+    if (error instanceof SkipMoshtixListingError) {
+      return {
+        gig: null,
+        failedCount: 0
+      };
+    }
+
+    return {
+      gig: null,
+      failedCount: 1
+    };
+  }
+}
+
 export const moshtixWaSource: SourceAdapter = {
   slug: "moshtix-wa",
   name: "Moshtix WA",
@@ -759,6 +820,7 @@ export const moshtixWaSource: SourceAdapter = {
       const searchPage = await fetchSearchPage(fetchImpl, currentPage, now);
       totalPages = Math.max(totalPages, searchPage.totalPages);
       failedCount += searchPage.failedCount;
+      const detailListings: MoshtixSearchListing[] = [];
 
       for (const listing of searchPage.listings) {
         if (seenEventIds.has(listing.externalId)) {
@@ -767,23 +829,31 @@ export const moshtixWaSource: SourceAdapter = {
 
         seenEventIds.add(listing.externalId);
 
-        try {
-          const response = await fetchWithTimeout(fetchImpl, listing.eventUrl);
+        if (shouldSkipSearchListingBeforeDetailFetch(listing)) {
+          continue;
+        }
 
-          if (!response.ok) {
-            failedCount += 1;
-            continue;
-          }
+        detailListings.push(listing);
+      }
 
-          gigs.push(
-            normalizeMoshtixEventPage({
-              listing,
-              html: await response.text()
-            })
-          );
-        } catch (error) {
-          if (!(error instanceof SkipMoshtixListingError)) {
-            failedCount += 1;
+      for (
+        let detailIndex = 0;
+        detailIndex < detailListings.length;
+        detailIndex += DETAIL_FETCH_BATCH_SIZE
+      ) {
+        const batch = detailListings.slice(
+          detailIndex,
+          detailIndex + DETAIL_FETCH_BATCH_SIZE
+        );
+        const batchResults = await Promise.all(
+          batch.map((listing) => fetchMoshtixListingDetails(fetchImpl, listing))
+        );
+
+        for (const result of batchResults) {
+          failedCount += result.failedCount;
+
+          if (result.gig) {
+            gigs.push(result.gig);
           }
         }
       }
