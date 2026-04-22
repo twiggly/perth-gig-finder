@@ -9,6 +9,8 @@ async function main(): Promise<void> {
   const results = [];
   const selectedSources = resolveSourcesToRun();
 
+  await store.ensureImageBucket();
+
   for (const source of selectedSources) {
     results.push(await executeSourceRun(store, source));
   }

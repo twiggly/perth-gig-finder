@@ -840,7 +840,6 @@ export class SupabaseGigStore implements GigStore {
   }): Promise<{
     inserted: boolean;
     sourceGig: SourceGigRecord;
-    shouldMirror: boolean;
   }> {
     const preferredIdentityKey = input.gig.externalId ?? input.gig.checksum;
     const existingByIdentity = await this.findSourceGig(
@@ -928,8 +927,7 @@ export class SupabaseGigStore implements GigStore {
 
     return {
       inserted: !existing,
-      sourceGig: toSourceGigRecord(data, input.gig.sourceSlug),
-      shouldMirror: Boolean(sourceImageUrl) && !unchangedReadyImage
+      sourceGig: toSourceGigRecord(data, input.gig.sourceSlug)
     };
   }
 

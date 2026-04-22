@@ -95,7 +95,6 @@ class MirrorOnlyStore implements GigStore {
   }): Promise<{
     inserted: boolean;
     sourceGig: SourceGigRecord;
-    shouldMirror: boolean;
   }> {
     throw new Error("not implemented");
   }
