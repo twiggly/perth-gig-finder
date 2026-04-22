@@ -573,20 +573,6 @@ describe("moshtix wa source adapter", () => {
           { status: 200 }
         )
       )
-      .mockResolvedValueOnce(
-        new Response(
-          buildEventPage({
-            eventId: "193080",
-            title: "Mojos Pub Quiz",
-            eventUrl: "https://www.moshtix.com.au/v2/event/mojos-pub-quiz/193080",
-            startDate: "2026-04-08T19:00:00",
-            endDate: "2026-04-08T21:00:00",
-            venueName: "Mojos Bar, North Fremantle",
-            descriptionHtml: "<p>Weekly trivia night.</p>"
-          }),
-          { status: 200 }
-        )
-      )
       .mockResolvedValueOnce(new Response(pageTwoHtml, { status: 200 }))
       .mockResolvedValueOnce(
         new Response(
@@ -607,24 +593,6 @@ describe("moshtix wa source adapter", () => {
           }),
           { status: 200 }
         )
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          buildEventPage({
-            eventId: "193083",
-            title: "No Future: Hip Hop & RnB Night - Busselton",
-            eventUrl: "https://www.moshtix.com.au/v2/event/no-future-busselton/193083",
-            startDate: "2026-05-01T20:00:00",
-            endDate: "2026-05-02T00:00:00",
-            venueName: "Busselton Pavilion",
-            streetAddress: "55 Queen St",
-            locality: "Busselton",
-            region: "WA",
-            postalCode: "6280",
-            descriptionHtml: "<p>Regional club night.</p>"
-          }),
-          { status: 200 }
-        )
       );
 
     try {
@@ -637,9 +605,19 @@ describe("moshtix wa source adapter", () => {
         "Doctor Jazz",
         "Mojos Songwriters Club"
       ]);
-      expect(fetchMock).toHaveBeenCalledTimes(6);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
       expect(String(fetchMock.mock.calls[0]?.[0])).toContain("FromDate=07+Apr+2026");
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes("Page=2"))).toBe(true);
+      expect(
+        fetchMock.mock.calls.some(([url]) =>
+          String(url).includes("/v2/event/mojos-pub-quiz/193080")
+        )
+      ).toBe(false);
+      expect(
+        fetchMock.mock.calls.some(([url]) =>
+          String(url).includes("/v2/event/no-future-busselton/193083")
+        )
+      ).toBe(false);
     } finally {
       vi.useRealTimers();
     }
