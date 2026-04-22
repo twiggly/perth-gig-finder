@@ -22,6 +22,7 @@ import {
   normalizeArtistNames,
   selectCanonicalArtistNames
 } from "./artist-utils";
+import { retryTransientSupabaseOperation } from "./supabase-retry";
 import type {
   GigRecord,
   GigStore,
@@ -1417,65 +1418,69 @@ export class SupabaseGigStore implements GigStore {
   }
 
   private async writeGigArtists(gigId: string, artists: string[]): Promise<void> {
-    const normalizedArtists = normalizeArtistNames(artists);
-    const uniqueArtistsBySlug = new Map<string, string>();
+    await retryTransientSupabaseOperation(async () => {
+      const normalizedArtists = normalizeArtistNames(artists);
+      const uniqueArtistsBySlug = new Map<string, string>();
 
-    for (const artist of normalizedArtists) {
-      const artistSlug = slugify(artist);
+      for (const artist of normalizedArtists) {
+        const artistSlug = slugify(artist);
 
-      if (!artistSlug || uniqueArtistsBySlug.has(artistSlug)) {
-        continue;
+        if (!artistSlug || uniqueArtistsBySlug.has(artistSlug)) {
+          continue;
+        }
+
+        uniqueArtistsBySlug.set(artistSlug, artist);
       }
 
-      uniqueArtistsBySlug.set(artistSlug, artist);
-    }
+      const { error: deleteError } = await this.client
+        .from("gig_artists")
+        .delete()
+        .eq("gig_id", gigId);
 
-    const { error: deleteError } = await this.client
-      .from("gig_artists")
-      .delete()
-      .eq("gig_id", gigId);
-
-    if (deleteError) {
-      throw new Error(`Unable to clear gig artists: ${deleteError.message}`);
-    }
-
-    if (uniqueArtistsBySlug.size === 0) {
-      return;
-    }
-
-    const artistRows: ArtistRow[] = [];
-
-    for (const [artistSlug, artistName] of uniqueArtistsBySlug.entries()) {
-      const { data, error } = await this.client
-        .from("artists")
-        .upsert(
-          {
-            name: artistName,
-            slug: artistSlug
-          },
-          { onConflict: "slug" }
-        )
-        .select("id, name, slug")
-        .single<ArtistRow>();
-
-      if (error || !data) {
-        throw new Error(`Unable to upsert artist: ${error?.message ?? "unknown error"}`);
+      if (deleteError) {
+        throw new Error(`Unable to clear gig artists: ${deleteError.message}`);
       }
 
-      artistRows.push(data);
-    }
+      if (uniqueArtistsBySlug.size === 0) {
+        return;
+      }
 
-    const uniqueArtistRows = [...new Map(artistRows.map((artist) => [artist.id, artist])).values()];
-    const { error: joinError } = await this.client.from("gig_artists").insert(
-      uniqueArtistRows.map((artist) => ({
-        gig_id: gigId,
-        artist_id: artist.id
-      }))
-    );
+      const artistRows: ArtistRow[] = [];
 
-    if (joinError) {
-      throw new Error(`Unable to create gig artist rows: ${joinError.message}`);
-    }
+      for (const [artistSlug, artistName] of uniqueArtistsBySlug.entries()) {
+        const { data, error } = await this.client
+          .from("artists")
+          .upsert(
+            {
+              name: artistName,
+              slug: artistSlug
+            },
+            { onConflict: "slug" }
+          )
+          .select("id, name, slug")
+          .single<ArtistRow>();
+
+        if (error || !data) {
+          throw new Error(`Unable to upsert artist: ${error?.message ?? "unknown error"}`);
+        }
+
+        artistRows.push(data);
+      }
+
+      const uniqueArtistRows = [
+        ...new Map(artistRows.map((artist) => [artist.id, artist])).values()
+      ];
+      const { error: joinError } = await this.client.from("gig_artists").insert(
+        uniqueArtistRows.map((artist) => ({
+          gig_id: gigId,
+          artist_id: artist.id
+        }))
+      );
+
+      if (joinError) {
+        throw new Error(`Unable to create gig artist rows: ${joinError.message}`);
+      }
+    });
   }
 
   async syncGigArtistsFromSourceGigs(gigIds: string[]): Promise<void> {
