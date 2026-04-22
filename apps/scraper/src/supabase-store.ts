@@ -54,6 +54,13 @@ interface VenueRow {
   website_url?: string | null;
 }
 
+interface VenueCacheEntry extends VenueRecord {
+  name: string;
+  suburb: string | null;
+  address: string | null;
+  websiteUrl: string | null;
+}
+
 interface GigRow {
   id: string;
   slug: string;
@@ -93,6 +100,19 @@ interface GigAttachmentRow {
 interface AttachedSourceGigRow extends SourceGigRow {
   last_seen_at: string;
   created_at: string;
+}
+
+interface SourceGigLookupRow extends AttachedSourceGigRow {
+  external_id: string | null;
+  checksum: string;
+  source_url: string;
+}
+
+interface SourceGigCache {
+  byChecksum: Map<string, SourceGigLookupRow>;
+  byExternalId: Map<string, SourceGigLookupRow>;
+  byGigId: Map<string, SourceGigLookupRow[]>;
+  byId: Map<string, SourceGigLookupRow>;
 }
 
 interface PrunableSourceGigRow {
@@ -221,6 +241,17 @@ function chooseCanonicalStatus(
   return canReplaceCanonical ? incomingStatus : existingStatus;
 }
 
+function compareAttachedSourceGigRows(
+  left: Pick<AttachedSourceGigRow, "last_seen_at" | "created_at">,
+  right: Pick<AttachedSourceGigRow, "last_seen_at" | "created_at">
+): number {
+  if (left.last_seen_at !== right.last_seen_at) {
+    return right.last_seen_at.localeCompare(left.last_seen_at);
+  }
+
+  return right.created_at.localeCompare(left.created_at);
+}
+
 function determineCanonicalOwner(
   existingGig: GigStateRow,
   canonicalSources: CanonicalGigSourceState[]
@@ -259,6 +290,8 @@ function createSupabaseAdminClient(): SupabaseClient {
 
 export class SupabaseGigStore implements GigStore {
   private readonly client = createSupabaseAdminClient();
+  private readonly venueCache = new Map<string, VenueCacheEntry>();
+  private readonly sourceGigCaches = new Map<string, SourceGigCache>();
 
   async ensureImageBucket(): Promise<void> {
     await ensureImageBucket(this.client);
@@ -355,6 +388,22 @@ export class SupabaseGigStore implements GigStore {
 
   async upsertVenue(gig: NormalizedGig): Promise<VenueRecord> {
     const venueSlug = gig.venue.slug || slugifyVenueName(gig.venue.name);
+    const cachedVenue = this.venueCache.get(venueSlug);
+    const desiredWebsiteUrl = gig.venue.websiteUrl ?? cachedVenue?.websiteUrl ?? null;
+
+    if (
+      cachedVenue &&
+      cachedVenue.name === gig.venue.name &&
+      cachedVenue.suburb === gig.venue.suburb &&
+      cachedVenue.address === gig.venue.address &&
+      cachedVenue.websiteUrl === desiredWebsiteUrl
+    ) {
+      return {
+        id: cachedVenue.id,
+        slug: cachedVenue.slug
+      };
+    }
+
     const { data: existingVenue, error: existingVenueError } = await this.client
       .from("venues")
       .select("id, slug, website_url")
@@ -375,7 +424,7 @@ export class SupabaseGigStore implements GigStore {
           name: gig.venue.name,
           suburb: gig.venue.suburb,
           address: gig.venue.address,
-          website_url: gig.venue.websiteUrl ?? existingVenue?.website_url ?? null
+          website_url: desiredWebsiteUrl ?? existingVenue?.website_url ?? null
         },
         { onConflict: "slug" }
       )
@@ -386,7 +435,100 @@ export class SupabaseGigStore implements GigStore {
       throw new Error(`Unable to upsert venue: ${error?.message ?? "unknown error"}`);
     }
 
+    this.venueCache.set(venueSlug, {
+      id: data.id,
+      slug: data.slug,
+      name: gig.venue.name,
+      suburb: gig.venue.suburb,
+      address: gig.venue.address,
+      websiteUrl: desiredWebsiteUrl ?? existingVenue?.website_url ?? null
+    });
+
     return { id: data.id, slug: data.slug };
+  }
+
+  private buildSourceGigCache(rows: SourceGigLookupRow[]): SourceGigCache {
+    const cache: SourceGigCache = {
+      byChecksum: new Map(),
+      byExternalId: new Map(),
+      byGigId: new Map(),
+      byId: new Map()
+    };
+
+    for (const row of rows) {
+      this.cacheSourceGigRow(cache, row);
+    }
+
+    return cache;
+  }
+
+  private cacheSourceGigRow(cache: SourceGigCache, row: SourceGigLookupRow): void {
+    const existingRow = cache.byId.get(row.id);
+
+    if (existingRow) {
+      this.removeSourceGigRowFromCache(cache, existingRow);
+    }
+
+    cache.byId.set(row.id, row);
+    cache.byChecksum.set(row.checksum, row);
+
+    if (row.external_id) {
+      cache.byExternalId.set(row.external_id, row);
+    }
+
+    const existingRows = cache.byGigId.get(row.gig_id) ?? [];
+    const nextRows = [
+      ...existingRows.filter((existingRow) => existingRow.id !== row.id),
+      row
+    ].sort(compareAttachedSourceGigRows);
+
+    cache.byGigId.set(row.gig_id, nextRows);
+  }
+
+  private removeSourceGigRowFromCache(cache: SourceGigCache, row: SourceGigLookupRow): void {
+    cache.byId.delete(row.id);
+    cache.byChecksum.delete(row.checksum);
+
+    if (row.external_id) {
+      cache.byExternalId.delete(row.external_id);
+    }
+
+    const existingRows = cache.byGigId.get(row.gig_id) ?? [];
+    const nextRows = existingRows.filter((existingRow) => existingRow.id !== row.id);
+
+    if (nextRows.length === 0) {
+      cache.byGigId.delete(row.gig_id);
+      return;
+    }
+
+    cache.byGigId.set(row.gig_id, nextRows);
+  }
+
+  private async getSourceGigCache(sourceId: string): Promise<SourceGigCache> {
+    const cached = this.sourceGigCaches.get(sourceId);
+
+    if (cached) {
+      return cached;
+    }
+
+    const { data, error } = await this.client
+      .from("source_gigs")
+      .select(
+        "id, source_id, gig_id, identity_key, starts_at_precision, artist_names, artist_extraction_kind, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height, external_id, checksum, source_url, last_seen_at, created_at"
+      )
+      .eq("source_id", sourceId);
+
+    if (error) {
+      throw new Error(
+        `Unable to load source gigs for cache: ${error.message ?? "unknown error"}`
+      );
+    }
+
+    const cache = this.buildSourceGigCache(
+      (data as SourceGigLookupRow[] | null) ?? []
+    );
+    this.sourceGigCaches.set(sourceId, cache);
+    return cache;
   }
 
   private async getGigState(gigId: string): Promise<GigStateRow> {
@@ -521,50 +663,20 @@ export class SupabaseGigStore implements GigStore {
     externalId: string | null,
     checksum: string
   ): Promise<SourceGigRecord | null> {
-    let query = this.client
-      .from("source_gigs")
-      .select(
-        "id, source_id, gig_id, identity_key, starts_at_precision, artist_names, artist_extraction_kind, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height"
-      )
-      .eq("source_id", sourceId)
-      .limit(1);
+    const cache = await this.getSourceGigCache(sourceId);
+    const row = externalId
+      ? cache.byExternalId.get(externalId) ?? null
+      : cache.byChecksum.get(checksum) ?? null;
 
-    query = externalId ? query.eq("external_id", externalId) : query.eq("checksum", checksum);
-
-    const { data, error } = await query.single<SourceGigRow>();
-
-    if (error) {
-      if (error.code === "PGRST116") {
-        return null;
-      }
-
-      throw new Error(`Unable to look up source gig: ${error.message}`);
-    }
-
-    return data ? toSourceGigRecord(data, "") : null;
+    return row ? toSourceGigRecord(row, "") : null;
   }
 
   private async listSourceGigsForSourceAndGig(
     sourceId: string,
     gigId: string
   ): Promise<AttachedSourceGigRow[]> {
-    const { data, error } = await this.client
-      .from("source_gigs")
-      .select(
-        "id, source_id, gig_id, identity_key, starts_at_precision, artist_names, artist_extraction_kind, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height, last_seen_at, created_at"
-      )
-      .eq("source_id", sourceId)
-      .eq("gig_id", gigId)
-      .order("last_seen_at", { ascending: false })
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      throw new Error(
-        `Unable to load source gig attachments for canonical gig: ${error.message}`
-      );
-    }
-
-    return (data as AttachedSourceGigRow[] | null) ?? [];
+    const cache = await this.getSourceGigCache(sourceId);
+    return [...(cache.byGigId.get(gigId) ?? [])];
   }
 
   private pickAttachedSourceGigKeeper(
@@ -593,10 +705,23 @@ export class SupabaseGigStore implements GigStore {
       return;
     }
 
+    const rowsByCache = [...this.sourceGigCaches.values()].map((cache) => ({
+      cache,
+      rows: ids
+        .map((id) => cache.byId.get(id) ?? null)
+        .filter((row): row is SourceGigLookupRow => Boolean(row))
+    }));
+
     const { error } = await this.client.from("source_gigs").delete().in("id", ids);
 
     if (error) {
       throw new Error(`Unable to remove duplicate source gigs: ${error.message}`);
+    }
+
+    for (const { cache, rows } of rowsByCache) {
+      for (const row of rows) {
+        this.removeSourceGigRowFromCache(cache, row);
+      }
     }
   }
 
@@ -915,15 +1040,18 @@ export class SupabaseGigStore implements GigStore {
       : this.client.from("source_gigs").insert(payload);
     const { data, error } = await mutation
       .select(
-        "id, source_id, gig_id, identity_key, starts_at_precision, artist_names, artist_extraction_kind, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height"
+        "id, source_id, gig_id, identity_key, starts_at_precision, artist_names, artist_extraction_kind, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height, external_id, checksum, source_url, last_seen_at, created_at"
       )
-      .single<SourceGigRow>();
+      .single<SourceGigLookupRow>();
 
     if (error || !data) {
       throw new Error(
         `Unable to upsert source gig: ${error?.message ?? "unknown error"}`
       );
     }
+
+    const cache = await this.getSourceGigCache(input.sourceId);
+    this.cacheSourceGigRow(cache, data);
 
     return {
       inserted: !existing,
