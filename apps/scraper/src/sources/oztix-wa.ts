@@ -70,6 +70,47 @@ const NON_MUSIC_CATEGORY_KEYWORDS = [
   "podcast"
 ];
 
+const EXPLICIT_NON_GIG_TEXT_PATTERNS = [
+  /\bclass(?:es)?\b/i,
+  /\bworkshop(?:s)?\b/i,
+  /\bmasterclass(?:es)?\b/i,
+  /\bintroduction to\b/i,
+  /\bhands-on\b/i,
+  /\bpanelists?\b/i,
+  /\bprofessional development\b/i,
+  /\bcheesemaking\b/i,
+  /\bmaterials?\s+(?:and|&)\s+ingredients\s+provided\b/i,
+  /\btake home everything you make\b/i
+];
+
+const EXPLICIT_MUSIC_TEXT_PATTERNS = [
+  /\bdj(?:s)?\b/i,
+  /\bband(?:s)?\b/i,
+  /\btribute\b/i,
+  /\bconcert\b/i,
+  /\btour\b/i,
+  /\bfestival\b/i,
+  /\brave\b/i,
+  /\blaunch\b/i,
+  /\borchestra\b/i,
+  /\bchoir\b/i,
+  /\bsongbook\b/i,
+  /\balbum\b/i,
+  /\brock\b/i,
+  /\bmetal\b/i,
+  /\bpunk\b/i,
+  /\bjazz\b/i,
+  /\bhip hop\b/i,
+  /\bhouse\b/i,
+  /\btechno\b/i,
+  /\bemo\b/i,
+  /\bindie\b/i,
+  /\bfolk\b/i,
+  /\bblues\b/i,
+  /\bcountry\b/i,
+  /\bpop\b/i
+];
+
 const SPECIAL_GUEST_PREFIX_PATTERN =
   /^(?:with|plus)?\s*special guests?[:,]?\s*|^(?:with|plus)\s+guests?[:,]?\s*|^starring\s+|^featuring\s+|^feat\.?\s+/i;
 const GENERIC_SPECIAL_GUEST_PATTERN =
@@ -274,6 +315,17 @@ function collectNamedArtists(hit: OztixHit): string[] {
     .filter(Boolean);
 }
 
+function collectStructuredArtists(hit: OztixHit): string[] {
+  const fromBands = Array.isArray(hit.Bands) ? hit.Bands : [];
+  const fromPerformances = Array.isArray(hit.Performances)
+    ? hit.Performances.map((performance) => performance.Name ?? "")
+    : [];
+
+  return [...fromBands, ...fromPerformances]
+    .map((artist) => normalizeWhitespace(artist))
+    .filter(Boolean);
+}
+
 function normalizeSpecialGuestToken(value: string): string {
   let normalized = normalizeWhitespace(value);
 
@@ -312,6 +364,26 @@ function normalizeCategories(hit: OztixHit): string[] {
     .filter(Boolean);
 }
 
+function hasExplicitNonGigSignal(hit: OztixHit): boolean {
+  const title = normalizeWhitespace(hit.EventName ?? "");
+  const description = toPlainText(hit.EventDescription);
+  const haystacks = [title, description].filter((value): value is string => Boolean(value));
+
+  return haystacks.some((value) =>
+    EXPLICIT_NON_GIG_TEXT_PATTERNS.some((pattern) => pattern.test(value))
+  );
+}
+
+function hasExplicitMusicSignal(hit: OztixHit): boolean {
+  const title = normalizeWhitespace(hit.EventName ?? "");
+  const description = toPlainText(hit.EventDescription);
+  const haystacks = [title, description].filter((value): value is string => Boolean(value));
+
+  return haystacks.some((value) =>
+    EXPLICIT_MUSIC_TEXT_PATTERNS.some((pattern) => pattern.test(value))
+  );
+}
+
 export function extractOztixArtists(hit: OztixHit) {
   const structuredArtists = [
     ...(Array.isArray(hit.Bands) ? hit.Bands : []),
@@ -347,24 +419,29 @@ export function isPerthMetroHit(hit: OztixHit): boolean {
 
 export function isMusicGigHit(hit: OztixHit): boolean {
   const normalizedCategories = normalizeCategories(hit);
+  const hasMusicCategory = normalizedCategories.some((category) =>
+    MUSIC_CATEGORY_KEYWORDS.some((keyword) => category.includes(keyword))
+  );
+  const hasNonMusicCategory = normalizedCategories.some((category) =>
+    NON_MUSIC_CATEGORY_KEYWORDS.some((keyword) => category.includes(keyword))
+  );
+  const structuredArtists = collectStructuredArtists(hit);
+  const parsedArtists = parseOztixSpecialGuests(hit.SpecialGuests);
+  const namedArtists = collectNamedArtists(hit);
 
-  if (
-    normalizedCategories.some((category) =>
-      MUSIC_CATEGORY_KEYWORDS.some((keyword) => category.includes(keyword))
-    )
-  ) {
-    return true;
-  }
-
-  if (
-    normalizedCategories.some((category) =>
-      NON_MUSIC_CATEGORY_KEYWORDS.some((keyword) => category.includes(keyword))
-    )
-  ) {
+  if (hasExplicitNonGigSignal(hit) && structuredArtists.length === 0) {
     return false;
   }
 
-  return collectNamedArtists(hit).length > 0;
+  if (hasMusicCategory) {
+    return true;
+  }
+
+  if (hasNonMusicCategory) {
+    return structuredArtists.length > 0 && hasExplicitMusicSignal(hit);
+  }
+
+  return namedArtists.length > 0;
 }
 
 function normalizeVenue(hit: OztixHit): NormalizedVenue {
