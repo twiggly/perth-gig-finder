@@ -81,6 +81,37 @@ describe("oztix wa source adapter", () => {
         Categories: ["Membership"]
       })
     ).toBe(false);
+    expect(
+      isMusicGigHit({
+        EventName: "Let's Make Cheese! Traditional Italian Cheesemaking Class",
+        Categories: ["Food and Wine"],
+        SpecialGuests: "Galleria Burrata",
+        EventDescription:
+          "Join us for a special hands-on cheesemaking class. Materials and ingredients provided."
+      })
+    ).toBe(false);
+    expect(
+      isMusicGigHit({
+        EventName: "Pro Takes 03 - Introduction to Music Production",
+        Categories: ["Music", "Educational", "Workshop", "Professional Development"],
+        SpecialGuests: "Panelists: Bec Price (Project BEXX) & Reece Lenzo"
+      })
+    ).toBe(false);
+    expect(
+      isMusicGigHit({
+        EventName: "Social Saturdays DJs + $2 Oysters",
+        Categories: ["Food", "Beer", "DJ", "Free Event"],
+        EventDescription:
+          "Rosemount Hotel & RTRFM present Social Saturdays with DJs every Saturday."
+      })
+    ).toBe(true);
+    expect(
+      isMusicGigHit({
+        EventName: "Rave & Brunch",
+        Categories: ["House", "Rave / Trance", "DJ"],
+        EventDescription: "3 DJs, 2 MCs, dancers and immersive moments."
+      })
+    ).toBe(true);
   });
 
   it("prefers the fuller payload image candidate and falls back when needed", () => {
