@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   buildMoshtixWaSearchUrl,
+  extractMoshtixArtists,
   moshtixWaSource,
   normalizeMoshtixEventPage,
   parseMoshtixSearchPage
@@ -298,6 +299,121 @@ describe("moshtix wa source adapter", () => {
       artists: ["Doctor Jazz"],
       artistExtractionKind: "structured"
     });
+  });
+
+  it("parses artists from Moshtix title and description lines when structured performers are missing", () => {
+    const listing = parseMoshtixSearchPage(
+      buildSearchPage({
+        results: [
+          buildSearchResult({
+            eventId: "193703",
+            title: "Dean Haitani + Dilip N The Davs",
+            eventUrl: "https://www.moshtix.com.au/v2/event/dean-haitani-dilip-n-the-davs/193703",
+            imageUrl: "https://static.moshtix.com.au/uploads/deanx140x140",
+            startDate: "2026-04-28T19:30:00",
+            endDate: "2026-04-28T22:30:00",
+            venueName: "Mojos Bar, North Fremantle",
+            streetAddress: "237 Queen Victoria St",
+            locality: "North Fremantle"
+          })
+        ]
+      })
+    ).listings[0];
+
+    const gig = normalizeMoshtixEventPage({
+      listing,
+      html: buildEventPage({
+        eventId: "193703",
+        title: "Dean Haitani + Dilip N The Davs",
+        eventUrl: listing.eventUrl,
+        startDate: "2026-04-28T19:30:00",
+        endDate: "2026-04-28T22:30:00",
+        venueName: "Mojos Bar, North Fremantle",
+        streetAddress: "237 Queen Victoria St",
+        locality: "North Fremantle",
+        region: "WA",
+        postalCode: "6159",
+        descriptionHtml:
+          "<p><strong>The PERTH BLUES CLUB presents</strong></p><p><strong>Dean Haitani + Dilip N The Davs</strong></p><h1>Dean Haitani | 7.30pm</h1><h1>Dilip N The Davs | 9.00pm</h1>",
+        artists: []
+      })
+    });
+
+    expect(gig.artists).toEqual(["Dean Haitani", "Dilip N The Davs"]);
+    expect(gig.artistExtractionKind).toBe("parsed_text");
+  });
+
+  it("parses featured headliners and support names from Moshtix concert copy", () => {
+    const extraction = extractMoshtixArtists({
+      title: "Remembering The Strike; featuring Shane Howard (Goanna Band) and more!",
+      descriptionHtml:
+        "<p>Headlined by Shane Howard with his Great Western band made up of Fremantle musicians Lucky Oceans, David Hyams, Roy Martinez and Todd Pickett.</p>",
+      structuredEvent: null,
+      eventData: {
+        name: "Remembering The Strike; featuring Shane Howard (Goanna Band) and more!",
+        artists: [],
+        venue: {
+          name: "Freo.Social"
+        },
+        client: {
+          name: "Freo.Social"
+        }
+      },
+      venue: {
+        name: "Freo.Social",
+        slug: "freo-social",
+        suburb: "Fremantle",
+        address: null,
+        websiteUrl: null
+      }
+    });
+
+    expect(extraction).toEqual({
+      artists: ["Shane Howard", "Lucky Oceans", "David Hyams", "Roy Martinez", "Todd Pickett"],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
+  it("parses DJ artists from Moshtix venue-session descriptions", () => {
+    const listing = parseMoshtixSearchPage(
+      buildSearchPage({
+        results: [
+          buildSearchResult({
+            eventId: "193929",
+            title: "VINYL LOUNGE at the Duke",
+            eventUrl: "https://www.moshtix.com.au/v2/event/vinyl-lounge-at-the-duke/193929",
+            imageUrl: "https://static.moshtix.com.au/uploads/vinyl-loungex140x140",
+            startDate: "2026-04-25T13:00:00",
+            endDate: "2026-04-25T17:00:00",
+            venueName: "The Duke of George",
+            streetAddress: "135 Duke Street",
+            locality: "East Fremantle"
+          })
+        ]
+      })
+    ).listings[0];
+
+    const gig = normalizeMoshtixEventPage({
+      listing,
+      html: buildEventPage({
+        eventId: "193929",
+        title: "VINYL LOUNGE at the Duke",
+        eventUrl: listing.eventUrl,
+        startDate: "2026-04-25T13:00:00",
+        endDate: "2026-04-25T17:00:00",
+        venueName: "The Duke of George",
+        streetAddress: "135 Duke Street",
+        locality: "East Fremantle",
+        region: "WA",
+        postalCode: "6158",
+        descriptionHtml:
+          "<p>DJ Howie Z launches the Saturday Vinyl Lounge Sessions!</p><p>Free Entry and Tunes from 1 pm to 5 pm</p>",
+        artists: []
+      })
+    });
+
+    expect(gig.artists).toEqual(["DJ Howie Z"]);
+    expect(gig.artistExtractionKind).toBe("parsed_text");
   });
 
   it("skips the empty Moshtix uploads directory URL and falls back to the next real image", () => {
