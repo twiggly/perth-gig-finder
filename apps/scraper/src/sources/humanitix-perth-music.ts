@@ -14,7 +14,11 @@ import {
   type StartsAtPrecision
 } from "@perth-gig-finder/shared";
 
-import { createArtistExtraction, unknownArtistExtraction } from "../artist-utils";
+import {
+  createArtistExtraction,
+  hasKnownArtists,
+  unknownArtistExtraction
+} from "../artist-utils";
 import type { SourceAdapter, SourceAdapterResult } from "../types";
 
 const SOURCE_ORIGIN = "https://humanitix.com";
@@ -200,6 +204,37 @@ const UI_NOISE_TEXT = new Set([
   "Keywords"
 ]);
 
+const ARTIST_SECTION_HEADINGS = new Set(["lineup", "artists", "performers", "featuring"]);
+const HUMANITIX_ARTIST_LIST_SEPARATOR_PATTERN = /\s*(?:,|•|\+|;)\s*/;
+const HUMANITIX_TITLE_PLUS_PATTERN = /^(.+?)\s+\+\s+(.+)$/;
+const HUMANITIX_TITLE_LAUNCH_PATTERN = /^(.+?)\s+(?:single|ep|album)\s+launch\b/i;
+const HUMANITIX_TITLE_SUPPORT_PATTERN =
+  /^(.+?)\s+(?:with|w\/)\s+support\s+from\s+(.+)$/i;
+const HUMANITIX_EXPLICIT_ARTIST_PATTERNS = [
+  /\b(?:featuring|feat\.?|ft\.?)\s+(.+?)(?:[.!?]|$)/i,
+  /\bwith support from\s+(.+?)(?:[.!?]|$)/i,
+  /\bsupport from\s+(.+?)(?:[.!?]|$)/i,
+  /\bheadlined by\s+(.+?)(?:[.!?]|$)/i,
+  /^lineup\s*[:\-]\s*(.+)$/i,
+  /^artists?\s*[:\-]\s*(.+)$/i
+];
+const HUMANITIX_ARTIST_LABEL_PREFIX_PATTERN =
+  /^(?:featuring|feat\.?|ft\.?|with support from|support from|lineup|artists?)\s*[:\-]?\s*/i;
+const HUMANITIX_ARTIST_TRAILING_NOISE_PATTERN =
+  /\s+(?:and more!?|plus more!?|more to be announced|tba|tbc)$/i;
+const HUMANITIX_GENERIC_ARTIST_WORDS = new Set([
+  "plus",
+  "band",
+  "bands",
+  "music",
+  "live",
+  "alternative",
+  "keywords",
+  "lineup",
+  "artists",
+  "description"
+]);
+
 interface HumanitixStructuredAddress {
   "@type"?: string | string[];
   streetAddress?: string;
@@ -258,6 +293,7 @@ interface HumanitixPageMeta {
   eventId: string | null;
   pageText: string[];
   headings: string[];
+  lineupText: string[];
 }
 
 export interface ParsedHumanitixDiscoveryPage {
@@ -372,6 +408,52 @@ function extractPageText($: cheerio.CheerioAPI): string[] {
   return [...new Set(texts)];
 }
 
+function extractSectionText($: cheerio.CheerioAPI, headingsToMatch: Set<string>): string[] {
+  const values: string[] = [];
+
+  const pushValue = (value: string) => {
+    const normalized = normalizeWhitespace(value);
+
+    if (!normalized || UI_NOISE_TEXT.has(normalized)) {
+      return;
+    }
+
+    values.push(normalized);
+  };
+
+  $("main h2, main h3, main h4").each((_, element) => {
+    const heading = normalizeWhitespace($(element).text()).toLowerCase();
+
+    if (!headingsToMatch.has(heading)) {
+      return;
+    }
+
+    let sibling = $(element).next();
+
+    while (sibling.length > 0 && !sibling.is("h2, h3, h4")) {
+      if (sibling.is("ul, ol")) {
+        sibling.find("li").each((__, listItem) => {
+          pushValue($(listItem).text());
+        });
+      } else {
+        const nestedTextNodes = sibling.find("p, li");
+
+        if (nestedTextNodes.length > 0) {
+          nestedTextNodes.each((__, node) => {
+            pushValue($(node).text());
+          });
+        } else {
+          pushValue(sibling.text());
+        }
+      }
+
+      sibling = sibling.next();
+    }
+  });
+
+  return [...new Set(values)];
+}
+
 function decodeFrancisEventId(value: string | null | undefined): string | null {
   if (!value) {
     return null;
@@ -410,7 +492,8 @@ function getPageMeta($: cheerio.CheerioAPI): HumanitixPageMeta {
     headings: $("main h2, main h3, main h4")
       .map((_, element) => normalizeWhitespace($(element).text()))
       .get()
-      .filter((value): value is string => Boolean(value))
+      .filter((value): value is string => Boolean(value)),
+    lineupText: extractSectionText($, ARTIST_SECTION_HEADINGS)
   };
 }
 
@@ -794,8 +877,34 @@ function splitArtistNames(value: string): string[] {
     .filter(Boolean);
 }
 
+function normalizeHumanitixArtistToken(value: string): string {
+  return normalizeWhitespace(
+    value
+      .replace(HUMANITIX_ARTIST_LABEL_PREFIX_PATTERN, "")
+      .replace(HUMANITIX_ARTIST_TRAILING_NOISE_PATTERN, "")
+      .replace(/^[-–•]+|[-–•]+$/g, "")
+  );
+}
+
+function splitHumanitixArtistLine(value: string): string[] {
+  const normalized = normalizeHumanitixArtistToken(value);
+
+  if (!normalized) {
+    return [];
+  }
+
+  return normalized
+    .split(HUMANITIX_ARTIST_LIST_SEPARATOR_PATTERN)
+    .map((entry) => normalizeHumanitixArtistToken(entry))
+    .filter((entry) => isLikelyArtistName(entry));
+}
+
 function isLikelyArtistName(value: string): boolean {
   if (!value) {
+    return false;
+  }
+
+  if (HUMANITIX_GENERIC_ARTIST_WORDS.has(value.toLowerCase())) {
     return false;
   }
 
@@ -818,7 +927,7 @@ function isLikelyArtistName(value: string): boolean {
   );
 }
 
-export function extractHumanitixArtists(structuredEvent: HumanitixStructuredEvent) {
+function extractStructuredHumanitixArtists(structuredEvent: HumanitixStructuredEvent) {
   const candidates = [
     structuredEvent.performers,
     structuredEvent.performer
@@ -840,6 +949,137 @@ export function extractHumanitixArtists(structuredEvent: HumanitixStructuredEven
   }
 
   return createArtistExtraction(artists, "structured");
+}
+
+function parseHumanitixTitleArtists(title: string): string[] {
+  const normalized = normalizeWhitespace(title);
+
+  if (!normalized) {
+    return [];
+  }
+
+  const candidates: string[] = [];
+  const plusMatch = normalized.match(HUMANITIX_TITLE_PLUS_PATTERN);
+
+  if (plusMatch) {
+    candidates.push(...splitHumanitixArtistLine(`${plusMatch[1]}, ${plusMatch[2]}`));
+  }
+
+  const launchMatch = normalized.match(HUMANITIX_TITLE_LAUNCH_PATTERN);
+
+  if (launchMatch) {
+    const launchArtist = normalizeHumanitixArtistToken(launchMatch[1]);
+
+    if (isLikelyArtistName(launchArtist)) {
+      candidates.push(launchArtist);
+    }
+  }
+
+  const supportMatch = normalized.match(HUMANITIX_TITLE_SUPPORT_PATTERN);
+
+  if (supportMatch) {
+    candidates.push(
+      ...splitHumanitixArtistLine(supportMatch[1]),
+      ...splitHumanitixArtistLine(supportMatch[2])
+    );
+  }
+
+  return candidates;
+}
+
+function parseHumanitixLineupArtists(lineupText: string[]): string[] {
+  const candidates: string[] = [];
+  let sawExplicitLineupSignal = false;
+
+  for (const line of lineupText) {
+    const normalizedLine = normalizeWhitespace(line);
+
+    if (!normalizedLine) {
+      continue;
+    }
+
+    const hasExplicitLabel = HUMANITIX_ARTIST_LABEL_PREFIX_PATTERN.test(normalizedLine);
+
+    if (hasExplicitLabel) {
+      sawExplicitLineupSignal = true;
+      candidates.push(...splitHumanitixArtistLine(normalizedLine));
+      continue;
+    }
+
+    if (/[:,;+]/.test(normalizedLine)) {
+      const parsedArtists = splitHumanitixArtistLine(normalizedLine);
+
+      if (parsedArtists.length >= 2) {
+        sawExplicitLineupSignal = true;
+        candidates.push(...parsedArtists);
+      }
+
+      continue;
+    }
+
+    if (isLikelyArtistName(normalizedLine)) {
+      candidates.push(normalizedLine);
+    }
+  }
+
+  const normalizedCandidates = createArtistExtraction(candidates, "parsed_text").artists;
+
+  if (normalizedCandidates.length === 0) {
+    return [];
+  }
+
+  return sawExplicitLineupSignal || normalizedCandidates.length >= 2
+    ? normalizedCandidates
+    : [];
+}
+
+function parseHumanitixExplicitTextArtists(
+  values: Array<string | null | undefined>
+): string[] {
+  const candidates: string[] = [];
+
+  for (const value of values) {
+    const normalized = normalizeWhitespace(value ?? "");
+
+    if (!normalized) {
+      continue;
+    }
+
+    for (const pattern of HUMANITIX_EXPLICIT_ARTIST_PATTERNS) {
+      const match = normalized.match(pattern);
+
+      if (match?.[1]) {
+        candidates.push(...splitHumanitixArtistLine(match[1]));
+      }
+    }
+  }
+
+  return candidates;
+}
+
+export function extractHumanitixArtists(input: {
+  structuredEvent: HumanitixStructuredEvent;
+  title: string;
+  description: string | null;
+  meta: Pick<HumanitixPageMeta, "pageText" | "headings" | "lineupText">;
+}) {
+  const structuredExtraction = extractStructuredHumanitixArtists(input.structuredEvent);
+  const parsedArtists = [
+    ...parseHumanitixTitleArtists(input.title),
+    ...parseHumanitixLineupArtists(input.meta.lineupText),
+    ...parseHumanitixExplicitTextArtists([input.description, ...input.meta.pageText])
+  ];
+
+  if (hasKnownArtists(structuredExtraction)) {
+    return createArtistExtraction(
+      [...structuredExtraction.artists, ...parsedArtists],
+      "structured"
+    );
+  }
+
+  return parsedArtists.length > 0
+    ? createArtistExtraction(parsedArtists, "parsed_text")
+    : unknownArtistExtraction();
 }
 
 function isGenericDescription(value: string | null | undefined): boolean {
@@ -1042,8 +1282,13 @@ export function normalizeHumanitixDetailPage(input: {
       continue;
     }
 
-    const artistExtraction = extractHumanitixArtists(structuredEvent);
     const description = getPreferredDescription(structuredEvent, meta);
+    const artistExtraction = extractHumanitixArtists({
+      structuredEvent,
+      title,
+      description,
+      meta
+    });
 
     if (
       !isStrictMusicGig({
@@ -1088,7 +1333,10 @@ export function normalizeHumanitixDetailPage(input: {
             imageUrl: meta.imageUrl,
             twitterLocation: meta.twitterLocation,
             twitterDate: meta.twitterDate,
-            eventId: meta.eventId
+            eventId: meta.eventId,
+            pageText: meta.pageText,
+            headings: meta.headings,
+            lineupText: meta.lineupText
           }
         })
       ) as JsonObject,
@@ -1204,11 +1452,22 @@ export const humanitixPerthMusicSource: SourceAdapter = {
       rawPayload && typeof rawPayload === "object" && !Array.isArray(rawPayload)
         ? (rawPayload as {
             structuredEvent?: HumanitixStructuredEvent;
+            meta?: Pick<HumanitixPageMeta, "pageText" | "headings" | "lineupText">;
           })
         : {};
 
     return payload.structuredEvent
-      ? extractHumanitixArtists(payload.structuredEvent)
+      ? extractHumanitixArtists({
+          structuredEvent: payload.structuredEvent,
+          title: normalizeWhitespace(payload.structuredEvent.name ?? ""),
+          description:
+            normalizeWhitespace(payload.structuredEvent.description ?? "") || null,
+          meta: {
+            pageText: payload.meta?.pageText ?? [],
+            headings: payload.meta?.headings ?? [],
+            lineupText: payload.meta?.lineupText ?? []
+          }
+        })
       : unknownArtistExtraction();
   }
 };
