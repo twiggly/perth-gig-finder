@@ -282,6 +282,108 @@ describe("humanitix perth music source adapter", () => {
     expect(gigs[0]?.artistExtractionKind).toBe("structured");
   });
 
+  it("parses lineup artists from Humanitix page sections when structured performers are missing", () => {
+    const gigs = normalizeHumanitixDetailPage({
+      eventUrl: "https://events.humanitix.com/alt-thursdays",
+      html: buildEventPage({
+        title: "ALT//THURSDAYS",
+        canonicalUrl: "https://events.humanitix.com/alt-thursdays",
+        ogDescription: "A live electronic showcase in Perth.",
+        imageUrl: "https://images.humanitix.com/i/alt-thursdays@seo-500.jpg",
+        twitterLocation: "The Bird, 181 William St, Northbridge WA 6003, Australia",
+        twitterDate: "Thursday 23rd April 2026",
+        eventId: "alt-thursdays",
+        structuredEvents: buildStructuredEvent({
+          title: "ALT//THURSDAYS",
+          url: "https://events.humanitix.com/alt-thursdays",
+          startDate: "2026-04-23T18:30:00+0800",
+          venueName: "The Bird",
+          streetAddress: "181 William St, Northbridge WA 6003, Australia",
+          locality: "Northbridge",
+          postalCode: "6003",
+          description: "A live electronic showcase in Perth."
+        }),
+        headings: ["Description", "Lineup"],
+        paragraphs: ["A live electronic showcase in Perth."],
+        listItems: ["Melānija", "Esper", "softwarebodyIV", "tarsier", "big trouble little china"]
+      })
+    });
+
+    expect(gigs).toHaveLength(1);
+    expect(gigs[0]?.artists).toEqual([
+      "Melānija",
+      "Esper",
+      "softwarebodyIV",
+      "tarsier",
+      "big trouble little china"
+    ]);
+    expect(gigs[0]?.artistExtractionKind).toBe("parsed_text");
+  });
+
+  it("merges explicit support artists from page text with structured Humanitix performers", () => {
+    const gigs = normalizeHumanitixDetailPage({
+      eventUrl: "https://events.humanitix.com/headline-artist-live",
+      html: buildEventPage({
+        title: "Headline Artist Live",
+        canonicalUrl: "https://events.humanitix.com/headline-artist-live",
+        ogDescription: "A headline set with local support acts.",
+        imageUrl: "https://images.humanitix.com/i/headline-artist-live@seo-500.jpg",
+        twitterLocation: "Lyric's Underground, 22 Lyric Ln, Maylands WA 6051, Australia",
+        twitterDate: "Friday 1st May 2026",
+        eventId: "headline-artist-live",
+        structuredEvents: buildStructuredEvent({
+          title: "Headline Artist Live",
+          url: "https://events.humanitix.com/headline-artist-live",
+          startDate: "2026-05-01T19:30:00+0800",
+          venueName: "Lyric's Underground",
+          streetAddress: "22 Lyric Ln, Maylands WA 6051, Australia",
+          locality: "Maylands",
+          postalCode: "6051",
+          description: "A headline set with local support acts.",
+          performers: [{ name: "Headline Artist" }]
+        }),
+        headings: ["Description"],
+        paragraphs: ["With support from Local Friend, Second Support."]
+      })
+    });
+
+    expect(gigs).toHaveLength(1);
+    expect(gigs[0]?.artists).toEqual([
+      "Headline Artist",
+      "Local Friend",
+      "Second Support"
+    ]);
+    expect(gigs[0]?.artistExtractionKind).toBe("structured");
+  });
+
+  it("repairs parsed Humanitix artists from stored lineup metadata", () => {
+    const extraction = humanitixPerthMusicSource.repairArtists?.({
+      structuredEvent: buildStructuredEvent({
+        title: "ALT//THURSDAYS",
+        url: "https://events.humanitix.com/alt-thursdays",
+        startDate: "2026-04-23T18:30:00+0800",
+        venueName: "The Bird",
+        streetAddress: "181 William St, Northbridge WA 6003, Australia",
+        locality: "Northbridge",
+        postalCode: "6003",
+        description: "A live electronic showcase in Perth."
+      }) as never,
+      meta: {
+        pageText: [
+          "A live electronic showcase in Perth.",
+          "Featuring Melānija, Esper, softwarebodyIV, tarsier, big trouble little china"
+        ],
+        headings: ["Description", "Lineup"],
+        lineupText: ["Melānija", "Esper", "softwarebodyIV", "tarsier", "big trouble little china"]
+      }
+    });
+
+    expect(extraction).toEqual({
+      artists: ["Melānija", "Esper", "softwarebodyIV", "tarsier", "big trouble little china"],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
   it("rejects noisy non-gig Humanitix events", () => {
     const cocktailGigs = normalizeHumanitixDetailPage({
       eventUrl: "https://events.humanitix.com/hss-cocktail-night-chrome-mirage",
