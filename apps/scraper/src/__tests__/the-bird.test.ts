@@ -389,6 +389,63 @@ describe("the bird source adapter", () => {
     });
   });
 
+  it("merges weekly rows when the coming-up title only adds The Bird venue text", async () => {
+    const comingUpRows: TheBirdFeedRow[] = [
+      {
+        Date: "26/04/2026",
+        Day: "SUNDAY",
+        "Event Title": "WESTEND EXPORT @ THE BIRD",
+        Info: "Doors 8pm",
+        "Ticket Link": ""
+      }
+    ];
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const url = String(input);
+
+      if (url.includes("AKfycbxdag")) {
+        return new Response(JSON.stringify(comingUpRows), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (url.includes("AKfycbzzgyned")) {
+        return new Response(
+          JSON.stringify([
+            {
+              Date: "26.04.26",
+              Day: "Sunday",
+              Time: "8pm",
+              Price: "FREE",
+              Vibe: "live music",
+              Title: "Westend Export",
+              Featuring: "WEX PARTY UNIT, Coyboy, Lala, Sneeze, Respondent & Joii",
+              Description: "Westend Export returns to The Bird.",
+              "Ticket Link": ""
+            }
+          ]),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          }
+        );
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    const result = await theBirdSource.fetchListings(fetchMock);
+
+    expect(result.failedCount).toBe(0);
+    expect(result.gigs).toHaveLength(1);
+    expect(result.gigs[0]).toMatchObject({
+      title: "WESTEND EXPORT @ THE BIRD",
+      startsAt: "2026-04-26T12:00:00.000Z",
+      artists: ["WEX PARTY UNIT", "Coyboy", "Lala", "Sneeze", "Respondent & Joii"],
+      artistExtractionKind: "explicit_lineup"
+    });
+  });
+
   it("is registered in the shared source list", () => {
     expect(sources.map((source) => source.slug)).toContain("the-bird");
   });
