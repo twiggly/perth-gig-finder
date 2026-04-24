@@ -10,7 +10,8 @@ import {
   normalizeOztixHit,
   oztixWaSource,
   parseOztixSpecialGuests,
-  parseOztixHits
+  parseOztixHits,
+  parseOztixTitleFeaturedArtists
 } from "../sources/oztix-wa";
 
 const FIXTURE_DIR = resolve(import.meta.dirname, "fixtures");
@@ -232,6 +233,9 @@ describe("oztix wa source adapter", () => {
 
     expect(parseOztixSpecialGuests("With BLESSTHEFALL")).toEqual(["BLESSTHEFALL"]);
     expect(parseOztixSpecialGuests("with DJ SWEETMAN")).toEqual(["DJ SWEETMAN"]);
+    expect(parseOztixSpecialGuests("with a special guest to be announced")).toEqual([]);
+    expect(parseOztixSpecialGuests("special guest to be announced")).toEqual([]);
+    expect(parseOztixSpecialGuests("guest TBA")).toEqual([]);
 
     expect(
       parseOztixSpecialGuests("OBSCURA (GER) FALLUJAH (USA)^ ASHEN (WA) + ANOXIA (NSW)")
@@ -272,6 +276,32 @@ describe("oztix wa source adapter", () => {
     ).toEqual({
       artists: ["Less Than Jake", "The Aquabats!", "The Suicide Machines"],
       artistExtractionKind: "structured"
+    });
+  });
+
+  it("parses explicit featured performers from Oztix titles", () => {
+    expect(parseOztixTitleFeaturedArtists("Tribute Night ft. Lindsay Wells")).toEqual([
+      "Lindsay Wells"
+    ]);
+    expect(parseOztixTitleFeaturedArtists("Tribute Night feat. Lindsay Wells")).toEqual([
+      "Lindsay Wells"
+    ]);
+    expect(parseOztixTitleFeaturedArtists("Tribute Night featuring Lindsay Wells")).toEqual([
+      "Lindsay Wells"
+    ]);
+  });
+
+  it("drops tribute subjects when an Oztix title names the real featured performer", () => {
+    expect(
+      extractOztixArtists({
+        EventName: "Jimi Hendrix The Australian Tribute ft. Lindsay Wells",
+        Bands: ["Jimi Hendrix"],
+        Performances: [{ Name: "Jimi Hendrix" }],
+        SpecialGuests: "with a special guest to be announced"
+      })
+    ).toEqual({
+      artists: ["Lindsay Wells"],
+      artistExtractionKind: "parsed_text"
     });
   });
 

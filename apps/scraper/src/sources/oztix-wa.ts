@@ -114,8 +114,12 @@ const EXPLICIT_MUSIC_TEXT_PATTERNS = [
 const SPECIAL_GUEST_PREFIX_PATTERN =
   /^(?:with|plus)?\s*special guests?[:,]?\s*|^(?:with|plus)\s+guests?[:,]?\s*|^(?:with|plus)\s+|^starring\s+|^featuring\s+|^feat\.?\s+/i;
 const GENERIC_SPECIAL_GUEST_PATTERN =
-  /^(?:special guests?|guests?)\s*(?:tba|tbc)?$|^(?:tba|tbc|to be announced|more to be announced)$/i;
+  /^(?:(?:a|an)\s+)?(?:special\s+)?guests?\s*(?:to be announced|tba|tbc)?$|^(?:tba|tbc|to be announced|more to be announced)$/i;
 const SPECIAL_GUEST_SEPARATOR_PATTERN = /\s*(?:,|\+|\^|\||\s-\s)\s*/;
+const TITLE_FEATURED_ARTIST_PATTERN =
+  /\b(?:ft\.?|feat\.?|featuring)\s+(.+)$/i;
+const TITLE_TRIBUTE_SUBJECT_PATTERN =
+  /^(.+?)\s+the\s+australian\s+tribute\b/i;
 
 interface OztixVenue {
   Name?: string;
@@ -309,8 +313,15 @@ function collectNamedArtists(hit: OztixHit): string[] {
     : [];
   const fromTourName = hit.TourName ? [hit.TourName] : [];
   const fromSpecialGuests = parseOztixSpecialGuests(hit.SpecialGuests);
+  const fromTitleFeatured = parseOztixTitleFeaturedArtists(hit.EventName);
 
-  return [...fromBands, ...fromPerformances, ...fromTourName, ...fromSpecialGuests]
+  return [
+    ...fromBands,
+    ...fromPerformances,
+    ...fromTourName,
+    ...fromSpecialGuests,
+    ...fromTitleFeatured
+  ]
     .map((artist) => normalizeWhitespace(artist))
     .filter(Boolean);
 }
@@ -358,6 +369,45 @@ export function parseOztixSpecialGuests(value: string | null | undefined): strin
   return createArtistExtraction(candidates, "parsed_text").artists;
 }
 
+function normalizeArtistIdentity(value: string): string {
+  return normalizeWhitespace(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function splitOztixArtistList(value: string): string[] {
+  return value
+    .replace(/\s+and\s+/gi, ", ")
+    .split(SPECIAL_GUEST_SEPARATOR_PATTERN)
+    .flatMap((token) => token.split(/\s*,\s*/))
+    .map((token) =>
+      normalizeWhitespace(token).replace(/^["'“”‘’]+|["'“”‘’]+$/g, "")
+    )
+    .filter(Boolean)
+    .filter((token) => !GENERIC_SPECIAL_GUEST_PATTERN.test(token));
+}
+
+export function parseOztixTitleFeaturedArtists(
+  title: string | null | undefined
+): string[] {
+  const normalized = normalizeWhitespace(title ?? "");
+  const match = normalized.match(TITLE_FEATURED_ARTIST_PATTERN);
+
+  if (!match?.[1]) {
+    return [];
+  }
+
+  return createArtistExtraction(splitOztixArtistList(match[1]), "parsed_text").artists;
+}
+
+function getOztixTributeSubject(title: string | null | undefined): string | null {
+  const normalized = normalizeWhitespace(title ?? "");
+  const match = normalized.match(TITLE_TRIBUTE_SUBJECT_PATTERN);
+
+  return match?.[1] ? normalizeWhitespace(match[1]) : null;
+}
+
 function normalizeCategories(hit: OztixHit): string[] {
   return (Array.isArray(hit.Categories) ? hit.Categories : [])
     .map((category) => normalizeWhitespace(category).toLowerCase())
@@ -385,6 +435,13 @@ function hasExplicitMusicSignal(hit: OztixHit): boolean {
 }
 
 export function extractOztixArtists(hit: OztixHit) {
+  const titleFeaturedArtists = parseOztixTitleFeaturedArtists(hit.EventName);
+  const tributeSubject = titleFeaturedArtists.length > 0
+    ? getOztixTributeSubject(hit.EventName)
+    : null;
+  const tributeSubjectIdentity = tributeSubject
+    ? normalizeArtistIdentity(tributeSubject)
+    : null;
   const structuredArtists = [
     ...(Array.isArray(hit.Bands) ? hit.Bands : []),
     ...(Array.isArray(hit.Performances)
@@ -393,9 +450,18 @@ export function extractOztixArtists(hit: OztixHit) {
     ...(hit.TourName ? [hit.TourName] : [])
   ]
     .map((artist) => normalizeWhitespace(artist))
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter(
+      (artist) =>
+        !tributeSubjectIdentity ||
+        normalizeArtistIdentity(artist) !== tributeSubjectIdentity
+    );
   const parsedSpecialGuests = parseOztixSpecialGuests(hit.SpecialGuests);
-  const combinedArtists = [...structuredArtists, ...parsedSpecialGuests];
+  const combinedArtists = [
+    ...structuredArtists,
+    ...titleFeaturedArtists,
+    ...parsedSpecialGuests
+  ];
   const extractionKind = structuredArtists.length > 0 ? "structured" : "parsed_text";
 
   return createArtistExtraction(combinedArtists, extractionKind);
