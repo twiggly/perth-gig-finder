@@ -87,8 +87,11 @@ const EARLY_SKIP_KEYWORD_PATTERNS = [
   /\bmarkets?\b/i
 ];
 const MOSHTIX_ARTIST_LIST_SEPARATOR_PATTERN = /\s*(?:\+|,)\s*/;
+const MOSHTIX_PLACEHOLDER_ARTIST_PATTERN =
+  /^(?:(?:local|more|additional|special)\s+)*(?:support|supports|support acts?)\s*(?:to be announced|tba|tbc)?$|^(?:(?:a|an)\s+)?(?:special\s+)?guests?\s*(?:to be announced|tba|tbc)?$|^(?:secret|mystery)\s+(?:act|artist|guest|set)s?[!.]?$|^(?:more|more\s+(?:acts?|artists?|guests?))[!.]?$|^(?:tba|tbc|to be announced|more to be announced)$/i;
 const MOSHTIX_TITLE_FEATURE_PATTERN =
   /^(?:(.+?)\s*[|:-;]\s*)?(?:featuring|feat\.?|ft\.?)\s+(.+)$/i;
+const MOSHTIX_TITLE_SUPPORT_PATTERN = /^(.+?)\s+(w[/.]\s*|with\s+)(.+)$/i;
 const MOSHTIX_TITLE_TOUR_PREFIX_PATTERN = /^(.+?):\s+.+\btour\b/i;
 const MOSHTIX_TITLE_REGION_SUFFIX_PATTERN =
   /^(.+?)\s*[-–|]\s*(?:australia|australian|perth|fremantle|wa|world|uk|eu|us|au|nz|\d{4}).*$/i;
@@ -317,6 +320,7 @@ function normalizeTitle(value: string | null | undefined): string {
 function normalizeMoshtixArtistToken(value: string): string {
   return normalizeWhitespace(
     value
+      .replace(/^w[/.]\s*/i, "")
       .replace(MOSHTIX_TIME_SUFFIX_PATTERN, "")
       .replace(/\band more!?$/i, "")
       .replace(/\bwith special guests?.*$/i, "")
@@ -358,7 +362,8 @@ function splitMoshtixArtistList(value: string): string[] {
     .replace(/\s+\band\b\s+/gi, ", ")
     .split(MOSHTIX_ARTIST_LIST_SEPARATOR_PATTERN)
     .map((artist) => normalizeMoshtixArtistToken(artist))
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((artist) => !MOSHTIX_PLACEHOLDER_ARTIST_PATTERN.test(artist));
 }
 
 function extractProminentDescriptionLines(descriptionHtml: string | null | undefined): string[] {
@@ -383,6 +388,14 @@ function parseMoshtixTitleArtists(title: string): string[] {
   }
 
   const candidates: string[] = [];
+  const supportMatch = normalized.match(MOSHTIX_TITLE_SUPPORT_PATTERN);
+
+  if (isLikelyMoshtixTitleSupportMatch(supportMatch)) {
+    candidates.push(...splitMoshtixArtistList(supportMatch[1]));
+    candidates.push(...splitMoshtixArtistList(supportMatch[3]));
+    return candidates;
+  }
+
   const featureMatch = normalized.match(MOSHTIX_TITLE_FEATURE_PATTERN);
 
   if (featureMatch) {
@@ -416,6 +429,22 @@ function parseMoshtixTitleArtists(title: string): string[] {
   }
 
   return candidates;
+}
+
+function isLikelyMoshtixTitleSupportMatch(
+  match: RegExpMatchArray | null
+): match is RegExpMatchArray {
+  if (!match?.[2] || !match[3]) {
+    return false;
+  }
+
+  if (/^w[/.]/i.test(match[2])) {
+    return true;
+  }
+
+  return /(?:\+|,|\bmore\b|\bspecial\s+guests?\b|\bsupports?\b|\btba\b|\btbc\b)/i.test(
+    match[3]
+  );
 }
 
 function parseMoshtixDescriptionArtists(descriptionHtml: string | null | undefined): string[] {
@@ -625,10 +654,9 @@ export function extractMoshtixArtists(input: {
       return !normalized.includes("homepage gallery");
     });
 
-  const parsedCandidates = [
-    ...parseMoshtixTitleArtists(input.title),
-    ...parseMoshtixDescriptionArtists(input.descriptionHtml)
-  ]
+  const parsedTitleCandidates = parseMoshtixTitleArtists(input.title);
+  const parsedDescriptionCandidates = parseMoshtixDescriptionArtists(input.descriptionHtml);
+  const parsedCandidates = [...parsedTitleCandidates, ...parsedDescriptionCandidates]
     .map((artist) => normalizeWhitespace(artist))
     .filter(Boolean)
     .filter((artist) => {
@@ -642,7 +670,13 @@ export function extractMoshtixArtists(input: {
     });
 
   if (candidates.length > 0) {
-    return createArtistExtraction([...candidates, ...parsedCandidates], "structured");
+    const normalizedTitle = normalizeTitle(input.title);
+    const titleSupportMatch = normalizedTitle.match(MOSHTIX_TITLE_SUPPORT_PATTERN);
+    const orderedCandidates = isLikelyMoshtixTitleSupportMatch(titleSupportMatch)
+      ? [...parsedTitleCandidates, ...candidates, ...parsedDescriptionCandidates]
+      : [...candidates, ...parsedCandidates];
+
+    return createArtistExtraction(orderedCandidates, "structured");
   }
 
   return createArtistExtraction(parsedCandidates, "parsed_text");
