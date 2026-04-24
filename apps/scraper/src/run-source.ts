@@ -49,8 +49,36 @@ async function processGig(
   store: GigStore,
   source: { id: string; priority: number },
   gig: NormalizedGig
-): Promise<{ outcome: "inserted" | "updated"; gigId: string }> {
+): Promise<{
+  outcome: "inserted" | "updated";
+  gigId: string;
+  sourceGigId: string | null;
+  changed: boolean;
+}> {
   const venue = await store.upsertVenue(gig);
+  const normalizedGig = {
+    ...gig,
+    venue: {
+      ...gig.venue,
+      slug: venue.slug
+    }
+  };
+  const reused = await store.tryReuseUnchangedSourceGig({
+    sourceId: source.id,
+    sourcePriority: source.priority,
+    venueId: venue.id,
+    gig: normalizedGig
+  });
+
+  if (reused) {
+    return {
+      outcome: "updated",
+      gigId: reused.gigId,
+      sourceGigId: reused.sourceGigId,
+      changed: false
+    };
+  }
+
   const existingSourceGig = await store.findSourceGig(source.id, gig.externalId, gig.checksum);
   const matchedGig = await store.findCanonicalGig({
     venueId: venue.id,
@@ -76,33 +104,23 @@ async function processGig(
 
   const result = await store.saveGig({
     existingGigId: targetGigId,
-    gig: {
-      ...gig,
-      venue: {
-        ...gig.venue,
-        slug: venue.slug
-      }
-    },
+    gig: normalizedGig,
     venueId: venue.id,
     sourceId: source.id,
     sourcePriority: source.priority
   });
 
-  await store.upsertSourceGig({
+  const sourceGigResult = await store.upsertSourceGig({
     sourceId: source.id,
     gigId: result.gig.id,
-    gig: {
-      ...gig,
-      venue: {
-        ...gig.venue,
-        slug: venue.slug
-      }
-    }
+    gig: normalizedGig
   });
 
   return {
     outcome: result.inserted ? "inserted" : "updated",
-    gigId: result.gig.id
+    gigId: result.gig.id,
+    sourceGigId: sourceGigResult.sourceGig.id,
+    changed: true
   };
 }
 
@@ -130,6 +148,7 @@ export async function executeSourceRun(
     const errors: string[] = [];
     const retainedIdentityKeys = new Set<string>();
     const touchedGigIds = new Set<string>();
+    const reusedSourceGigIds = new Set<string>();
     let hadPostProcessingError = false;
 
     for (const gig of gigs) {
@@ -147,7 +166,12 @@ export async function executeSourceRun(
         });
 
         retainedIdentityKeys.add(gig.externalId ?? gig.checksum);
-        touchedGigIds.add(result.gigId);
+
+        if (result.changed) {
+          touchedGigIds.add(result.gigId);
+        } else if (result.sourceGigId) {
+          reusedSourceGigIds.add(result.sourceGigId);
+        }
 
         if (result.outcome === "inserted") {
           insertedCount += 1;
@@ -157,6 +181,19 @@ export async function executeSourceRun(
       } catch (error) {
         failedCount += 1;
         errors.push(error instanceof Error ? error.message : "Unexpected gig error");
+      }
+    }
+
+    if (reusedSourceGigIds.size > 0) {
+      try {
+        await store.touchSourceGigsSeen([...reusedSourceGigIds], nowIso());
+      } catch (error) {
+        hadPostProcessingError = true;
+        errors.push(
+          error instanceof Error
+            ? `Unable to mark unchanged source gigs as seen: ${error.message}`
+            : "Unable to mark unchanged source gigs as seen"
+        );
       }
     }
 

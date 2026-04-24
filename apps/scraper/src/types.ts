@@ -51,7 +51,10 @@ export interface SourceGigRecord {
   id: string;
   gigId: string;
   sourceSlug: string;
+  externalId: string | null;
   identityKey: string;
+  checksum: string;
+  sourceUrl: string;
   startsAtPrecision: StartsAtPrecision;
   artistNames: string[];
   artistExtractionKind: ArtistExtractionKind;
@@ -100,6 +103,13 @@ export interface GigStore {
     externalId: string | null,
     checksum: string
   ): Promise<SourceGigRecord | null>;
+  tryReuseUnchangedSourceGig(input: {
+    sourceId: string;
+    gig: NormalizedGig;
+    venueId: string;
+    sourcePriority: number;
+  }): Promise<{ gigId: string; sourceGigId: string } | null>;
+  touchSourceGigsSeen(sourceGigIds: string[], seenAt: string): Promise<void>;
   findCanonicalGig(
     input: {
       venueId: string;

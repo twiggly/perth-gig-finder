@@ -159,15 +159,34 @@ interface RepairableSourceGigRow {
   artist_extraction_kind: ArtistExtractionKind;
 }
 
+interface GigSavePayload {
+  venue_id: string;
+  title: string;
+  description: string | null;
+  starts_at: string;
+  ends_at: string | null;
+  ticket_url: string | null;
+  source_url: string;
+  status: GigStatus;
+  slug: string;
+}
+
 function toSourceGigRecord(
-  row: SourceGigRow,
+  row: SourceGigRow & {
+    external_id?: string | null;
+    checksum?: string;
+    source_url?: string;
+  },
   sourceSlug: string
 ): SourceGigRecord {
   return {
     id: row.id,
     gigId: row.gig_id,
     sourceSlug,
+    externalId: row.external_id ?? null,
     identityKey: row.identity_key,
+    checksum: row.checksum ?? row.identity_key,
+    sourceUrl: row.source_url ?? "",
     startsAtPrecision: row.starts_at_precision,
     artistNames: row.artist_names ?? [],
     artistExtractionKind: row.artist_extraction_kind,
@@ -241,6 +260,24 @@ function chooseCanonicalStatus(
   canReplaceCanonical: boolean
 ): GigStatus {
   return canReplaceCanonical ? incomingStatus : existingStatus;
+}
+
+function areStringArraysEqual(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function normalizeNullableIsoDate(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
+}
+
+function areNullableIsoDatesEqual(left: string | null, right: string | null): boolean {
+  return normalizeNullableIsoDate(left) === normalizeNullableIsoDate(right);
 }
 
 function compareAttachedSourceGigRows(
@@ -938,73 +975,75 @@ export class SupabaseGigStore implements GigStore {
       : null;
   }
 
-  async saveGig(input: {
-    existingGigId: string | null;
+  private async buildExistingGigSavePayload(input: {
+    existingGigId: string;
     gig: NormalizedGig;
     venueId: string;
     sourceId: string;
     sourcePriority: number;
-  }): Promise<{ gig: GigRecord; inserted: boolean }> {
-    if (input.existingGigId) {
-      const existingGig = await this.getGigState(input.existingGigId);
-      const canonicalSources = await this.listCanonicalGigSources(input.existingGigId);
-      const ownerSource = determineCanonicalOwner(existingGig, canonicalSources);
-      const canReplaceCanonical =
-        !ownerSource ||
-        ownerSource.sourceId === input.sourceId ||
-        input.sourcePriority > ownerSource.priority;
-      const hasAttachedExactTime = canonicalSources.some(
-        (source) => source.startsAtPrecision === "exact"
-      );
-      const ownerStartsAtPrecision = ownerSource?.startsAtPrecision ?? "exact";
-      const shouldUpgradeStartsAt =
-        input.gig.startsAtPrecision === "exact" &&
-        ownerStartsAtPrecision === "date" &&
-        existingGig.starts_at !== input.gig.startsAt;
-      const shouldPreserveExactStartsAt =
-        input.gig.startsAtPrecision === "date" &&
-        (ownerStartsAtPrecision === "exact" || hasAttachedExactTime);
-      const startsAt =
-        shouldUpgradeStartsAt ||
-        (canReplaceCanonical && !shouldPreserveExactStartsAt)
-          ? input.gig.startsAt
-          : existingGig.starts_at;
-      const title = chooseCanonicalTextField(
-        existingGig.title,
-        input.gig.title,
-        canReplaceCanonical
-      ) ?? input.gig.title;
-      const description = chooseCanonicalTextField(
-        existingGig.description,
-        input.gig.description,
-        canReplaceCanonical
-      );
-      const endsAt = chooseCanonicalTextField(
-        existingGig.ends_at,
-        input.gig.endsAt,
-        canReplaceCanonical
-      );
-      const ticketUrl = chooseCanonicalTextField(
-        existingGig.ticket_url,
-        input.gig.ticketUrl,
-        canReplaceCanonical
-      );
-      const sourceUrl = chooseCanonicalTextField(
-        existingGig.source_url,
-        input.gig.sourceUrl,
-        canReplaceCanonical
-      ) ?? input.gig.sourceUrl;
-      const status = chooseCanonicalStatus(
-        existingGig.status,
-        input.gig.status,
-        canReplaceCanonical
-      );
-      const slug = buildGigSlug({
-        venueSlug: input.gig.venue.slug,
-        startsAt,
-        title
-      });
-      const payload = {
+  }): Promise<{ existingGig: GigStateRow; payload: GigSavePayload }> {
+    const existingGig = await this.getGigState(input.existingGigId);
+    const canonicalSources = await this.listCanonicalGigSources(input.existingGigId);
+    const ownerSource = determineCanonicalOwner(existingGig, canonicalSources);
+    const canReplaceCanonical =
+      !ownerSource ||
+      ownerSource.sourceId === input.sourceId ||
+      input.sourcePriority > ownerSource.priority;
+    const hasAttachedExactTime = canonicalSources.some(
+      (source) => source.startsAtPrecision === "exact"
+    );
+    const ownerStartsAtPrecision = ownerSource?.startsAtPrecision ?? "exact";
+    const shouldUpgradeStartsAt =
+      input.gig.startsAtPrecision === "exact" &&
+      ownerStartsAtPrecision === "date" &&
+      existingGig.starts_at !== input.gig.startsAt;
+    const shouldPreserveExactStartsAt =
+      input.gig.startsAtPrecision === "date" &&
+      (ownerStartsAtPrecision === "exact" || hasAttachedExactTime);
+    const startsAt =
+      shouldUpgradeStartsAt ||
+      (canReplaceCanonical && !shouldPreserveExactStartsAt)
+        ? input.gig.startsAt
+        : existingGig.starts_at;
+    const title = chooseCanonicalTextField(
+      existingGig.title,
+      input.gig.title,
+      canReplaceCanonical
+    ) ?? input.gig.title;
+    const description = chooseCanonicalTextField(
+      existingGig.description,
+      input.gig.description,
+      canReplaceCanonical
+    );
+    const endsAt = chooseCanonicalTextField(
+      existingGig.ends_at,
+      input.gig.endsAt,
+      canReplaceCanonical
+    );
+    const ticketUrl = chooseCanonicalTextField(
+      existingGig.ticket_url,
+      input.gig.ticketUrl,
+      canReplaceCanonical
+    );
+    const sourceUrl = chooseCanonicalTextField(
+      existingGig.source_url,
+      input.gig.sourceUrl,
+      canReplaceCanonical
+    ) ?? input.gig.sourceUrl;
+    const status = chooseCanonicalStatus(
+      existingGig.status,
+      input.gig.status,
+      canReplaceCanonical
+    );
+    const slug = buildGigSlug({
+      venueSlug: input.gig.venue.slug,
+      startsAt,
+      title
+    });
+
+    return {
+      existingGig,
+      payload: {
         venue_id: input.venueId,
         title,
         description,
@@ -1014,7 +1053,109 @@ export class SupabaseGigStore implements GigStore {
         source_url: sourceUrl,
         status,
         slug
-      };
+      }
+    };
+  }
+
+  private isGigSavePayloadAlreadyStored(
+    existingGig: GigStateRow,
+    payload: GigSavePayload
+  ): boolean {
+    return (
+      existingGig.slug === payload.slug &&
+      existingGig.title === payload.title &&
+      existingGig.venue_id === payload.venue_id &&
+      existingGig.description === payload.description &&
+      areNullableIsoDatesEqual(existingGig.starts_at, payload.starts_at) &&
+      areNullableIsoDatesEqual(existingGig.ends_at, payload.ends_at) &&
+      existingGig.ticket_url === payload.ticket_url &&
+      existingGig.source_url === payload.source_url &&
+      existingGig.status === payload.status
+    );
+  }
+
+  private isSourceGigSnapshotAlreadyStored(
+    sourceGig: SourceGigRecord,
+    gig: NormalizedGig
+  ): boolean {
+    const normalizedArtists = normalizeArtistNames(gig.artists);
+
+    return (
+      sourceGig.externalId === gig.externalId &&
+      sourceGig.checksum === gig.checksum &&
+      sourceGig.sourceUrl === gig.sourceUrl &&
+      sourceGig.startsAtPrecision === gig.startsAtPrecision &&
+      sourceGig.sourceImageUrl === gig.imageUrl &&
+      sourceGig.artistExtractionKind === gig.artistExtractionKind &&
+      areStringArraysEqual(sourceGig.artistNames, normalizedArtists)
+    );
+  }
+
+  async tryReuseUnchangedSourceGig(input: {
+    sourceId: string;
+    gig: NormalizedGig;
+    venueId: string;
+    sourcePriority: number;
+  }): Promise<{ gigId: string; sourceGigId: string } | null> {
+    const existingSourceGig = await this.findSourceGig(
+      input.sourceId,
+      input.gig.externalId,
+      input.gig.checksum
+    );
+
+    if (!existingSourceGig) {
+      return null;
+    }
+
+    if (!this.isSourceGigSnapshotAlreadyStored(existingSourceGig, input.gig)) {
+      return null;
+    }
+
+    const attachedSourceGigs = await this.listSourceGigsForSourceAndGig(
+      input.sourceId,
+      existingSourceGig.gigId
+    );
+
+    if (
+      attachedSourceGigs.length !== 1 ||
+      attachedSourceGigs[0]?.id !== existingSourceGig.id
+    ) {
+      return null;
+    }
+
+    const { existingGig, payload } = await this.buildExistingGigSavePayload({
+      existingGigId: existingSourceGig.gigId,
+      gig: input.gig,
+      venueId: input.venueId,
+      sourceId: input.sourceId,
+      sourcePriority: input.sourcePriority
+    });
+
+    if (!this.isGigSavePayloadAlreadyStored(existingGig, payload)) {
+      return null;
+    }
+
+    return {
+      gigId: existingSourceGig.gigId,
+      sourceGigId: existingSourceGig.id
+    };
+  }
+
+  async saveGig(input: {
+    existingGigId: string | null;
+    gig: NormalizedGig;
+    venueId: string;
+    sourceId: string;
+    sourcePriority: number;
+  }): Promise<{ gig: GigRecord; inserted: boolean }> {
+    if (input.existingGigId) {
+      const { payload } = await this.buildExistingGigSavePayload({
+        existingGigId: input.existingGigId,
+        gig: input.gig,
+        venueId: input.venueId,
+        sourceId: input.sourceId,
+        sourcePriority: input.sourcePriority
+      });
       const { data, error } = await this.client
         .from("gigs")
         .update(payload)
@@ -1031,12 +1172,12 @@ export class SupabaseGigStore implements GigStore {
         slug: data.slug,
         title: data.title,
         venue_id: input.venueId,
-        description,
-        starts_at: startsAt,
-        ends_at: endsAt,
-        ticket_url: ticketUrl,
-        source_url: sourceUrl,
-        status
+        description: payload.description,
+        starts_at: payload.starts_at,
+        ends_at: payload.ends_at,
+        ticket_url: payload.ticket_url,
+        source_url: payload.source_url,
+        status: payload.status
       });
 
       return {
@@ -1215,6 +1356,42 @@ export class SupabaseGigStore implements GigStore {
     };
   }
 
+  async touchSourceGigsSeen(sourceGigIds: string[], seenAt: string): Promise<void> {
+    const uniqueSourceGigIds = [...new Set(sourceGigIds)];
+
+    if (uniqueSourceGigIds.length === 0) {
+      return;
+    }
+
+    for (const sourceGigIdChunk of chunkValues(uniqueSourceGigIds, QUERY_CHUNK_SIZE)) {
+      const { error } = await this.client
+        .from("source_gigs")
+        .update({ last_seen_at: seenAt })
+        .in("id", sourceGigIdChunk);
+
+      if (error) {
+        throw new Error(
+          `Unable to update unchanged source gig timestamps: ${error.message ?? "unknown error"}`
+        );
+      }
+    }
+
+    for (const cache of this.sourceGigCaches.values()) {
+      for (const sourceGigId of uniqueSourceGigIds) {
+        const row = cache.byId.get(sourceGigId);
+
+        if (!row) {
+          continue;
+        }
+
+        this.cacheSourceGigRow(cache, {
+          ...row,
+          last_seen_at: seenAt
+        });
+      }
+    }
+  }
+
   async prepareSourceGigReattachment(input: {
     sourceGigId: string;
     currentGigId: string;
@@ -1378,7 +1555,7 @@ export class SupabaseGigStore implements GigStore {
     const { data, error } = await this.client
       .from("source_gigs")
       .select(
-        "id, source_id, gig_id, identity_key, starts_at_precision, artist_names, artist_extraction_kind, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height"
+        "id, source_id, gig_id, identity_key, starts_at_precision, artist_names, artist_extraction_kind, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height, external_id, checksum, source_url"
       )
       .not("source_image_url", "is", null)
       .order("last_seen_at", { ascending: false });
