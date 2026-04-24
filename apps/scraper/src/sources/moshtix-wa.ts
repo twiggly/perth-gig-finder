@@ -89,6 +89,8 @@ const EARLY_SKIP_KEYWORD_PATTERNS = [
 const MOSHTIX_ARTIST_LIST_SEPARATOR_PATTERN = /\s*(?:\+|,)\s*/;
 const MOSHTIX_PLACEHOLDER_ARTIST_PATTERN =
   /^(?:(?:local|more|additional|special)\s+)*(?:support|supports|support acts?)\s*(?:to be announced|tba|tbc)?$|^(?:(?:a|an)\s+)?(?:special\s+)?guests?\s*(?:to be announced|tba|tbc)?$|^(?:secret|mystery)\s+(?:act|artist|guest|set)s?[!.]?$|^(?:more|more\s+(?:acts?|artists?|guests?))[!.]?$|^(?:tba|tbc|to be announced|more\s+(?:tba|tbc|to be announced)|more to be announced)$/i;
+const MOSHTIX_ARTIST_LABEL_PREFIX_PATTERN =
+  /^(?:(?:with|w[/.]?)\s+)?(?:special\s+)?guests?\s*[:,\-]?\s+/i;
 const MOSHTIX_TITLE_FEATURE_PATTERN =
   /^(?:(.+?)\s*[|:-;]\s*)?(?:featuring|feat\.?|ft\.?)\s+(.+)$/i;
 const MOSHTIX_TITLE_SUPPORT_PATTERN = /^(.+?)\s+(w[/.]\s*|with\s+)(.+)$/i;
@@ -355,10 +357,12 @@ function normalizeMoshtixArtistToken(value: string): string {
   return normalizeWhitespace(
     value
       .replace(/^w[/.]\s*/i, "")
+      .replace(MOSHTIX_ARTIST_LABEL_PREFIX_PATTERN, "")
       .replace(MOSHTIX_TIME_SUFFIX_PATTERN, "")
       .replace(/\band more!?$/i, "")
       .replace(/\bwith special guests?.*$/i, "")
       .replace(MOSHTIX_TITLE_DESCRIPTOR_PATTERN, "")
+      .replace(/\s*[|:;,-]\s*$/g, "")
       .replace(/^["'“”‘’]+|["'“”‘’]+$/g, "")
   );
 }
@@ -725,7 +729,7 @@ export function extractMoshtixArtists(input: {
     ...(input.eventData?.artists ?? []),
     ...((input.structuredEvent?.performers ?? []).map((performer) => performer.name ?? ""))
   ]
-    .map((artist) => normalizeWhitespace(artist))
+    .map((artist) => normalizeMoshtixArtistToken(artist))
     .filter(Boolean)
     .filter((artist) => !isNoisyArtist(artist));
 
