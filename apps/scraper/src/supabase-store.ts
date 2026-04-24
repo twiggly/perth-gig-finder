@@ -1471,9 +1471,10 @@ export class SupabaseGigStore implements GigStore {
         ...new Map(artistRows.map((artist) => [artist.id, artist])).values()
       ];
       const { error: joinError } = await this.client.from("gig_artists").insert(
-        uniqueArtistRows.map((artist) => ({
+        uniqueArtistRows.map((artist, index) => ({
           gig_id: gigId,
-          artist_id: artist.id
+          artist_id: artist.id,
+          sort_order: index
         }))
       );
 

@@ -15,6 +15,13 @@ describe("artist utils", () => {
     ]);
   });
 
+  it("preserves artist order during normalization", () => {
+    expect(normalizeArtistNames(["Sienna Skies", "Saving Face"])).toEqual([
+      "Sienna Skies",
+      "Saving Face"
+    ]);
+  });
+
   it("strips decorative wrappers from artist names before deduping", () => {
     expect(
       normalizeArtistNames([
