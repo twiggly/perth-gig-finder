@@ -114,7 +114,7 @@ const EXPLICIT_MUSIC_TEXT_PATTERNS = [
 const SPECIAL_GUEST_PREFIX_PATTERN =
   /^(?:with|plus)?\s*special guests?[:,]?\s*|^(?:with|plus)\s+guests?[:,]?\s*|^(?:with|plus)\s+|^starring\s+|^featuring\s+|^feat\.?\s+/i;
 const GENERIC_SPECIAL_GUEST_PATTERN =
-  /^(?:(?:a|an)\s+)?(?:special\s+)?guests?\s*(?:to be announced|tba|tbc)?$|^(?:tba|tbc|to be announced|more to be announced)$/i;
+  /^(?:(?:a|an)\s+)?(?:special\s+)?guests?\s*(?:to be announced|tba|tbc)?$|^(?:support|supports|support acts?)\s*(?:to be announced|tba|tbc)?$|^(?:tba|tbc|to be announced|more to be announced)$/i;
 const SPECIAL_GUEST_SEPARATOR_PATTERN = /\s*(?:,|\+|\^|\||\s-\s)\s*/;
 const TITLE_FEATURED_ARTIST_PATTERN =
   /\b(?:ft\.?|feat\.?|featuring)\s+(.+)$/i;

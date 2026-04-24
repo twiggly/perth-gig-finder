@@ -236,6 +236,8 @@ describe("oztix wa source adapter", () => {
     expect(parseOztixSpecialGuests("with a special guest to be announced")).toEqual([]);
     expect(parseOztixSpecialGuests("special guest to be announced")).toEqual([]);
     expect(parseOztixSpecialGuests("guest TBA")).toEqual([]);
+    expect(parseOztixSpecialGuests("Supports to be announced")).toEqual([]);
+    expect(parseOztixSpecialGuests("support acts TBA")).toEqual([]);
 
     expect(
       parseOztixSpecialGuests("OBSCURA (GER) FALLUJAH (USA)^ ASHEN (WA) + ANOXIA (NSW)")
