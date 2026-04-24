@@ -4,6 +4,7 @@ import {
   buildGigSlug,
   normalizeCanonicalTitleForMatch,
   normalizeTitleForMatch,
+  normalizeWhitespace,
   slugify,
   slugifyVenueName,
   type GigStatus,
@@ -36,6 +37,11 @@ import type {
 
 interface ArtistRow {
   id: string;
+  name: string;
+  slug: string;
+}
+
+interface ArtistNameRow {
   name: string;
   slug: string;
 }
@@ -159,6 +165,24 @@ interface RepairableSourceGigRow {
   artist_extraction_kind: ArtistExtractionKind;
 }
 
+interface CurrentGigArtistRow {
+  gig_id: string;
+  sort_order: number | null;
+  artists: ArtistNameRow | ArtistNameRow[] | null;
+}
+
+interface CanonicalArtistSyncCandidate {
+  artists: string[];
+  artistExtractionKind: ArtistExtractionKind;
+  priority: number;
+  lastSeenAt: string;
+}
+
+export interface GigArtistWritePlanItem {
+  gigId: string;
+  artistNames: string[];
+}
+
 interface GigSavePayload {
   venue_id: string;
   title: string;
@@ -278,6 +302,37 @@ function normalizeNullableIsoDate(value: string | null): string | null {
 
 function areNullableIsoDatesEqual(left: string | null, right: string | null): boolean {
   return normalizeNullableIsoDate(left) === normalizeNullableIsoDate(right);
+}
+
+function getJoinedArtistName(row: CurrentGigArtistRow): string | null {
+  const artist = Array.isArray(row.artists) ? row.artists[0] : row.artists;
+  return normalizeWhitespace(artist?.name ?? "") || null;
+}
+
+export function planGigArtistWrites(input: {
+  gigIds: string[];
+  candidatesByGigId: Map<string, CanonicalArtistSyncCandidate[]>;
+  currentArtistNamesByGigId: Map<string, string[]>;
+}): GigArtistWritePlanItem[] {
+  return [...new Set(input.gigIds)].flatMap((gigId) => {
+    const desiredArtistNames = selectCanonicalArtistNames(
+      input.candidatesByGigId.get(gigId) ?? []
+    );
+    const currentArtistNames = normalizeArtistNames(
+      input.currentArtistNamesByGigId.get(gigId) ?? []
+    );
+
+    if (areStringArraysEqual(currentArtistNames, desiredArtistNames)) {
+      return [];
+    }
+
+    return [
+      {
+        gigId,
+        artistNames: desiredArtistNames
+      }
+    ];
+  });
 }
 
 function compareAttachedSourceGigRows(
@@ -1661,6 +1716,59 @@ export class SupabaseGigStore implements GigStore {
     });
   }
 
+  private async listCurrentGigArtistNamesByGigId(
+    gigIds: string[]
+  ): Promise<Map<string, string[]>> {
+    const rows: CurrentGigArtistRow[] = [];
+
+    for (const gigIdChunk of chunkValues([...new Set(gigIds)], QUERY_CHUNK_SIZE)) {
+      const { data, error } = await this.client
+        .from("gig_artists")
+        .select("gig_id, sort_order, artists(name, slug)")
+        .in("gig_id", gigIdChunk);
+
+      if (error) {
+        throw new Error(
+          `Unable to load current gig artists: ${error.message ?? "unknown error"}`
+        );
+      }
+
+      rows.push(...(((data as CurrentGigArtistRow[] | null) ?? [])));
+    }
+
+    const rowsByGigId = new Map<string, CurrentGigArtistRow[]>();
+
+    for (const row of rows) {
+      rowsByGigId.set(row.gig_id, [...(rowsByGigId.get(row.gig_id) ?? []), row]);
+    }
+
+    return new Map(
+      [...rowsByGigId.entries()].map(([gigId, gigRows]) => [
+        gigId,
+        normalizeArtistNames(
+          gigRows
+            .slice()
+            .sort((left, right) => {
+              const sortOrderDiff =
+                (left.sort_order ?? Number.MAX_SAFE_INTEGER) -
+                (right.sort_order ?? Number.MAX_SAFE_INTEGER);
+
+              if (sortOrderDiff !== 0) {
+                return sortOrderDiff;
+              }
+
+              return (getJoinedArtistName(left) ?? "").localeCompare(
+                getJoinedArtistName(right) ?? "",
+                "en-AU"
+              );
+            })
+            .map((row) => getJoinedArtistName(row))
+            .filter((artist): artist is string => Boolean(artist))
+        )
+      ])
+    );
+  }
+
   async syncGigArtistsFromSourceGigs(gigIds: string[]): Promise<void> {
     const uniqueGigIds = [...new Set(gigIds)];
 
@@ -1676,6 +1784,7 @@ export class SupabaseGigStore implements GigStore {
           .map((candidate) => candidate.source_id)
       )]
     );
+    const syncCandidatesByGigId = new Map<string, CanonicalArtistSyncCandidate[]>();
 
     for (const gigId of uniqueGigIds) {
       const candidates = (candidatesByGigId.get(gigId) ?? []).map((candidate) => ({
@@ -1685,7 +1794,19 @@ export class SupabaseGigStore implements GigStore {
         lastSeenAt: candidate.last_seen_at
       }));
 
-      await this.writeGigArtists(gigId, selectCanonicalArtistNames(candidates));
+      syncCandidatesByGigId.set(gigId, candidates);
+    }
+
+    const currentArtistNamesByGigId =
+      await this.listCurrentGigArtistNamesByGigId(uniqueGigIds);
+    const writePlan = planGigArtistWrites({
+      gigIds: uniqueGigIds,
+      candidatesByGigId: syncCandidatesByGigId,
+      currentArtistNamesByGigId
+    });
+
+    for (const item of writePlan) {
+      await this.writeGigArtists(item.gigId, item.artistNames);
     }
   }
 
