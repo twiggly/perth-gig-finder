@@ -922,7 +922,7 @@ function isLikelyArtistName(value: string): boolean {
     return false;
   }
 
-  return !/\b(is|are|from|with|and carried|writing|performs|supported|building|offering|reflects|creating|co-creates|beyond the stage|crowned|journey|grounded|audiences)\b/i.test(
+  return !/\b(is|are|from|with|and carried|writing|performs|supported|building|offering|reflects|creating|co-creates|beyond the stage|crowned|journey|grounded|audiences|acclaimed|contemporary|orchestra presents|wide-ranging|repertoire|spanning|classical)\b/i.test(
     value
   );
 }

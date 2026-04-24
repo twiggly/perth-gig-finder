@@ -230,6 +230,9 @@ describe("oztix wa source adapter", () => {
       )
     ).toEqual(["The Aquabats!", "The Suicide Machines"]);
 
+    expect(parseOztixSpecialGuests("With BLESSTHEFALL")).toEqual(["BLESSTHEFALL"]);
+    expect(parseOztixSpecialGuests("with DJ SWEETMAN")).toEqual(["DJ SWEETMAN"]);
+
     expect(
       parseOztixSpecialGuests("OBSCURA (GER) FALLUJAH (USA)^ ASHEN (WA) + ANOXIA (NSW)")
     ).toEqual(["OBSCURA (GER)", "FALLUJAH (USA)", "ASHEN (WA)", "ANOXIA (NSW)"]);

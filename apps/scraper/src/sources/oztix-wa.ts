@@ -112,7 +112,7 @@ const EXPLICIT_MUSIC_TEXT_PATTERNS = [
 ];
 
 const SPECIAL_GUEST_PREFIX_PATTERN =
-  /^(?:with|plus)?\s*special guests?[:,]?\s*|^(?:with|plus)\s+guests?[:,]?\s*|^starring\s+|^featuring\s+|^feat\.?\s+/i;
+  /^(?:with|plus)?\s*special guests?[:,]?\s*|^(?:with|plus)\s+guests?[:,]?\s*|^(?:with|plus)\s+|^starring\s+|^featuring\s+|^feat\.?\s+/i;
 const GENERIC_SPECIAL_GUEST_PATTERN =
   /^(?:special guests?|guests?)\s*(?:tba|tbc)?$|^(?:tba|tbc|to be announced|more to be announced)$/i;
 const SPECIAL_GUEST_SEPARATOR_PATTERN = /\s*(?:,|\+|\^|\||\s-\s)\s*/;
