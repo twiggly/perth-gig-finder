@@ -274,6 +274,38 @@ describe("humanitix perth music source adapter", () => {
     });
   });
 
+  it("parses supported-by artists from Humanitix titles without keeping stage suffixes", () => {
+    const gigs = normalizeHumanitixDetailPage({
+      eventUrl: "https://events.humanitix.com/fanny-fundy",
+      html: buildEventPage({
+        title:
+          "FANNY FUNDY - Lauren and the Goodfights Fundraiser supported by ALF, Inhumane, Streets of Separation // ALT",
+        canonicalUrl: "https://events.humanitix.com/fanny-fundy",
+        ogDescription: "A punk fundraiser gig at The Bird.",
+        imageUrl: "https://images.humanitix.com/i/fanny-fundy@seo-500.jpg",
+        twitterLocation: "The Bird, 181 William St, Northbridge WA 6003, Australia",
+        twitterDate: "Thursday 30th April 2026",
+        structuredEvents: buildStructuredEvent({
+          title:
+            "FANNY FUNDY - Lauren and the Goodfights Fundraiser supported by ALF, Inhumane, Streets of Separation // ALT",
+          url: "https://events.humanitix.com/fanny-fundy",
+          startDate: "2026-04-30T19:30:00+0800",
+          venueName: "The Bird",
+          streetAddress: "181 William St, Northbridge WA 6003, Australia",
+          locality: "Northbridge",
+          postalCode: "6003",
+          description: "A punk fundraiser gig at The Bird."
+        })
+      })
+    });
+
+    expect(gigs).toHaveLength(1);
+    expect(gigs[0]).toMatchObject({
+      artists: ["ALF", "Inhumane", "Streets of Separation"],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
   it("keeps performer names while dropping sentence-like Humanitix performer descriptions", () => {
     const gigs = normalizeHumanitixDetailPage({
       eventUrl: "https://events.humanitix.com/georgina-dacheff-single-launch",

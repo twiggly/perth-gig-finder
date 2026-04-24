@@ -212,15 +212,16 @@ const HUMANITIX_TITLE_LAUNCH_PATTERN = /^(.+?)\s+(?:single|ep|album)\s+launch\b/
 const HUMANITIX_TITLE_SUPPORT_PATTERN =
   /^(.+?)\s+(?:with|w\/)\s+support\s+from\s+(.+)$/i;
 const HUMANITIX_EXPLICIT_ARTIST_PATTERNS = [
-  /\b(?:featuring|feat\.?|ft\.?)\s+(.+?)(?:[.!?]|$)/i,
-  /\bwith support from\s+(.+?)(?:[.!?]|$)/i,
-  /\bsupport from\s+(.+?)(?:[.!?]|$)/i,
-  /\bheadlined by\s+(.+?)(?:[.!?]|$)/i,
+  /\b(?:featuring|feat\.?|ft\.?)\s+(.+?)(?:\s+\/\/|[.!?]|$)/i,
+  /\bwith support from\s+(.+?)(?:\s+\/\/|[.!?]|$)/i,
+  /\bsupport from\s+(.+?)(?:\s+\/\/|[.!?]|$)/i,
+  /\bsupported by\s+(.+?)(?:\s+\/\/|[.!?]|$)/i,
+  /\bheadlined by\s+(.+?)(?:\s+\/\/|[.!?]|$)/i,
   /^lineup\s*[:\-]\s*(.+)$/i,
   /^artists?\s*[:\-]\s*(.+)$/i
 ];
 const HUMANITIX_ARTIST_LABEL_PREFIX_PATTERN =
-  /^(?:featuring|feat\.?|ft\.?|with support from|support from|lineup|artists?)\s*[:\-]?\s*/i;
+  /^(?:featuring|feat\.?|ft\.?|with support from|support from|supported by|lineup|artists?)\s*[:\-]?\s*/i;
 const HUMANITIX_ARTIST_TRAILING_NOISE_PATTERN =
   /\s+(?:and more!?|plus more!?|more to be announced|tba|tbc)$/i;
 const HUMANITIX_GENERIC_ARTIST_WORDS = new Set([
@@ -882,6 +883,7 @@ function normalizeHumanitixArtistToken(value: string): string {
   return normalizeWhitespace(
     value
       .replace(HUMANITIX_ARTIST_LABEL_PREFIX_PATTERN, "")
+      .replace(/\s*\/\/\s*[^,;+•]+$/u, "")
       .replace(HUMANITIX_ARTIST_TRAILING_NOISE_PATTERN, "")
       .replace(/^[-–•]+|[-–•]+$/g, "")
   );
