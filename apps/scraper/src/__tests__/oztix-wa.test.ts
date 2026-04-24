@@ -12,7 +12,8 @@ import {
   parseOztixSpecialGuests,
   parseOztixTitleHeadlinerArtists,
   parseOztixHits,
-  parseOztixTitleFeaturedArtists
+  parseOztixTitleFeaturedArtists,
+  parseOztixTitlePresentedArtists
 } from "../sources/oztix-wa";
 
 const FIXTURE_DIR = resolve(import.meta.dirname, "fixtures");
@@ -372,6 +373,27 @@ describe("oztix wa source adapter", () => {
     expect(parseOztixTitleFeaturedArtists("Tribute Night featuring Lindsay Wells")).toEqual([
       "Lindsay Wells"
     ]);
+  });
+
+  it("parses narrow colon presents titles as the presented artist", () => {
+    expect(
+      parseOztixTitlePresentedArtists("The gRaveyard Presents: Ruby Rising")
+    ).toEqual(["Ruby Rising"]);
+    expect(
+      parseOztixTitlePresentedArtists("Glam Funk Band presents Ministry of Disco")
+    ).toEqual([]);
+
+    expect(
+      extractOztixArtists({
+        EventName: "The gRaveyard Presents: Ruby Rising",
+        Bands: [],
+        Performances: [],
+        SpecialGuests: ""
+      })
+    ).toEqual({
+      artists: ["Ruby Rising"],
+      artistExtractionKind: "parsed_text"
+    });
   });
 
   it("drops tribute subjects when an Oztix title names the real featured performer", () => {

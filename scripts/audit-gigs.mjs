@@ -383,29 +383,40 @@ function classifyImages(gigs) {
 
 function findNonMusicLeakageCandidates(gigs) {
   const nonMusicPattern =
-    /\b(?:cocktail|ecstatic|wellness|workshop|networking|seminar|class|classes|social|catch up|fundraiser|market|markets|comedy|wrestling|boxing|expo|conference|meditation|breathwork|yoga|sound healing|bridgerton|ball)\b/i;
+    /\b(?:cocktail|ecstatic|wellness|workshop|networking|seminar|class|classes|social|catch up|market|markets|comedy|wrestling|boxing|expo|conference|meditation|breathwork|yoga|sound healing|bridgerton|ball)\b/i;
+  const fundraiserPattern = /\bfundraiser\b/i;
+  const musicFundraiserSignalPattern =
+    /\b(?:band|bands|dj|live music|gig|concert|festival|supported by|support from|with support|featuring|feat\.?|ft\.?|lineup|album|single|launch|punk|metal|rock|jazz|folk|hip hop|electronic|techno|house|disco)\b/i;
 
   return gigs
     .filter((gig) => /Humanitix|Ticketek/.test(gig.source_name ?? ""))
-    .filter((gig) =>
-      nonMusicPattern.test(
-        [
-          gig.title,
-          gig.description,
-          gig.venue_name,
-          gig.venue_suburb,
-          ...gig.artist_names
-        ]
-          .filter(Boolean)
-          .join(" ")
-      )
-    )
+    .filter((gig) => {
+      const text = [
+        gig.title,
+        gig.description,
+        gig.venue_name,
+        gig.venue_suburb,
+        ...gig.artist_names
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      if (nonMusicPattern.test(text)) {
+        return true;
+      }
+
+      if (!fundraiserPattern.test(text)) {
+        return false;
+      }
+
+      return gig.artist_names.length === 0 && !musicFundraiserSignalPattern.test(text);
+    })
     .map(formatGigSummary);
 }
 
 function findMissingArtistCandidates(gigs) {
   const explicitLineupPattern =
-    /\b(?:feat\.?|ft\.?|featuring|with special guest|with support|support from|lineup|presents)\b/i;
+    /\b(?:feat\.?|ft\.?|featuring|with special guest|with support|support from|supported by|lineup|presents)\b/i;
   const likelyArtistPlusPattern =
     /\b[A-Za-z][A-Za-z0-9'’&./-]*(?:\s+[A-Za-z][A-Za-z0-9'’&./-]*){0,5}\s+\+\s+[A-Za-z][A-Za-z0-9'’&./-]*(?:\s+[A-Za-z][A-Za-z0-9'’&./-]*){0,5}\b/;
 

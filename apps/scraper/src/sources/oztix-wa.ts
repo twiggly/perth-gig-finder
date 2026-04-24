@@ -120,6 +120,8 @@ const SPECIAL_GUEST_TOUR_LEAD_IN_PATTERN =
   /^.+?\b(?:tour|single|album|ep|launch|show)\b\s+with\s+special guests?[:,]?\s+/i;
 const TITLE_FEATURED_ARTIST_PATTERN =
   /\b(?:ft\.?|feat\.?|featuring)\s+(.+)$/i;
+const TITLE_PRESENTED_ARTIST_PATTERN =
+  /^.{1,80}?\bpresents:\s+(.+)$/i;
 const TITLE_QUOTED_TOUR_HEADLINER_PATTERN =
   /^(.+?)\s+(?:"[^"]+"|'[^']+'|“[^”]+”|‘[^’]+’)$/;
 const TITLE_TRIBUTE_SUBJECT_PATTERN =
@@ -319,6 +321,7 @@ function collectNamedArtists(hit: OztixHit): string[] {
   const fromTourName = hit.TourName ? [hit.TourName] : [];
   const fromSpecialGuests = parseOztixSpecialGuests(hit.SpecialGuests);
   const fromTitleFeatured = parseOztixTitleFeaturedArtists(hit.EventName);
+  const fromTitlePresented = parseOztixTitlePresentedArtists(hit.EventName);
   const fromTitleHeadliner =
     fromBands.length === 0 && fromPerformances.length === 0
       ? parseOztixTitleHeadlinerArtists(hit.EventName)
@@ -329,6 +332,7 @@ function collectNamedArtists(hit: OztixHit): string[] {
     ...fromPerformances,
     ...fromTourName,
     ...fromTitleHeadliner,
+    ...fromTitlePresented,
     ...fromSpecialGuests,
     ...fromTitleFeatured
   ]
@@ -417,6 +421,19 @@ export function parseOztixTitleFeaturedArtists(
   return createArtistExtraction(splitOztixArtistList(match[1]), "parsed_text").artists;
 }
 
+export function parseOztixTitlePresentedArtists(
+  title: string | null | undefined
+): string[] {
+  const normalized = normalizeWhitespace(title ?? "");
+  const match = normalized.match(TITLE_PRESENTED_ARTIST_PATTERN);
+
+  if (!match?.[1]) {
+    return [];
+  }
+
+  return createArtistExtraction(splitOztixArtistList(match[1]), "parsed_text").artists;
+}
+
 export function parseOztixTitleHeadlinerArtists(
   title: string | null | undefined
 ): string[] {
@@ -471,6 +488,7 @@ function hasExplicitMusicSignal(hit: OztixHit): boolean {
 
 export function extractOztixArtists(hit: OztixHit) {
   const titleFeaturedArtists = parseOztixTitleFeaturedArtists(hit.EventName);
+  const titlePresentedArtists = parseOztixTitlePresentedArtists(hit.EventName);
   const tributeSubject = titleFeaturedArtists.length > 0
     ? getOztixTributeSubject(hit.EventName)
     : null;
@@ -499,6 +517,7 @@ export function extractOztixArtists(hit: OztixHit) {
   const combinedArtists = [
     ...structuredArtists,
     ...titleHeadlinerArtists,
+    ...titlePresentedArtists,
     ...titleFeaturedArtists,
     ...parsedSpecialGuests
   ];
