@@ -465,6 +465,125 @@ describe("moshtix wa source adapter", () => {
     });
   });
 
+  it("parses labelled trio lineups from Moshtix titles and filters venue performers", () => {
+    const extraction = extractMoshtixArtists({
+      title: "MOONLIGHT AND LOVE SONGS with THE TRIO: Helen Shanahan, Allira Wilson and Jessie Gordon",
+      descriptionHtml: null,
+      structuredEvent: {
+        location: {
+          name: "The Duke of George"
+        },
+        performers: [
+          { name: "Duke Of George" },
+          { name: "The Duke of George" },
+          { name: "Jessie Gordon" }
+        ]
+      },
+      eventData: {
+        name: "MOONLIGHT AND LOVE SONGS with THE TRIO: Helen Shanahan, Allira Wilson and Jessie Gordon",
+        artists: ["Duke Of George", "The Duke of George", "Jessie Gordon"],
+        venue: {
+          name: "The Duke of George"
+        },
+        client: {
+          name: "The Duke Of George"
+        }
+      },
+      venue: {
+        name: "The Duke of George",
+        slug: "the-duke-of-george",
+        suburb: "East Fremantle",
+        address: null,
+        websiteUrl: null
+      }
+    });
+
+    expect(extraction).toEqual({
+      artists: ["Helen Shanahan", "Allira Wilson", "Jessie Gordon"],
+      artistExtractionKind: "structured"
+    });
+  });
+
+  it("filters Moshtix venue handles and redundant title-tour artist fragments", () => {
+    const extraction = extractMoshtixArtists({
+      title: "Kathleen Halloran 'Nobody’s Baby' Album Tour - Fremantle (Solo)",
+      descriptionHtml: null,
+      structuredEvent: {
+        location: {
+          name: "Mojos Bar, North Fremantle"
+        },
+        performers: [
+          { name: "Mojos Bar" },
+          { name: "Mojos Bar Homepage Gallery" },
+          { name: "mojosbarwa" },
+          { name: "Kathleen Halloran" }
+        ]
+      },
+      eventData: {
+        name: "Kathleen Halloran 'Nobody’s Baby' Album Tour - Fremantle (Solo)",
+        artists: [
+          "Mojos Bar",
+          "Mojos Bar Homepage Gallery",
+          "mojosbarwa",
+          "Kathleen Halloran"
+        ],
+        venue: {
+          name: "Mojos Bar, North Fremantle"
+        },
+        client: {
+          name: "Mojo's Bar"
+        }
+      },
+      venue: {
+        name: "Mojos Bar",
+        slug: "mojos-bar",
+        suburb: "North Fremantle",
+        address: null,
+        websiteUrl: null
+      }
+    });
+
+    expect(extraction).toEqual({
+      artists: ["Kathleen Halloran"],
+      artistExtractionKind: "structured"
+    });
+  });
+
+  it("parses played-by tribute performers instead of Moshtix venue placeholders", () => {
+    const extraction = extractMoshtixArtists({
+      title: "GORILLAZ: Demon Days Album + Greatest Hits Played By Last Living Souls.",
+      descriptionHtml: null,
+      structuredEvent: {
+        location: {
+          name: "Freo.Social"
+        },
+        performers: [{ name: "Freo Social" }]
+      },
+      eventData: {
+        name: "GORILLAZ: Demon Days Album + Greatest Hits Played By Last Living Souls.",
+        artists: ["Freo Social"],
+        venue: {
+          name: "Freo.Social"
+        },
+        client: {
+          name: "Freo Social"
+        }
+      },
+      venue: {
+        name: "Freo.Social",
+        slug: "freo-social",
+        suburb: "Fremantle",
+        address: null,
+        websiteUrl: null
+      }
+    });
+
+    expect(extraction).toEqual({
+      artists: ["Last Living Souls"],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
   it("parses featured headliners and support names from Moshtix concert copy", () => {
     const extraction = extractMoshtixArtists({
       title: "Remembering The Strike; featuring Shane Howard (Goanna Band) and more!",
@@ -536,6 +655,37 @@ describe("moshtix wa source adapter", () => {
 
     expect(gig.artists).toEqual(["DJ Howie Z"]);
     expect(gig.artistExtractionKind).toBe("parsed_text");
+  });
+
+  it("parses Moshtix DJ schedule lines without keeping set times", () => {
+    const extraction = extractMoshtixArtists({
+      title: "Club 237",
+      descriptionHtml:
+        "<p>CLUB 237 LAUNCH PARTY!</p><p>DJS: 🖤 Anne Love: PRE-PARTY 8-9PM 🖤 Anne Love: 9-10PM 🖤 Swangin: 10-11PM 🖤 Cue: 11-12AM 🖤 Buff Baby: 12-1AM 🖤 Ramoe: 1-2AM 🖤 Sal: 2-CLOSE</p>",
+      structuredEvent: null,
+      eventData: {
+        name: "Club 237",
+        artists: [],
+        venue: {
+          name: "Destination"
+        },
+        client: {
+          name: "Destination (formerly Barbes)"
+        }
+      },
+      venue: {
+        name: "Destination",
+        slug: "destination",
+        suburb: "Northbridge",
+        address: null,
+        websiteUrl: null
+      }
+    });
+
+    expect(extraction).toEqual({
+      artists: ["Anne Love", "Swangin", "Cue", "Buff Baby", "Ramoe", "Sal"],
+      artistExtractionKind: "parsed_text"
+    });
   });
 
   it("skips the empty Moshtix uploads directory URL and falls back to the next real image", () => {

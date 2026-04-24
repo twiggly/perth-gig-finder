@@ -258,6 +258,10 @@ describe("oztix wa source adapter", () => {
 
     expect(parseOztixSpecialGuests("with guests TBC")).toEqual([]);
     expect(parseOztixSpecialGuests("plus special guests")).toEqual([]);
+    expect(parseOztixSpecialGuests("more TBC")).toEqual([]);
+    expect(
+      parseOztixSpecialGuests("Everything Around You Tour with Special Guest Codee-lee")
+    ).toEqual(["Codee-lee"]);
   });
 
   it("uses parsed special guests when Oztix has no structured artist arrays", () => {
@@ -290,6 +294,21 @@ describe("oztix wa source adapter", () => {
       })
     ).toEqual({
       artists: ["Less Than Jake", "The Aquabats!", "The Suicide Machines"],
+      artistExtractionKind: "structured"
+    });
+
+    expect(
+      extractOztixArtists({
+        EventName: "Felicity Urquhart & Josh Cunningham",
+        Bands: ["Felicity Urquhart", "Josh Cunningham"],
+        Performances: [
+          { Name: "Felicity Urquhart" },
+          { Name: "Josh Cunningham" }
+        ],
+        SpecialGuests: "Everything Around You Tour with Special Guest Codee-lee"
+      })
+    ).toEqual({
+      artists: ["Felicity Urquhart", "Josh Cunningham", "Codee-lee"],
       artistExtractionKind: "structured"
     });
   });
@@ -328,6 +347,18 @@ describe("oztix wa source adapter", () => {
     ).toEqual({
       artists: ["Sienna Skies", "Saving Face"],
       artistExtractionKind: "parsed_text"
+    });
+
+    expect(
+      extractOztixArtists({
+        EventName: "Tim Schilperoort - Maybe - Single Launch",
+        Bands: ["Tim Schilperoort"],
+        Performances: [{ Name: "Tim Schilperoort" }],
+        SpecialGuests: "with special guests Anika Louise + more TBC"
+      })
+    ).toEqual({
+      artists: ["Tim Schilperoort", "Anika Louise"],
+      artistExtractionKind: "structured"
     });
   });
 

@@ -88,10 +88,14 @@ const EARLY_SKIP_KEYWORD_PATTERNS = [
 ];
 const MOSHTIX_ARTIST_LIST_SEPARATOR_PATTERN = /\s*(?:\+|,)\s*/;
 const MOSHTIX_PLACEHOLDER_ARTIST_PATTERN =
-  /^(?:(?:local|more|additional|special)\s+)*(?:support|supports|support acts?)\s*(?:to be announced|tba|tbc)?$|^(?:(?:a|an)\s+)?(?:special\s+)?guests?\s*(?:to be announced|tba|tbc)?$|^(?:secret|mystery)\s+(?:act|artist|guest|set)s?[!.]?$|^(?:more|more\s+(?:acts?|artists?|guests?))[!.]?$|^(?:tba|tbc|to be announced|more to be announced)$/i;
+  /^(?:(?:local|more|additional|special)\s+)*(?:support|supports|support acts?)\s*(?:to be announced|tba|tbc)?$|^(?:(?:a|an)\s+)?(?:special\s+)?guests?\s*(?:to be announced|tba|tbc)?$|^(?:secret|mystery)\s+(?:act|artist|guest|set)s?[!.]?$|^(?:more|more\s+(?:acts?|artists?|guests?))[!.]?$|^(?:tba|tbc|to be announced|more\s+(?:tba|tbc|to be announced)|more to be announced)$/i;
 const MOSHTIX_TITLE_FEATURE_PATTERN =
   /^(?:(.+?)\s*[|:-;]\s*)?(?:featuring|feat\.?|ft\.?)\s+(.+)$/i;
 const MOSHTIX_TITLE_SUPPORT_PATTERN = /^(.+?)\s+(w[/.]\s*|with\s+)(.+)$/i;
+const MOSHTIX_TITLE_WITH_LABEL_LINEUP_PATTERN =
+  /\bwith\s+(?:the\s+)?(?:trio|band|artists?|performers?)\s*:\s*(.+)$/i;
+const MOSHTIX_TITLE_PLAYED_BY_PATTERN =
+  /\bplayed\s+by\s+(.+?)(?:[.!]|$)/i;
 const MOSHTIX_TITLE_TOUR_PREFIX_PATTERN = /^(.+?):\s+.+\btour\b/i;
 const MOSHTIX_TITLE_REGION_SUFFIX_PATTERN =
   /^(.+?)\s*[-–|]\s*(?:australia|australian|perth|fremantle|wa|world|uk|eu|us|au|nz|\d{4}).*$/i;
@@ -101,6 +105,8 @@ const MOSHTIX_TIME_SUFFIX_PATTERN =
   /\s*[|–-]\s*\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)\b.*$/i;
 const MOSHTIX_HEADLINED_BY_PATTERN = /\bheadlined by\s+(.+?)(?:\s+with\b|[.!]|$)/i;
 const MOSHTIX_DJ_LAUNCHES_PATTERN = /\b(DJ\s+.+?)\s+launches\b/i;
+const MOSHTIX_DJ_LINE_PATTERN = /\bDJS?\s*:\s*(.+)$/i;
+const MOSHTIX_DJ_SEGMENT_SEPARATOR_PATTERN = /\s*[🖤🌹•·●▪▫◆◇★☆*]\s*/u;
 const MOSHTIX_MADE_UP_OF_PATTERN = /\bmade up of\b\s+(.+?)(?:[.!]|$)/i;
 const MOSHTIX_TITLE_DESCRIPTOR_PATTERN =
   /\s+\((?:[A-Z]{2,}|UK|USA|NZ|DK|GER|SWE(?:DEN)?|SWEDEN|Goanna Band)\)\s*$/i;
@@ -317,6 +323,34 @@ function normalizeTitle(value: string | null | undefined): string {
   return normalizeWhitespace(value ?? "");
 }
 
+function normalizeMoshtixIdentity(value: string): string {
+  return normalizeWhitespace(value)
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/^the\s+/, "")
+    .trim();
+}
+
+function getMoshtixIdentityVariants(value: string | null | undefined): string[] {
+  const identity = normalizeMoshtixIdentity(value ?? "");
+
+  if (!identity) {
+    return [];
+  }
+
+  const compact = identity.replace(/\s+/g, "");
+  const variants = [identity, compact];
+
+  if (compact.endsWith("wa")) {
+    variants.push(compact.replace(/wa$/, ""));
+  } else {
+    variants.push(`${compact}wa`);
+  }
+
+  return variants;
+}
+
 function normalizeMoshtixArtistToken(value: string): string {
   return normalizeWhitespace(
     value
@@ -366,6 +400,27 @@ function splitMoshtixArtistList(value: string): string[] {
     .filter((artist) => !MOSHTIX_PLACEHOLDER_ARTIST_PATTERN.test(artist));
 }
 
+function parseMoshtixDjLine(line: string): string[] {
+  const match = line.match(MOSHTIX_DJ_LINE_PATTERN);
+
+  if (!match?.[1]) {
+    return [];
+  }
+
+  return match[1]
+    .split(MOSHTIX_DJ_SEGMENT_SEPARATOR_PATTERN)
+    .map((segment) =>
+      normalizeMoshtixArtistToken(
+        segment.replace(
+          /\s*:\s*(?:pre[-\s]?party\s*)?\d{1,2}(?::\d{2})?\s*(?:am|pm)?(?:\s*[-–]\s*(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)?|close))?.*$/i,
+          ""
+        )
+      )
+    )
+    .filter(Boolean)
+    .filter((artist) => !MOSHTIX_PLACEHOLDER_ARTIST_PATTERN.test(artist));
+}
+
 function extractProminentDescriptionLines(descriptionHtml: string | null | undefined): string[] {
   if (!descriptionHtml) {
     return [];
@@ -388,6 +443,20 @@ function parseMoshtixTitleArtists(title: string): string[] {
   }
 
   const candidates: string[] = [];
+  const labelLineupMatch = normalized.match(MOSHTIX_TITLE_WITH_LABEL_LINEUP_PATTERN);
+
+  if (labelLineupMatch?.[1]) {
+    candidates.push(...splitMoshtixArtistList(labelLineupMatch[1]));
+    return candidates;
+  }
+
+  const playedByMatch = normalized.match(MOSHTIX_TITLE_PLAYED_BY_PATTERN);
+
+  if (playedByMatch?.[1]) {
+    candidates.push(...splitMoshtixArtistList(playedByMatch[1]));
+    return candidates;
+  }
+
   const supportMatch = normalized.match(MOSHTIX_TITLE_SUPPORT_PATTERN);
 
   if (isLikelyMoshtixTitleSupportMatch(supportMatch)) {
@@ -458,11 +527,15 @@ function parseMoshtixDescriptionArtists(descriptionHtml: string | null | undefin
       break;
     }
 
-    if (line !== line.replace(MOSHTIX_TIME_SUFFIX_PATTERN, "")) {
+    const isDjLine = MOSHTIX_DJ_LINE_PATTERN.test(line);
+
+    if (!isDjLine && line !== line.replace(MOSHTIX_TIME_SUFFIX_PATTERN, "")) {
       candidates.push(
         ...splitMoshtixArtistList(line.replace(MOSHTIX_TIME_SUFFIX_PATTERN, ""))
       );
     }
+
+    candidates.push(...parseMoshtixDjLine(line));
 
     const headlinedMatch = line.match(MOSHTIX_HEADLINED_BY_PATTERN);
     if (headlinedMatch) {
@@ -632,11 +705,21 @@ export function extractMoshtixArtists(input: {
   eventData: MoshtixEventData | null;
   venue: NormalizedVenue;
 }) {
-  const venueNames = new Set(
-    [input.venue.name, input.eventData?.venue?.name, input.eventData?.client?.name]
-      .map((value) => normalizeWhitespace(value ?? "").toLowerCase())
-      .filter(Boolean)
+  const venueIdentities = new Set(
+    [
+      input.venue.name,
+      input.eventData?.venue?.name,
+      input.eventData?.client?.name,
+      input.structuredEvent?.location?.name
+    ].flatMap(getMoshtixIdentityVariants)
   );
+  const isVenueArtist = (artist: string) =>
+    getMoshtixIdentityVariants(artist).some((identity) => venueIdentities.has(identity));
+  const isNoisyArtist = (artist: string) => {
+    const normalized = artist.toLowerCase();
+
+    return isVenueArtist(artist) || normalized.includes("homepage gallery");
+  };
 
   const candidates = [
     ...(input.eventData?.artists ?? []),
@@ -644,30 +727,25 @@ export function extractMoshtixArtists(input: {
   ]
     .map((artist) => normalizeWhitespace(artist))
     .filter(Boolean)
-    .filter((artist) => {
-      const normalized = artist.toLowerCase();
-
-      if (venueNames.has(normalized)) {
-        return false;
-      }
-
-      return !normalized.includes("homepage gallery");
-    });
+    .filter((artist) => !isNoisyArtist(artist));
 
   const parsedTitleCandidates = parseMoshtixTitleArtists(input.title);
   const parsedDescriptionCandidates = parseMoshtixDescriptionArtists(input.descriptionHtml);
   const parsedCandidates = [...parsedTitleCandidates, ...parsedDescriptionCandidates]
     .map((artist) => normalizeWhitespace(artist))
     .filter(Boolean)
-    .filter((artist) => {
-      const normalized = artist.toLowerCase();
-
-      if (venueNames.has(normalized)) {
-        return false;
-      }
-
-      return !normalized.includes("homepage gallery");
-    });
+    .filter((artist) => !isNoisyArtist(artist))
+    .filter(
+      (artist) =>
+        candidates.length === 0 ||
+        !candidates.some(
+          (candidate) =>
+            normalizeMoshtixIdentity(artist).startsWith(
+              normalizeMoshtixIdentity(candidate)
+            ) &&
+            /\b(?:tour|album|single|launch|fremantle|perth|solo)\b/i.test(artist)
+        )
+    );
 
   if (candidates.length > 0) {
     const normalizedTitle = normalizeTitle(input.title);
