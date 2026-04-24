@@ -647,6 +647,25 @@ function hasKnownLineupArtists(gig: NormalizedGig): boolean {
   );
 }
 
+function normalizeTheBirdFeedMergeTitle(value: string): string {
+  return slugify(
+    normalizeWhitespace(value)
+      .replace(/\s*(?:@|at)\s+the\s+bird\b/gi, " ")
+      .replace(/\s+-\s+the\s+bird\b/gi, " ")
+  );
+}
+
+function areTheBirdFeedTitlesCompatible(left: string, right: string): boolean {
+  if (areCanonicalTitlesCompatible(left, right)) {
+    return true;
+  }
+
+  const normalizedLeft = normalizeTheBirdFeedMergeTitle(left);
+  const normalizedRight = normalizeTheBirdFeedMergeTitle(right);
+
+  return Boolean(normalizedLeft && normalizedLeft === normalizedRight);
+}
+
 function chooseLongerText(
   current: string | null,
   candidate: string | null
@@ -727,7 +746,7 @@ function mergeTheBirdFeedResults(
 
       return (
         existingGig.startsAt.slice(0, 10) === gig.startsAt.slice(0, 10) &&
-        areCanonicalTitlesCompatible(existingGig.title, gig.title)
+        areTheBirdFeedTitlesCompatible(existingGig.title, gig.title)
       );
     });
 
