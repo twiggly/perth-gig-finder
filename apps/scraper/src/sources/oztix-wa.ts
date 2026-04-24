@@ -118,8 +118,11 @@ const GENERIC_SPECIAL_GUEST_PATTERN =
 const SPECIAL_GUEST_SEPARATOR_PATTERN = /\s*(?:,|\+|\^|\||\s-\s)\s*/;
 const TITLE_FEATURED_ARTIST_PATTERN =
   /\b(?:ft\.?|feat\.?|featuring)\s+(.+)$/i;
+const TITLE_QUOTED_TOUR_HEADLINER_PATTERN =
+  /^(.+?)\s+(?:"[^"]+"|'[^']+'|“[^”]+”|‘[^’]+’)$/;
 const TITLE_TRIBUTE_SUBJECT_PATTERN =
   /^(.+?)\s+the\s+australian\s+tribute\b/i;
+const TITLE_HEADLINER_SEPARATOR_PATTERN = /\s[-–—:]\s|[,+]/;
 
 interface OztixVenue {
   Name?: string;
@@ -314,11 +317,16 @@ function collectNamedArtists(hit: OztixHit): string[] {
   const fromTourName = hit.TourName ? [hit.TourName] : [];
   const fromSpecialGuests = parseOztixSpecialGuests(hit.SpecialGuests);
   const fromTitleFeatured = parseOztixTitleFeaturedArtists(hit.EventName);
+  const fromTitleHeadliner =
+    fromBands.length === 0 && fromPerformances.length === 0
+      ? parseOztixTitleHeadlinerArtists(hit.EventName)
+      : [];
 
   return [
     ...fromBands,
     ...fromPerformances,
     ...fromTourName,
+    ...fromTitleHeadliner,
     ...fromSpecialGuests,
     ...fromTitleFeatured
   ]
@@ -405,6 +413,25 @@ export function parseOztixTitleFeaturedArtists(
   return createArtistExtraction(splitOztixArtistList(match[1]), "parsed_text").artists;
 }
 
+export function parseOztixTitleHeadlinerArtists(
+  title: string | null | undefined
+): string[] {
+  const normalized = normalizeWhitespace(title ?? "");
+  const match = normalized.match(TITLE_QUOTED_TOUR_HEADLINER_PATTERN);
+
+  if (!match?.[1]) {
+    return [];
+  }
+
+  const headliner = normalizeWhitespace(match[1]);
+
+  if (!headliner || TITLE_HEADLINER_SEPARATOR_PATTERN.test(headliner)) {
+    return [];
+  }
+
+  return createArtistExtraction([headliner], "parsed_text").artists;
+}
+
 function getOztixTributeSubject(title: string | null | undefined): string | null {
   const normalized = normalizeWhitespace(title ?? "");
   const match = normalized.match(TITLE_TRIBUTE_SUBJECT_PATTERN);
@@ -460,9 +487,14 @@ export function extractOztixArtists(hit: OztixHit) {
         !tributeSubjectIdentity ||
         normalizeArtistIdentity(artist) !== tributeSubjectIdentity
     );
+  const titleHeadlinerArtists =
+    structuredArtists.length === 0
+      ? parseOztixTitleHeadlinerArtists(hit.EventName)
+      : [];
   const parsedSpecialGuests = parseOztixSpecialGuests(hit.SpecialGuests);
   const combinedArtists = [
     ...structuredArtists,
+    ...titleHeadlinerArtists,
     ...titleFeaturedArtists,
     ...parsedSpecialGuests
   ];
