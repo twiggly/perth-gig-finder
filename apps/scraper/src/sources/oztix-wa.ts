@@ -112,9 +112,9 @@ const EXPLICIT_MUSIC_TEXT_PATTERNS = [
 ];
 
 const SPECIAL_GUEST_PREFIX_PATTERN =
-  /^(?:with|plus)?\s*special guests?[:,]?\s*|^(?:with|plus)\s+guests?[:,]?\s*|^(?:with|plus)\s+|^starring\s+|^featuring\s+|^feat\.?\s+/i;
+  /^(?:with|plus)?\s*special guests?[:,]?\s*|^(?:with|plus)\s+guests?[:,]?\s*|^w[/.]\s*|^(?:with|plus)\s+|^starring\s+|^featuring\s+|^feat\.?\s+/i;
 const GENERIC_SPECIAL_GUEST_PATTERN =
-  /^(?:(?:a|an)\s+)?(?:special\s+)?guests?\s*(?:to be announced|tba|tbc)?$|^(?:(?:local|more|additional|special)\s+)*(?:support|supports|support acts?)\s*(?:to be announced|tba|tbc)?$|^(?:tba|tbc|to be announced|more to be announced)$/i;
+  /^(?:(?:a|an)\s+)?(?:special\s+)?guests?\s*(?:to be announced|tba|tbc)?$|^(?:(?:local|more|additional|special)\s+)*(?:support|supports|support acts?)\s*(?:to be announced|tba|tbc)?$|^(?:secret|mystery)\s+(?:act|artist|guest|set)s?[!.]?$|^(?:more|more\s+(?:acts?|artists?|guests?))[!.]?$|^(?:tba|tbc|to be announced|more to be announced)$/i;
 const SPECIAL_GUEST_SEPARATOR_PATTERN = /\s*(?:,|\+|\^|\||\s-\s)\s*/;
 const TITLE_FEATURED_ARTIST_PATTERN =
   /\b(?:ft\.?|feat\.?|featuring)\s+(.+)$/i;
@@ -337,14 +337,22 @@ function collectStructuredArtists(hit: OztixHit): string[] {
     .filter(Boolean);
 }
 
-function normalizeSpecialGuestToken(value: string): string {
+function stripOztixArtistPrefix(value: string): string {
   let normalized = normalizeWhitespace(value);
 
   while (SPECIAL_GUEST_PREFIX_PATTERN.test(normalized)) {
     normalized = normalizeWhitespace(normalized.replace(SPECIAL_GUEST_PREFIX_PATTERN, ""));
   }
 
-  return normalized.replace(/\s+and\s+/gi, ", ");
+  return normalized;
+}
+
+function cleanOztixArtistToken(value: string): string {
+  return stripOztixArtistPrefix(value).replace(/^["'“”‘’]+|["'“”‘’]+$/g, "");
+}
+
+function normalizeSpecialGuestToken(value: string): string {
+  return stripOztixArtistPrefix(value).replace(/\s+and\s+/gi, ", ");
 }
 
 export function parseOztixSpecialGuests(value: string | null | undefined): string[] {
@@ -360,9 +368,7 @@ export function parseOztixSpecialGuests(value: string | null | undefined): strin
   const candidates = normalized
     .split(SPECIAL_GUEST_SEPARATOR_PATTERN)
     .flatMap((token) => token.split(/\s*,\s*/))
-    .map((token) =>
-      normalizeWhitespace(token).replace(/^["'“”‘’]+|["'“”‘’]+$/g, "")
-    )
+    .map(cleanOztixArtistToken)
     .filter(Boolean)
     .filter((token) => !GENERIC_SPECIAL_GUEST_PATTERN.test(token));
 
@@ -381,9 +387,7 @@ function splitOztixArtistList(value: string): string[] {
     .replace(/\s+and\s+/gi, ", ")
     .split(SPECIAL_GUEST_SEPARATOR_PATTERN)
     .flatMap((token) => token.split(/\s*,\s*/))
-    .map((token) =>
-      normalizeWhitespace(token).replace(/^["'“”‘’]+|["'“”‘’]+$/g, "")
-    )
+    .map(cleanOztixArtistToken)
     .filter(Boolean)
     .filter((token) => !GENERIC_SPECIAL_GUEST_PATTERN.test(token));
 }
