@@ -12,10 +12,12 @@ function printUsage() {
   console.log(`Usage:
   pnpm audit:gigs -- --url https://your-deployment.vercel.app
   pnpm audit:gigs -- --file /tmp/homepage.html
+  pnpm audit:gigs -- --supabase
 
 Options:
   --url <url>           Homepage URL to fetch. Falls back to AUDIT_GIGS_URL.
   --file <path>         Read a saved homepage HTML file instead of fetching.
+  --supabase            Audit the Supabase gig_cards view using SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
   --vercel              Fetch a protected Vercel deployment with vercel curl.
   --match <regex>       Include notable rows whose title matches the regex. Repeatable.
   --json                Print machine-readable JSON only.
@@ -32,6 +34,7 @@ function parseArgs(argv) {
     limit: DEFAULT_EXAMPLE_LIMIT,
     matchPatterns: [],
     strict: false,
+    supabase: false,
     url: process.env.AUDIT_GIGS_URL ?? null,
     vercel: false
   };
@@ -62,6 +65,9 @@ function parseArgs(argv) {
       case "--strict":
         options.strict = true;
         break;
+      case "--supabase":
+        options.supabase = true;
+        break;
       case "--url":
         options.url = argv[++index] ?? null;
         break;
@@ -87,6 +93,119 @@ function parseArgs(argv) {
   }
 
   return options;
+}
+
+const DAY_KEY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+  day: "2-digit",
+  month: "2-digit",
+  timeZone: "Australia/Perth",
+  year: "numeric"
+});
+
+function getPerthDateKey(value) {
+  const parts = DAY_KEY_FORMATTER.formatToParts(new Date(value)).reduce((accumulator, part) => {
+    if (part.type === "year" || part.type === "month" || part.type === "day") {
+      accumulator[part.type] = part.value;
+    }
+
+    return accumulator;
+  }, {});
+
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function groupRowsByDate(rows) {
+  const groups = new Map();
+
+  for (const row of rows) {
+    const dateKey = getPerthDateKey(row.starts_at);
+    groups.set(dateKey, [...(groups.get(dateKey) ?? []), row]);
+  }
+
+  return [...groups.entries()].map(([dateKey, items]) => ({
+    dateKey,
+    items
+  }));
+}
+
+async function loadSupabasePayload() {
+  const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/$/, "");
+  const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    process.env.SUPABASE_ANON_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error(
+      "Provide SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY, or NEXT_PUBLIC_SUPABASE_ANON_KEY."
+    );
+  }
+
+  const url = new URL(`${supabaseUrl}/rest/v1/gig_cards`);
+  url.searchParams.set(
+    "select",
+    [
+      "id",
+      "slug",
+      "title",
+      "starts_at",
+      "artist_names",
+      "image_path",
+      "source_image_url",
+      "image_width",
+      "image_height",
+      "image_version",
+      "ticket_url",
+      "source_url",
+      "source_name",
+      "venue_slug",
+      "venue_name",
+      "venue_suburb",
+      "venue_website_url",
+      "status"
+    ].join(",")
+  );
+  url.searchParams.set("status", "eq.active");
+  url.searchParams.set("starts_at", `gte.${new Date().toISOString()}`);
+  url.searchParams.set("order", "starts_at.asc");
+  url.searchParams.set("limit", "5000");
+
+  const response = await fetch(url, {
+    headers: {
+      accept: "application/json",
+      apikey: supabaseKey,
+      authorization: `Bearer ${supabaseKey}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Supabase gig_cards request failed with status ${response.status}: ${await response.text()}`
+    );
+  }
+
+  const rows = await response.json();
+
+  if (!Array.isArray(rows)) {
+    throw new Error("Supabase gig_cards response was not an array.");
+  }
+
+  const normalizedRows = rows.map((row) => ({
+    ...row,
+    artist_names: Array.isArray(row.artist_names) ? row.artist_names : []
+  }));
+  const days = groupRowsByDate(normalizedRows);
+
+  return {
+    payload: {
+      days,
+      initialActiveDateKey: days[0]?.dateKey ?? null
+    },
+    target: {
+      target: `${supabaseUrl}/rest/v1/gig_cards`,
+      targetKind: "supabase"
+    }
+  };
 }
 
 async function loadHtml(options) {
@@ -578,11 +697,15 @@ try {
     process.exit(0);
   }
 
-  const loaded = await loadHtml(options);
-  const payload = extractHomepagePayload(loaded.html);
+  const loaded = options.supabase
+    ? await loadSupabasePayload()
+    : await loadHtml(options);
+  const payload = options.supabase
+    ? loaded.payload
+    : extractHomepagePayload(loaded.html);
   const audit = buildAudit(payload, options, {
-    kind: loaded.targetKind,
-    target: loaded.target
+    kind: loaded.targetKind ?? loaded.target.targetKind,
+    target: loaded.target.target ?? loaded.target
   });
 
   if (options.json) {
