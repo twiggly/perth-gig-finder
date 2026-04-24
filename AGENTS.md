@@ -49,6 +49,8 @@ This file is for coding agents working in this repository. Keep it short, practi
 - The hosted workflow:
   - runs `scrape` against hosted Supabase
   - runs `mirror-images` as best effort
+  - runs `audit:gigs -- --supabase` against the hosted `gig_cards` public view
+- Hosted refresh audits are currently non-blocking so findings remain visible without failing scheduled refreshes.
 - The hosted GitHub runner currently excludes `ticketmaster-au`, because Ticketmaster blocks it with `403` responses there.
 - A few poster mirror failures should not fail the whole hosted refresh workflow.
 

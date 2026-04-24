@@ -139,7 +139,9 @@ Good first pages:
 - The hosted refresh workflow:
   - scrapes source data into hosted Supabase
   - backfills mirrored images as best effort
-- After hosted refreshes, audit the visible public payload with `pnpm audit:gigs -- --url <deployment-url> --vercel` for Vercel-protected deployments.
+  - audits the hosted `gig_cards` public view that feeds the homepage
+- The hosted public payload audit is currently non-blocking: findings stay visible in the workflow logs without failing scheduled refreshes.
+- For manual checks, run `pnpm audit:gigs -- --url <deployment-url> --vercel` for Vercel-protected deployments.
 
 ## Local Development
 
@@ -255,6 +257,7 @@ pnpm verify
   ```
 
   Omit `--vercel` for publicly fetchable URLs. Use `--strict` if warning-level findings such as no-image rows or heuristic non-music matches should fail the command.
+  Hosted refreshes run `pnpm audit:gigs -- --supabase --limit 30` against the hosted `gig_cards` public view using the workflow Supabase secrets, with `continue-on-error` enabled for the first rollout.
 
 - Scraper-only verification:
 
