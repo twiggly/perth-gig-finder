@@ -24,6 +24,7 @@ This file is for coding agents working in this repository. Keep it short, practi
 - Reset local data with `pnpm supabase:reset`.
 - Run the scraper locally with `pnpm scrape`.
 - Recompute source-level artist provenance with `pnpm --filter @perth-gig-finder/scraper repair-artists`.
+- Audit the public homepage payload with `pnpm audit:gigs -- --url <deployment-url> --vercel` for Vercel-protected deployments.
 - Start the local web app with `pnpm web:dev`.
 - Start the production-style local preview with `pnpm web:preview`.
 
@@ -35,6 +36,7 @@ This file is for coding agents working in this repository. Keep it short, practi
 - Scraper-only tests: `pnpm --filter @perth-gig-finder/scraper test`
 - Scraper-only build: `pnpm --filter @perth-gig-finder/scraper build`
 - Artist provenance backfill: `pnpm --filter @perth-gig-finder/scraper repair-artists`
+- Public payload audit: `pnpm audit:gigs -- --url <deployment-url> --vercel`
 
 ## Hosted Operations
 

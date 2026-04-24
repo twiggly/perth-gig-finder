@@ -139,6 +139,7 @@ Good first pages:
 - The hosted refresh workflow:
   - scrapes source data into hosted Supabase
   - backfills mirrored images as best effort
+- After hosted refreshes, audit the visible public payload with `pnpm audit:gigs -- --url <deployment-url> --vercel` for Vercel-protected deployments.
 
 ## Local Development
 
@@ -246,6 +247,14 @@ pnpm verify
   ```bash
   pnpm verify
   ```
+
+- Public gig payload audit:
+
+  ```bash
+  pnpm audit:gigs -- --url https://your-deployment.vercel.app --vercel
+  ```
+
+  Omit `--vercel` for publicly fetchable URLs. Use `--strict` if warning-level findings such as no-image rows or heuristic non-music matches should fail the command.
 
 - Scraper-only verification:
 
