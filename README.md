@@ -140,7 +140,7 @@ Good first pages:
   - scrapes source data into hosted Supabase
   - backfills mirrored images as best effort
   - audits the hosted `gig_cards` public view that feeds the homepage
-- The hosted public payload audit is currently non-blocking: findings stay visible in the workflow logs without failing scheduled refreshes.
+- The hosted public payload audit runs in non-strict mode: hard errors fail the workflow, while warning-level findings stay visible in the workflow logs.
 - For manual checks, run `pnpm audit:gigs -- --url <deployment-url> --vercel` for Vercel-protected deployments.
 
 ## Local Development
@@ -257,7 +257,7 @@ pnpm verify
   ```
 
   Omit `--vercel` for publicly fetchable URLs. Use `--strict` if warning-level findings such as no-image rows or heuristic non-music matches should fail the command.
-  Hosted refreshes run `pnpm audit:gigs -- --supabase --limit 30` against the hosted `gig_cards` public view using the workflow Supabase secrets, with `continue-on-error` enabled for the first rollout.
+  Hosted refreshes run `pnpm audit:gigs -- --supabase --limit 30` against the hosted `gig_cards` public view using the workflow Supabase secrets.
 
 - Scraper-only verification:
 
