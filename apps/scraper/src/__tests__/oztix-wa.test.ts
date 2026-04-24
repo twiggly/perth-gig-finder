@@ -10,6 +10,7 @@ import {
   normalizeOztixHit,
   oztixWaSource,
   parseOztixSpecialGuests,
+  parseOztixTitleHeadlinerArtists,
   parseOztixHits,
   parseOztixTitleFeaturedArtists
 } from "../sources/oztix-wa";
@@ -304,6 +305,29 @@ describe("oztix wa source adapter", () => {
     ).toEqual({
       artists: ["Sienna Skies", "Saving Face"],
       artistExtractionKind: "structured"
+    });
+  });
+
+  it("parses narrow quoted-tour title headliners when Oztix omits structured artists", () => {
+    expect(
+      parseOztixTitleHeadlinerArtists('Sienna Skies "Australian Spring Tour"')
+    ).toEqual(["Sienna Skies"]);
+    expect(
+      parseOztixTitleHeadlinerArtists(
+        "Rock Wax Thursdays - 60 Years of Bob Dylan's 'Blonde on Blonde'"
+      )
+    ).toEqual([]);
+
+    expect(
+      extractOztixArtists({
+        EventName: 'Sienna Skies "Australian Spring Tour"',
+        Bands: [],
+        Performances: [],
+        SpecialGuests: "w/ Saving Face + Local Supports TBA"
+      })
+    ).toEqual({
+      artists: ["Sienna Skies", "Saving Face"],
+      artistExtractionKind: "parsed_text"
     });
   });
 
