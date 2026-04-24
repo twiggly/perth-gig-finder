@@ -888,7 +888,10 @@ function normalizeHumanitixArtistToken(value: string): string {
 }
 
 function splitHumanitixArtistLine(value: string): string[] {
-  const normalized = normalizeHumanitixArtistToken(value);
+  const normalizedToken = normalizeHumanitixArtistToken(value);
+  const normalized = /[,;•+]/.test(normalizedToken)
+    ? normalizedToken.replace(/\s+\band\b\s+(?=[^,;•+]+$)/i, ", ")
+    : normalizedToken;
 
   if (!normalized) {
     return [];
@@ -984,6 +987,8 @@ function parseHumanitixTitleArtists(title: string): string[] {
       ...splitHumanitixArtistLine(supportMatch[2])
     );
   }
+
+  candidates.push(...parseHumanitixExplicitTextArtists([normalized]));
 
   return candidates;
 }

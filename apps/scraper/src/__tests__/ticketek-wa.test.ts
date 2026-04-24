@@ -274,6 +274,40 @@ describe("ticketek wa source adapter", () => {
     });
   });
 
+  it("parses conservative presenter artists from Ticketek titles", () => {
+    const listing: Parameters<typeof normalizeTicketekListing>[0] = {
+      externalId: "GLAMFUNK26",
+      title: "Glam Funk Band presents Ministry of Disco",
+      subtitle: null,
+      summary: null,
+      sourceUrl: "https://premier.ticketek.com.au/Shows/Show.aspx?sh=GLAMFUNK26",
+      ticketUrl: "https://premier.ticketek.com.au/Shows/Show.aspx?sh=GLAMFUNK26",
+      imageUrl: "https://d35kvm5iuwjt9t.cloudfront.net/dbimages/glamfunk26.jpg",
+      locationText: "Astor Theatre, Mount Lawley, WA",
+      dateText: "Sat 14 Nov 2026",
+      startsAt: "2026-11-14T04:00:00.000Z",
+      startsAtPrecision: "date",
+      rawPayload: {
+        query: "funk perth",
+        title: "Glam Funk Band presents Ministry of Disco",
+        subtitle: null,
+        summary: null,
+        locationText: "Astor Theatre, Mount Lawley, WA",
+        dateText: "Sat 14 Nov 2026",
+        ticketUrl: "https://premier.ticketek.com.au/Shows/Show.aspx?sh=GLAMFUNK26",
+        imageUrl: "https://d35kvm5iuwjt9t.cloudfront.net/dbimages/glamfunk26.jpg"
+      }
+    };
+
+    const normalized = normalizeTicketekListing(listing);
+
+    expect(normalized).toMatchObject({
+      title: "Glam Funk Band presents Ministry of Disco",
+      artists: ["Glam Funk Band"],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
   it("indexes exact start times from Ticketek's structured search API", () => {
     const lookup = new Map<string, string | null>();
 
