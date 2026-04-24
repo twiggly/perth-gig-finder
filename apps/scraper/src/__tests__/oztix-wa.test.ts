@@ -233,12 +233,23 @@ describe("oztix wa source adapter", () => {
 
     expect(parseOztixSpecialGuests("With BLESSTHEFALL")).toEqual(["BLESSTHEFALL"]);
     expect(parseOztixSpecialGuests("with DJ SWEETMAN")).toEqual(["DJ SWEETMAN"]);
+    expect(parseOztixSpecialGuests("w/ Saving Face")).toEqual(["Saving Face"]);
+    expect(parseOztixSpecialGuests("w/Saving Face")).toEqual(["Saving Face"]);
     expect(parseOztixSpecialGuests("with a special guest to be announced")).toEqual([]);
     expect(parseOztixSpecialGuests("special guest to be announced")).toEqual([]);
     expect(parseOztixSpecialGuests("guest TBA")).toEqual([]);
     expect(parseOztixSpecialGuests("Supports to be announced")).toEqual([]);
     expect(parseOztixSpecialGuests("support acts TBA")).toEqual([]);
     expect(parseOztixSpecialGuests("Local Supports TBA")).toEqual([]);
+    expect(parseOztixSpecialGuests("Secret Act")).toEqual([]);
+    expect(parseOztixSpecialGuests("Mystery Guest")).toEqual([]);
+    expect(parseOztixSpecialGuests("MORE!")).toEqual([]);
+
+    expect(
+      parseOztixSpecialGuests(
+        "With Beddy Rays, Teenage Joans, Daily J, Bootleg Rascal, Secret Act, Vlads + MORE!"
+      )
+    ).toEqual(["Beddy Rays", "Teenage Joans", "Daily J", "Bootleg Rascal", "Vlads"]);
 
     expect(
       parseOztixSpecialGuests("OBSCURA (GER) FALLUJAH (USA)^ ASHEN (WA) + ANOXIA (NSW)")
@@ -278,6 +289,20 @@ describe("oztix wa source adapter", () => {
       })
     ).toEqual({
       artists: ["Less Than Jake", "The Aquabats!", "The Suicide Machines"],
+      artistExtractionKind: "structured"
+    });
+  });
+
+  it("cleans parsed support prefixes without dropping structured headliners", () => {
+    expect(
+      extractOztixArtists({
+        EventName: "Sienna Skies \"Australian Spring Tour\"",
+        Bands: ["Sienna Skies"],
+        Performances: [{ Name: "Sienna Skies" }],
+        SpecialGuests: "w/ Saving Face"
+      })
+    ).toEqual({
+      artists: ["Sienna Skies", "Saving Face"],
       artistExtractionKind: "structured"
     });
   });
