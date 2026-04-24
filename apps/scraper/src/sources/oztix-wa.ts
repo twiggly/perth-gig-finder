@@ -114,8 +114,10 @@ const EXPLICIT_MUSIC_TEXT_PATTERNS = [
 const SPECIAL_GUEST_PREFIX_PATTERN =
   /^(?:with|plus)?\s*special guests?[:,]?\s*|^(?:with|plus)\s+guests?[:,]?\s*|^w[/.]\s*|^(?:with|plus)\s+|^starring\s+|^featuring\s+|^feat\.?\s+/i;
 const GENERIC_SPECIAL_GUEST_PATTERN =
-  /^(?:(?:a|an)\s+)?(?:special\s+)?guests?\s*(?:to be announced|tba|tbc)?$|^(?:(?:local|more|additional|special)\s+)*(?:support|supports|support acts?)\s*(?:to be announced|tba|tbc)?$|^(?:secret|mystery)\s+(?:act|artist|guest|set)s?[!.]?$|^(?:more|more\s+(?:acts?|artists?|guests?))[!.]?$|^(?:tba|tbc|to be announced|more to be announced)$/i;
+  /^(?:(?:a|an)\s+)?(?:special\s+)?guests?\s*(?:to be announced|tba|tbc)?$|^(?:(?:local|more|additional|special)\s+)*(?:support|supports|support acts?)\s*(?:to be announced|tba|tbc)?$|^(?:secret|mystery)\s+(?:act|artist|guest|set)s?[!.]?$|^(?:more|more\s+(?:acts?|artists?|guests?))[!.]?$|^(?:tba|tbc|to be announced|more\s+(?:tba|tbc|to be announced)|more to be announced)$/i;
 const SPECIAL_GUEST_SEPARATOR_PATTERN = /\s*(?:,|\+|\^|\||\s-\s)\s*/;
+const SPECIAL_GUEST_TOUR_LEAD_IN_PATTERN =
+  /^.+?\b(?:tour|single|album|ep|launch|show)\b\s+with\s+special guests?[:,]?\s+/i;
 const TITLE_FEATURED_ARTIST_PATTERN =
   /\b(?:ft\.?|feat\.?|featuring)\s+(.+)$/i;
 const TITLE_QUOTED_TOUR_HEADLINER_PATTERN =
@@ -360,7 +362,9 @@ function cleanOztixArtistToken(value: string): string {
 }
 
 function normalizeSpecialGuestToken(value: string): string {
-  return stripOztixArtistPrefix(value).replace(/\s+and\s+/gi, ", ");
+  return stripOztixArtistPrefix(
+    value.replace(SPECIAL_GUEST_TOUR_LEAD_IN_PATTERN, "")
+  ).replace(/\s+and\s+/gi, ", ");
 }
 
 export function parseOztixSpecialGuests(value: string | null | undefined): string[] {
