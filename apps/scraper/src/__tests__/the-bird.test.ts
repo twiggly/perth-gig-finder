@@ -88,7 +88,7 @@ describe("the bird source adapter", () => {
 
   it("normalizes a weekly Thursday row with the featured lineup", () => {
     const normalized = normalizeTheBirdWhatsOnRow({
-      Date: "23.04.26",
+      Date: "30.04.26",
       Day: "Thursday",
       Time: "6:30pm",
       Price: 15,
@@ -102,11 +102,11 @@ describe("the bird source adapter", () => {
 
     expect(normalized).toMatchObject({
       sourceSlug: "the-bird",
-      externalId: "2026-04-23-alt-thursdays",
-      sourceUrl: "https://www.williamstreetbird.com/whatson#2026-04-23-alt-thursdays",
+      externalId: "2026-04-30-alt-thursdays",
+      sourceUrl: "https://www.williamstreetbird.com/whatson#2026-04-30-alt-thursdays",
       ticketUrl: null,
       title: "ALT//THURSDAYS",
-      startsAt: "2026-04-23T10:30:00.000Z",
+      startsAt: "2026-04-30T10:30:00.000Z",
       startsAtPrecision: "exact",
       artists: ["Melānija", "Esper", "softwarebodyIV", "tarsier", "big trouble little china"],
       artistExtractionKind: "explicit_lineup"
@@ -206,7 +206,7 @@ describe("the bird source adapter", () => {
         "Ticket Link": ""
       },
       {
-        Date: "23.04.26",
+        Date: "30.04.26",
         Day: "Thursday",
         Time: "6:30pm",
         Price: 15,
@@ -316,7 +316,7 @@ describe("the bird source adapter", () => {
   it("merges weekly rows into matching coming-up rows before returning gigs", async () => {
     const comingUpRows: TheBirdFeedRow[] = [
       {
-        Date: "24/04/2026",
+        Date: "01/05/2026",
         Day: "FRIDAY",
         "Event Title": "Dani Dray 'Tell Me' Single Launch",
         Info: "Doors 8pm | Music until 11:45pm",
@@ -338,7 +338,7 @@ describe("the bird source adapter", () => {
         return new Response(
           JSON.stringify([
             {
-              Date: "23.04.26",
+              Date: "30.04.26",
               Day: "Thursday",
               Time: "6:30pm",
               Price: 15,
@@ -350,7 +350,7 @@ describe("the bird source adapter", () => {
               "Ticket Link": ""
             },
             {
-              Date: "24.04.26",
+              Date: "01.05.26",
               Day: "Friday",
               Time: "8pm",
               Price: 20,
@@ -384,7 +384,7 @@ describe("the bird source adapter", () => {
       artists: ["The Vicar", "Clare Perrott", "SOLARA"]
     });
     expect(thursdays).toMatchObject({
-      startsAt: "2026-04-23T10:30:00.000Z",
+      startsAt: "2026-04-30T10:30:00.000Z",
       artists: ["Melānija", "Esper", "softwarebodyIV", "tarsier", "big trouble little china"]
     });
   });

@@ -356,6 +356,53 @@ describe("humanitix perth music source adapter", () => {
     expect(gigs[0]?.artistExtractionKind).toBe("structured");
   });
 
+  it("drops sentence-like Humanitix prose fragments from structured performer descriptions", () => {
+    const gigs = normalizeHumanitixDetailPage({
+      eventUrl: "https://events.humanitix.com/2026-christmas-in-the-quad",
+      html: buildEventPage({
+        title: "Christmas in the Quad 2026",
+        canonicalUrl: "https://events.humanitix.com/2026-christmas-in-the-quad",
+        ogDescription: "A Christmas concert with orchestra and soloists.",
+        imageUrl: "https://images.humanitix.com/i/christmas-in-the-quad@seo-500.jpg",
+        twitterLocation: "St George's College, Crawley WA 6009, Australia",
+        twitterDate: "Monday 14th December 2026",
+        eventId: "christmas-in-the-quad",
+        structuredEvents: buildStructuredEvent({
+          title: "Christmas in the Quad 2026",
+          url: "https://events.humanitix.com/2026-christmas-in-the-quad",
+          startDate: "2026-12-14T19:00:00+0800",
+          venueName: "Quadrangle, St George's College",
+          streetAddress: "Mounts Bay Road, Crawley WA 6009, Australia",
+          locality: "Crawley",
+          postalCode: "6009",
+          description: "A Christmas concert with orchestra and soloists.",
+          performers: [
+            {
+              name: "West Coast Philharmonic Orchestra",
+              description:
+                "the orchestra presents a wide-ranging repertoire spanning classical and contemporary works"
+            },
+            {
+              name: "Emma Matthews",
+              description: "acclaimed soprano Emma Matthews"
+            },
+            {
+              name: "Samuel Parry",
+              description: "contemporary conductor Samuel Parry"
+            }
+          ]
+        })
+      })
+    });
+
+    expect(gigs).toHaveLength(1);
+    expect(gigs[0]?.artists).toEqual([
+      "West Coast Philharmonic Orchestra",
+      "Emma Matthews",
+      "Samuel Parry"
+    ]);
+  });
+
   it("repairs parsed Humanitix artists from stored lineup metadata", () => {
     const extraction = humanitixPerthMusicSource.repairArtists?.({
       structuredEvent: buildStructuredEvent({
