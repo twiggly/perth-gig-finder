@@ -405,6 +405,38 @@ describe("moshtix wa source adapter", () => {
     });
   });
 
+  it("strips Moshtix special-guest labels while preserving headliner order", () => {
+    const extraction = extractMoshtixArtists({
+      title: "Stereolab | with special guests Mick Harvey & Amanda Acevedo",
+      descriptionHtml: null,
+      structuredEvent: {
+        performers: [{ name: "special guests Mick Harvey & Amanda Acevedo" }]
+      },
+      eventData: {
+        name: "Stereolab | with special guests Mick Harvey & Amanda Acevedo",
+        artists: ["special guests Mick Harvey & Amanda Acevedo"],
+        venue: {
+          name: "Freo.Social"
+        },
+        client: {
+          name: "Freo.Social"
+        }
+      },
+      venue: {
+        name: "Freo.Social",
+        slug: "freo-social",
+        suburb: "Fremantle",
+        address: null,
+        websiteUrl: null
+      }
+    });
+
+    expect(extraction).toEqual({
+      artists: ["Stereolab", "Mick Harvey & Amanda Acevedo"],
+      artistExtractionKind: "structured"
+    });
+  });
+
   it("drops noisy Moshtix title support placeholders", () => {
     const extraction = extractMoshtixArtists({
       title: "Fever Dream with Alias Error + Special Guest TBA + Local Supports TBA + More",
