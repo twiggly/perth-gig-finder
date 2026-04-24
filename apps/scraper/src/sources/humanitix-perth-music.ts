@@ -32,6 +32,7 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const DEFAULT_START_HOUR = 12;
 const PERTH_OFFSET_SUFFIX = "+08:00";
 const MAX_DISCOVERY_PAGES = 12;
+const DETAIL_FETCH_BATCH_SIZE = 8;
 const GENERIC_DESCRIPTION_PREFIX = "Get tickets on Humanitix";
 
 const PERTH_METRO_LOCALITIES = new Set([
@@ -1423,22 +1424,45 @@ export const humanitixPerthMusicSource: SourceAdapter = {
       }
     }
 
-    for (const eventUrl of seenEventUrls) {
-      try {
-        const response = await fetchWithTimeout(fetchImpl, eventUrl);
+    const eventUrls = [...seenEventUrls];
 
-        if (!response.ok) {
-          throw new Error(`Humanitix event page returned status ${response.status}: ${eventUrl}`);
-        }
+    for (
+      let detailIndex = 0;
+      detailIndex < eventUrls.length;
+      detailIndex += DETAIL_FETCH_BATCH_SIZE
+    ) {
+      const batchResults = await Promise.all(
+        eventUrls
+          .slice(detailIndex, detailIndex + DETAIL_FETCH_BATCH_SIZE)
+          .map(async (eventUrl) => {
+            try {
+              const response = await fetchWithTimeout(fetchImpl, eventUrl);
 
-        gigs.push(
-          ...normalizeHumanitixDetailPage({
-            html: await response.text(),
-            eventUrl
+              if (!response.ok) {
+                throw new Error(
+                  `Humanitix event page returned status ${response.status}: ${eventUrl}`
+                );
+              }
+
+              return {
+                gigs: normalizeHumanitixDetailPage({
+                  html: await response.text(),
+                  eventUrl
+                }),
+                failedCount: 0
+              };
+            } catch {
+              return {
+                gigs: [],
+                failedCount: 1
+              };
+            }
           })
-        );
-      } catch {
-        failedCount += 1;
+      );
+
+      for (const result of batchResults) {
+        gigs.push(...result.gigs);
+        failedCount += result.failedCount;
       }
     }
 
