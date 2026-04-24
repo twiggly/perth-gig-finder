@@ -97,7 +97,11 @@ class MemoryGigStore implements GigStore {
   readonly mirroredImagePaths = new Map<string, string>();
   readonly mirroredImageCalls: string[] = [];
   readonly syncArtistCallBatches: string[][] = [];
+  readonly touchSourceGigsSeenBatches: string[][] = [];
   readonly failingImageUrls = new Set<string>();
+  findCanonicalGigCalls = 0;
+  saveGigCalls = 0;
+  upsertSourceGigCalls = 0;
   syncGigArtistsError: string | null = null;
   imageBucketEnsured = false;
 
@@ -257,6 +261,7 @@ class MemoryGigStore implements GigStore {
       excludeGigId?: string | null;
     }
   ): Promise<GigRecord | null> {
+    this.findCanonicalGigCalls += 1;
     const normalizedTitle = normalizeTitleForMatch(input.title);
     const canonicalTitle = normalizeCanonicalTitleForMatch(input.title);
 
@@ -302,6 +307,82 @@ class MemoryGigStore implements GigStore {
     return null;
   }
 
+  async tryReuseUnchangedSourceGig(input: {
+    sourceId: string;
+    gig: NormalizedGig;
+    venueId: string;
+    sourcePriority: number;
+  }): Promise<{ gigId: string; sourceGigId: string } | null> {
+    const existingSourceGig = await this.findSourceGig(
+      input.sourceId,
+      input.gig.externalId,
+      input.gig.checksum
+    );
+
+    if (!existingSourceGig) {
+      return null;
+    }
+
+    const normalizedArtists = normalizeArtistNames(input.gig.artists);
+
+    if (
+      existingSourceGig.externalId !== input.gig.externalId ||
+      existingSourceGig.checksum !== input.gig.checksum ||
+      existingSourceGig.sourceUrl !== input.gig.sourceUrl ||
+      existingSourceGig.startsAtPrecision !== input.gig.startsAtPrecision ||
+      existingSourceGig.sourceImageUrl !== input.gig.imageUrl ||
+      existingSourceGig.artistExtractionKind !== input.gig.artistExtractionKind ||
+      existingSourceGig.artistNames.length !== normalizedArtists.length ||
+      !existingSourceGig.artistNames.every(
+        (artist, index) => artist === normalizedArtists[index]
+      )
+    ) {
+      return null;
+    }
+
+    const attachedSourceGigs = this.listSourceGigsForSourceAndGig(
+      input.sourceId,
+      existingSourceGig.gigId
+    );
+
+    if (
+      attachedSourceGigs.length !== 1 ||
+      attachedSourceGigs[0]?.id !== existingSourceGig.id
+    ) {
+      return null;
+    }
+
+    const existingGig = this.gigs.get(existingSourceGig.gigId);
+
+    if (!existingGig) {
+      return null;
+    }
+
+    const expectedSlug = buildGigSlug({
+      venueSlug: input.gig.venue.slug,
+      startsAt: input.gig.startsAt,
+      title: input.gig.title
+    });
+
+    if (
+      existingGig.slug !== expectedSlug ||
+      existingGig.venueId !== input.venueId ||
+      existingGig.title !== input.gig.title ||
+      existingGig.startsAt !== input.gig.startsAt ||
+      existingGig.status !== input.gig.status ||
+      existingGig.description !== input.gig.description ||
+      existingGig.ticketUrl !== input.gig.ticketUrl ||
+      existingGig.sourceUrl !== input.gig.sourceUrl
+    ) {
+      return null;
+    }
+
+    return {
+      gigId: existingSourceGig.gigId,
+      sourceGigId: existingSourceGig.id
+    };
+  }
+
   async saveGig(input: {
     existingGigId: string | null;
     gig: NormalizedGig;
@@ -309,6 +390,8 @@ class MemoryGigStore implements GigStore {
     sourceId: string;
     sourcePriority: number;
   }): Promise<{ gig: GigRecord; inserted: boolean }> {
+    this.saveGigCalls += 1;
+
     if (input.existingGigId) {
       const existing = this.gigs.get(input.existingGigId);
 
@@ -422,6 +505,7 @@ class MemoryGigStore implements GigStore {
     inserted: boolean;
     sourceGig: SourceGigRecord;
   }> {
+    this.upsertSourceGigCalls += 1;
     const preferredIdentityKey = input.gig.externalId ?? input.gig.checksum;
     const existingByIdentity = await this.findSourceGig(
       input.sourceId,
@@ -492,6 +576,22 @@ class MemoryGigStore implements GigStore {
       inserted: !existing,
       sourceGig: nextRecord
     };
+  }
+
+  async touchSourceGigsSeen(sourceGigIds: string[], seenAt: string): Promise<void> {
+    const uniqueSourceGigIds = [...new Set(sourceGigIds)];
+    this.touchSourceGigsSeenBatches.push(uniqueSourceGigIds);
+
+    for (const sourceGigId of uniqueSourceGigIds) {
+      const existing = this.sourceGigs.get(sourceGigId);
+
+      if (existing) {
+        this.sourceGigs.set(sourceGigId, {
+          ...existing,
+          lastSeenAt: seenAt
+        });
+      }
+    }
   }
 
   async prepareSourceGigReattachment(input: {
@@ -752,6 +852,85 @@ describe("executeSourceRun", () => {
     expect(store.gigs.size).toBe(1);
     expect(store.sourceGigs.size).toBe(1);
     expect(store.imageBucketEnsured).toBe(false);
+  });
+
+  it("uses the unchanged source-gig fast path on clean reruns", async () => {
+    const store = new MemoryGigStore();
+    const source: SourceAdapter = {
+      slug: "oztix-wa",
+      name: "Oztix WA",
+      baseUrl: "https://www.oztix.com.au/search?states%5B0%5D=WA&q=",
+      priority: 10,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "oztix-wa",
+              externalId: "doctor-jazz",
+              sourceUrl: "https://tickets.oztix.com.au/outlet/event/doctor-jazz",
+              title: "Doctor Jazz",
+              status: "active",
+              artists: ["Doctor Jazz"]
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+
+    await executeSourceRun(store, source);
+    const existingSourceGig = [...store.sourceGigs.values()][0]!;
+    store.findCanonicalGigCalls = 0;
+    store.saveGigCalls = 0;
+    store.upsertSourceGigCalls = 0;
+
+    const result = await executeSourceRun(store, source);
+
+    expect(result.updatedCount).toBe(1);
+    expect(store.findCanonicalGigCalls).toBe(0);
+    expect(store.saveGigCalls).toBe(0);
+    expect(store.upsertSourceGigCalls).toBe(0);
+    expect(store.touchSourceGigsSeenBatches).toEqual([[existingSourceGig.id]]);
+    expect(store.syncArtistCallBatches).toHaveLength(1);
+  });
+
+  it("falls back to the full write path when an unchanged-checksum source updates public state", async () => {
+    const store = new MemoryGigStore();
+    let status: GigStatus = "active";
+    const source: SourceAdapter = {
+      slug: "oztix-wa",
+      name: "Oztix WA",
+      baseUrl: "https://www.oztix.com.au/search?states%5B0%5D=WA&q=",
+      priority: 10,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: "oztix-wa",
+              externalId: "doctor-jazz",
+              sourceUrl: "https://tickets.oztix.com.au/outlet/event/doctor-jazz",
+              title: "Doctor Jazz",
+              status,
+              artists: ["Doctor Jazz"]
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    };
+
+    await executeSourceRun(store, source);
+    status = "cancelled";
+    store.saveGigCalls = 0;
+    store.upsertSourceGigCalls = 0;
+
+    await executeSourceRun(store, source);
+
+    expect(store.saveGigCalls).toBe(1);
+    expect(store.upsertSourceGigCalls).toBe(1);
+    expect([...store.gigs.values()][0]?.status).toBe("cancelled");
   });
 
   it("syncs canonical artists once per source run using all touched gig ids", async () => {

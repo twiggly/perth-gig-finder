@@ -68,6 +68,19 @@ class MirrorOnlyStore implements GigStore {
     throw new Error("not implemented");
   }
 
+  async tryReuseUnchangedSourceGig(_input: {
+    sourceId: string;
+    gig: NormalizedGig;
+    venueId: string;
+    sourcePriority: number;
+  }): Promise<{ gigId: string; sourceGigId: string } | null> {
+    throw new Error("not implemented");
+  }
+
+  async touchSourceGigsSeen(_sourceGigIds: string[], _seenAt: string): Promise<void> {
+    throw new Error("not implemented");
+  }
+
   async findCanonicalGig(
     _input: {
       venueId: string;
@@ -163,7 +176,10 @@ describe("mirrorPendingSourceGigImages", () => {
       id: "source-gig-1",
       gigId: "gig-1",
       sourceSlug: "oztix-wa",
+      externalId: "doctor-jazz",
       identityKey: "doctor-jazz",
+      checksum: "doctor-jazz-checksum",
+      sourceUrl: "https://tickets.oztix.com.au/outlet/event/doctor-jazz",
       startsAtPrecision: "exact",
       artistNames: [],
       artistExtractionKind: "unknown",
@@ -198,7 +214,10 @@ describe("mirrorPendingSourceGigImages", () => {
         id: "source-gig-2",
         gigId: "gig-2",
         sourceSlug: "oztix-wa",
+        externalId: "portrait-night",
         identityKey: "portrait-night",
+        checksum: "portrait-night-checksum",
+        sourceUrl: "https://tickets.oztix.com.au/outlet/event/portrait-night",
         startsAtPrecision: "exact",
         artistNames: [],
         artistExtractionKind: "unknown",
@@ -231,7 +250,10 @@ describe("mirrorPendingSourceGigImages", () => {
         id: "source-gig-3",
         gigId: "gig-3",
         sourceSlug: "oztix-wa",
+        externalId: "michael-vdelli",
         identityKey: "michael-vdelli",
+        checksum: "michael-vdelli-checksum",
+        sourceUrl: "https://tickets.oztix.com.au/outlet/event/michael-vdelli",
         startsAtPrecision: "exact",
         artistNames: [],
         artistExtractionKind: "unknown",
