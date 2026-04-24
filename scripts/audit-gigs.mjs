@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 
 const DEFAULT_EXAMPLE_LIMIT = 10;
 const DEFAULT_FUZZY_THRESHOLD = 0.72;
+const EXPECTED_NO_IMAGE_SOURCE_NAMES = new Set(["The Bird"]);
 const execFileAsync = promisify(execFile);
 
 function printUsage() {
@@ -466,6 +467,7 @@ function findArtistPlaceholderLeaks(gigs) {
 
 function classifyImages(gigs) {
   const renderable = [];
+  const expectedNoImage = [];
   const invalidMetadata = [];
   const noImage = [];
 
@@ -488,12 +490,15 @@ function classifyImages(gigs) {
         title: gig.title,
         venue: gig.venue_name
       });
+    } else if (EXPECTED_NO_IMAGE_SOURCE_NAMES.has(gig.source_name ?? "")) {
+      expectedNoImage.push(formatGigSummary(gig));
     } else {
       noImage.push(formatGigSummary(gig));
     }
   }
 
   return {
+    expectedNoImage,
     invalidMetadata,
     noImage,
     renderableCount: renderable.length
@@ -625,6 +630,7 @@ function buildAudit(payload, options, target) {
       exactDuplicateCount: exactDuplicates.length,
       fuzzyDuplicateCount: fuzzyDuplicates.length,
       imageStats: {
+        expectedNoImageCount: images.expectedNoImage.length,
         invalidMetadataCount: images.invalidMetadata.length,
         noImageCount: images.noImage.length,
         renderableCount: images.renderableCount
@@ -674,6 +680,7 @@ function printHumanReport(audit, options) {
   console.log(`- renderable images: ${audit.checks.imageStats.renderableCount}`);
   console.log(`- invalid image metadata: ${audit.checks.imageStats.invalidMetadataCount}`);
   console.log(`- no-image public gigs: ${audit.checks.imageStats.noImageCount}`);
+  console.log(`- expected no-image public gigs: ${audit.checks.imageStats.expectedNoImageCount}`);
   console.log(`- Humanitix/Ticketek non-music candidates: ${audit.checks.nonMusicLeakageCandidateCount}`);
   console.log(`- missing artist candidates: ${audit.checks.missingArtistCandidateCount}`);
 
