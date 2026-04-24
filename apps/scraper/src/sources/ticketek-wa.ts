@@ -30,6 +30,7 @@ const MAX_PAGES_PER_QUERY = 3;
 const SEARCH_API_PAGE_SIZE = 20;
 const SEARCH_API_VISITOR_ID = "123";
 const REQUEST_TIMEOUT_MS = 20_000;
+const TITLE_SEARCH_CONCURRENCY = 4;
 
 const SEARCH_QUERIES = [
   "concerts perth",
@@ -903,6 +904,51 @@ async function hydrateExactTimeLookupFromTitleSearch(
   }
 }
 
+async function hydrateTicketekSearchApiLookup(
+  query: string,
+  exactTimeLookup: Map<string, string | null>,
+  fetchImpl: typeof fetch
+): Promise<void> {
+  let nextPageToken: string | null | undefined = null;
+
+  for (let pageNumber = 1; pageNumber <= MAX_PAGES_PER_QUERY; pageNumber += 1) {
+    const apiResponse = await fetchTicketekSearchApiPage(query, fetchImpl, nextPageToken);
+    mergeTicketekSearchApiResponseIntoExactTimeLookup(exactTimeLookup, apiResponse);
+
+    if (!apiResponse.paging?.hasMore || !apiResponse.paging?.nextPageToken) {
+      break;
+    }
+
+    nextPageToken = apiResponse.paging.nextPageToken;
+  }
+}
+
+async function runTicketekTitleHydrationBatch(input: {
+  listings: TicketekSearchListing[];
+  exactTimeLookup: Map<string, string | null>;
+  fetchImpl: typeof fetch;
+  titleQueryCache: Set<string>;
+}): Promise<void> {
+  for (
+    let listingIndex = 0;
+    listingIndex < input.listings.length;
+    listingIndex += TITLE_SEARCH_CONCURRENCY
+  ) {
+    await Promise.all(
+      input.listings
+        .slice(listingIndex, listingIndex + TITLE_SEARCH_CONCURRENCY)
+        .map((listing) =>
+          hydrateExactTimeLookupFromTitleSearch(
+            listing,
+            input.exactTimeLookup,
+            input.fetchImpl,
+            input.titleQueryCache
+          )
+        )
+    );
+  }
+}
+
 export const ticketekWaSource: SourceAdapter = {
   slug: "ticketek-wa",
   name: "Ticketek WA",
@@ -915,6 +961,13 @@ export const ticketekWaSource: SourceAdapter = {
     const exactTimeLookup = new Map<string, string | null>();
     const titleQueryCache = new Set<string>();
     let failedCount = 0;
+    const searchApiTasks = SEARCH_QUERIES.map(async (query) => {
+      try {
+        await hydrateTicketekSearchApiLookup(query, exactTimeLookup, fetchImpl);
+      } catch {
+        // Keep the source usable with date-only fallbacks if the structured API is unavailable.
+      }
+    });
 
     for (const query of SEARCH_QUERIES) {
       try {
@@ -968,42 +1021,26 @@ export const ticketekWaSource: SourceAdapter = {
       } catch {
         failedCount += 1;
       }
-
-      try {
-        let nextPageToken: string | null | undefined = null;
-
-        for (let pageNumber = 1; pageNumber <= MAX_PAGES_PER_QUERY; pageNumber += 1) {
-          const apiResponse = await fetchTicketekSearchApiPage(query, fetchImpl, nextPageToken);
-          mergeTicketekSearchApiResponseIntoExactTimeLookup(exactTimeLookup, apiResponse);
-
-          if (!apiResponse.paging?.hasMore || !apiResponse.paging?.nextPageToken) {
-            break;
-          }
-
-          nextPageToken = apiResponse.paging.nextPageToken;
-        }
-      } catch {
-        // Keep the source usable with date-only fallbacks if the structured API is unavailable.
-      }
     }
 
-    const enrichedListings: TicketekSearchListing[] = [];
+    await Promise.all(searchApiTasks);
 
-    for (const listing of listingsById.values()) {
-      let enrichedListing = enrichTicketekListingWithExactTime(listing, exactTimeLookup);
+    const listings = [...listingsById.values()];
+    const listingsNeedingTitleHydration = listings.filter(
+      (listing) =>
+        enrichTicketekListingWithExactTime(listing, exactTimeLookup).startsAtPrecision !== "exact"
+    );
 
-      if (enrichedListing.startsAtPrecision !== "exact") {
-        await hydrateExactTimeLookupFromTitleSearch(
-          listing,
-          exactTimeLookup,
-          fetchImpl,
-          titleQueryCache
-        );
-        enrichedListing = enrichTicketekListingWithExactTime(listing, exactTimeLookup);
-      }
+    await runTicketekTitleHydrationBatch({
+      listings: listingsNeedingTitleHydration,
+      exactTimeLookup,
+      fetchImpl,
+      titleQueryCache
+    });
 
-      enrichedListings.push(enrichedListing);
-    }
+    const enrichedListings = listings.map((listing) =>
+      enrichTicketekListingWithExactTime(listing, exactTimeLookup)
+    );
 
     const gigs = enrichedListings
       .map((listing) => normalizeTicketekListing(listing))
