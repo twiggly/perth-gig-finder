@@ -343,6 +343,128 @@ describe("moshtix wa source adapter", () => {
     expect(gig.artistExtractionKind).toBe("parsed_text");
   });
 
+  it("parses title support markers and drops placeholder support names", () => {
+    const extraction = extractMoshtixArtists({
+      title: "Fever Dream W/ Alias Error + More",
+      descriptionHtml: null,
+      structuredEvent: null,
+      eventData: {
+        name: "Fever Dream W/ Alias Error + More",
+        artists: [],
+        venue: {
+          name: "The Bird"
+        },
+        client: {
+          name: "The Bird"
+        }
+      },
+      venue: {
+        name: "The Bird",
+        slug: "the-bird",
+        suburb: "Northbridge",
+        address: null,
+        websiteUrl: null
+      }
+    });
+
+    expect(extraction).toEqual({
+      artists: ["Fever Dream", "Alias Error"],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
+  it("uses title support marker order when Moshtix structured artists only name the support", () => {
+    const extraction = extractMoshtixArtists({
+      title: "Fever Dream W/ Alias Error + More",
+      descriptionHtml: null,
+      structuredEvent: {
+        performers: [{ name: "Alias Error" }]
+      },
+      eventData: {
+        name: "Fever Dream W/ Alias Error + More",
+        artists: ["Alias Error"],
+        venue: {
+          name: "The Bird"
+        },
+        client: {
+          name: "The Bird"
+        }
+      },
+      venue: {
+        name: "The Bird",
+        slug: "the-bird",
+        suburb: "Northbridge",
+        address: null,
+        websiteUrl: null
+      }
+    });
+
+    expect(extraction).toEqual({
+      artists: ["Fever Dream", "Alias Error"],
+      artistExtractionKind: "structured"
+    });
+  });
+
+  it("drops noisy Moshtix title support placeholders", () => {
+    const extraction = extractMoshtixArtists({
+      title: "Fever Dream with Alias Error + Special Guest TBA + Local Supports TBA + More",
+      descriptionHtml: null,
+      structuredEvent: null,
+      eventData: {
+        name: "Fever Dream with Alias Error + Special Guest TBA + Local Supports TBA + More",
+        artists: [],
+        venue: {
+          name: "The Bird"
+        },
+        client: {
+          name: "The Bird"
+        }
+      },
+      venue: {
+        name: "The Bird",
+        slug: "the-bird",
+        suburb: "Northbridge",
+        address: null,
+        websiteUrl: null
+      }
+    });
+
+    expect(extraction).toEqual({
+      artists: ["Fever Dream", "Alias Error"],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
+  it("does not treat generic with titles as support lineups", () => {
+    const extraction = extractMoshtixArtists({
+      title: "An Evening with Alias Error",
+      descriptionHtml: null,
+      structuredEvent: null,
+      eventData: {
+        name: "An Evening with Alias Error",
+        artists: [],
+        venue: {
+          name: "The Bird"
+        },
+        client: {
+          name: "The Bird"
+        }
+      },
+      venue: {
+        name: "The Bird",
+        slug: "the-bird",
+        suburb: "Northbridge",
+        address: null,
+        websiteUrl: null
+      }
+    });
+
+    expect(extraction).toEqual({
+      artists: [],
+      artistExtractionKind: "unknown"
+    });
+  });
+
   it("parses featured headliners and support names from Moshtix concert copy", () => {
     const extraction = extractMoshtixArtists({
       title: "Remembering The Strike; featuring Shane Howard (Goanna Band) and more!",
