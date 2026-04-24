@@ -647,6 +647,58 @@ describe("moshtix wa source adapter", () => {
     });
   });
 
+  it("parses bare ft. and featuring performers from Moshtix titles", () => {
+    const baseInput = {
+      descriptionHtml: null,
+      structuredEvent: null,
+      eventData: {
+        artists: [],
+        venue: {
+          name: "The Rechabite"
+        },
+        client: {
+          name: "The Rechabite"
+        }
+      },
+      venue: {
+        name: "The Rechabite",
+        slug: "the-rechabite",
+        suburb: "Northbridge",
+        address: null,
+        websiteUrl: null
+      }
+    };
+
+    expect(
+      extractMoshtixArtists({
+        ...baseInput,
+        title: "THC ft. Houseology DJ's"
+      })
+    ).toEqual({
+      artists: ["Houseology DJ's"],
+      artistExtractionKind: "parsed_text"
+    });
+    expect(
+      extractMoshtixArtists({
+        ...baseInput,
+        title: "Flamenco Experience featuring Bernard van Rossum"
+      })
+    ).toEqual({
+      artists: ["Bernard van Rossum"],
+      artistExtractionKind: "parsed_text"
+    });
+    expect(
+      extractMoshtixArtists({
+        ...baseInput,
+        title:
+          "WAYJO Presents Queer Anthems featuring Queency with the Resonance Jazz Orchestra"
+      })
+    ).toEqual({
+      artists: ["Queency", "Resonance Jazz Orchestra"],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
   it("parses DJ artists from Moshtix venue-session descriptions", () => {
     const listing = parseMoshtixSearchPage(
       buildSearchPage({

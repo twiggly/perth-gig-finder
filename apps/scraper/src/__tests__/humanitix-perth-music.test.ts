@@ -242,6 +242,38 @@ describe("humanitix perth music source adapter", () => {
     expect(gigs[0]?.startsAtPrecision).toBe("date");
   });
 
+  it("parses explicit ft. artist lists from Humanitix titles", () => {
+    const gigs = normalizeHumanitixDetailPage({
+      eventUrl: "https://events.humanitix.com/ink-eaters-underworld-release-party",
+      html: buildEventPage({
+        title:
+          "Ink Eater’s The Underworld Release Party Ft Secondhandhigh, Hexegod and Fragile Machines",
+        canonicalUrl: "https://events.humanitix.com/ink-eaters-underworld-release-party",
+        ogDescription: "A heavy live music release party in Fremantle.",
+        imageUrl: "https://images.humanitix.com/i/ink-eater@seo-500.jpg",
+        twitterLocation: "Fremantle Buffalo Club, 54 High St, Fremantle WA 6160, Australia",
+        twitterDate: "Saturday 25th April 2026",
+        structuredEvents: buildStructuredEvent({
+          title:
+            "Ink Eater’s The Underworld Release Party Ft Secondhandhigh, Hexegod and Fragile Machines",
+          url: "https://events.humanitix.com/ink-eaters-underworld-release-party",
+          startDate: "2026-04-25T19:30:00+0800",
+          venueName: "Fremantle Buffalo Club",
+          streetAddress: "54 High St, Fremantle WA 6160, Australia",
+          locality: "Fremantle",
+          postalCode: "6160",
+          description: "A heavy live music release party in Fremantle."
+        })
+      })
+    });
+
+    expect(gigs).toHaveLength(1);
+    expect(gigs[0]).toMatchObject({
+      artists: ["Secondhandhigh", "Hexegod", "Fragile Machines"],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
   it("keeps performer names while dropping sentence-like Humanitix performer descriptions", () => {
     const gigs = normalizeHumanitixDetailPage({
       eventUrl: "https://events.humanitix.com/georgina-dacheff-single-launch",

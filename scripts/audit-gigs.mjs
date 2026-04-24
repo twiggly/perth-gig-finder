@@ -405,11 +405,16 @@ function findNonMusicLeakageCandidates(gigs) {
 
 function findMissingArtistCandidates(gigs) {
   const explicitLineupPattern =
-    /\b(?:feat\.?|ft\.?|featuring|with special guest|with support|support from|lineup|presents)\b|\+/i;
+    /\b(?:feat\.?|ft\.?|featuring|with special guest|with support|support from|lineup|presents)\b/i;
+  const likelyArtistPlusPattern =
+    /\b[A-Za-z][A-Za-z0-9'’&./-]*(?:\s+[A-Za-z][A-Za-z0-9'’&./-]*){0,5}\s+\+\s+[A-Za-z][A-Za-z0-9'’&./-]*(?:\s+[A-Za-z][A-Za-z0-9'’&./-]*){0,5}\b/;
 
   return gigs
     .filter((gig) => gig.artist_names.length === 0)
-    .filter((gig) => explicitLineupPattern.test([gig.title, gig.description].join(" ")))
+    .filter((gig) => {
+      const text = [gig.title, gig.description].join(" ");
+      return explicitLineupPattern.test(text) || likelyArtistPlusPattern.test(text);
+    })
     .map(formatGigSummary);
 }
 
