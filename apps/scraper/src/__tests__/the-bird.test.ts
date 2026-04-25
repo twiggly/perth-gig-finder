@@ -31,39 +31,46 @@ describe("the bird source adapter", () => {
   });
 
   it("normalizes a valid dated row with a real ticket link", () => {
-    const normalized = normalizeTheBirdRow({
-      Date: "24/04/2026",
-      Day: "FRIDAY",
-      "Event Title": "Dani Dray 'Tell Me' Single Launch",
-      Info: "Doors 8pm | Music until 11:45pm",
-      "Ticket Link":
-        "https://tickets.oztix.com.au/outlet/event/bc602244-415d-45de-86ac-a0a4b99940c0?utm_source=bird"
-    });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-23T16:00:00.000Z"));
 
-    expect(normalized).toMatchObject({
-      sourceSlug: "the-bird",
-      externalId: "2026-04-24-dani-dray-tell-me-single-launch",
-      sourceUrl:
-        "https://www.williamstreetbird.com/comingup#2026-04-24-dani-dray-tell-me-single-launch",
-      ticketUrl:
-        "https://tickets.oztix.com.au/outlet/event/bc602244-415d-45de-86ac-a0a4b99940c0",
-      title: "Dani Dray 'Tell Me' Single Launch",
-      description: "Doors 8pm | Music until 11:45pm",
-      imageUrl: null,
-      status: "active",
-      startsAt: "2026-04-24T12:00:00.000Z",
-      startsAtPrecision: "exact",
-      endsAt: null,
-      venue: {
-        name: "The Bird",
-        slug: "the-bird",
-        suburb: "Northbridge",
-        address: "181 William Street, Northbridge WA 6003",
-        websiteUrl: "https://www.williamstreetbird.com/"
-      },
-      artists: [],
-      artistExtractionKind: "unknown"
-    });
+    try {
+      const normalized = normalizeTheBirdRow({
+        Date: "24/04/2026",
+        Day: "FRIDAY",
+        "Event Title": "Dani Dray 'Tell Me' Single Launch",
+        Info: "Doors 8pm | Music until 11:45pm",
+        "Ticket Link":
+          "https://tickets.oztix.com.au/outlet/event/bc602244-415d-45de-86ac-a0a4b99940c0?utm_source=bird"
+      });
+
+      expect(normalized).toMatchObject({
+        sourceSlug: "the-bird",
+        externalId: "2026-04-24-dani-dray-tell-me-single-launch",
+        sourceUrl:
+          "https://www.williamstreetbird.com/comingup#2026-04-24-dani-dray-tell-me-single-launch",
+        ticketUrl:
+          "https://tickets.oztix.com.au/outlet/event/bc602244-415d-45de-86ac-a0a4b99940c0",
+        title: "Dani Dray 'Tell Me' Single Launch",
+        description: "Doors 8pm | Music until 11:45pm",
+        imageUrl: null,
+        status: "active",
+        startsAt: "2026-04-24T12:00:00.000Z",
+        startsAtPrecision: "exact",
+        endsAt: null,
+        venue: {
+          name: "The Bird",
+          slug: "the-bird",
+          suburb: "Northbridge",
+          address: "181 William Street, Northbridge WA 6003",
+          websiteUrl: "https://www.williamstreetbird.com/"
+        },
+        artists: [],
+        artistExtractionKind: "unknown"
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("normalizes blank and free ticket links to null", () => {

@@ -437,6 +437,42 @@ describe("moshtix wa source adapter", () => {
     });
   });
 
+  it("decodes Moshtix HTML entities before deduping artist names", () => {
+    const extraction = extractMoshtixArtists({
+      title: "SEUN KUTI & EGYPT 80",
+      descriptionHtml: null,
+      structuredEvent: {
+        performers: [
+          { name: "SEUN KUTI & EGYPT 80" },
+          { name: "SEUN KUTI" },
+          { name: "SEUN KUTI &amp; EGYPT 80" }
+        ]
+      },
+      eventData: {
+        name: "SEUN KUTI & EGYPT 80",
+        artists: ["SEUN KUTI & EGYPT 80", "SEUN KUTI", "SEUN KUTI &amp; EGYPT 80"],
+        venue: {
+          name: "Freo.Social"
+        },
+        client: {
+          name: "Freo.Social"
+        }
+      },
+      venue: {
+        name: "Freo.Social",
+        slug: "freo-social",
+        suburb: "Fremantle",
+        address: null,
+        websiteUrl: null
+      }
+    });
+
+    expect(extraction).toEqual({
+      artists: ["SEUN KUTI & EGYPT 80", "SEUN KUTI"],
+      artistExtractionKind: "structured"
+    });
+  });
+
   it("drops noisy Moshtix title support placeholders", () => {
     const extraction = extractMoshtixArtists({
       title: "Fever Dream with Alias Error + Special Guest TBA + Local Supports TBA + More",

@@ -346,6 +346,45 @@ describe("humanitix perth music source adapter", () => {
     expect(gigs[0]?.artistExtractionKind).toBe("structured");
   });
 
+  it("does not treat Humanitix social links and performer bios as artist names", () => {
+    const gigs = normalizeHumanitixDetailPage({
+      eventUrl: "https://events.humanitix.com/georgina-dacheff-single-launch",
+      html: buildEventPage({
+        title: "Georgina Dacheff Single Launch: KNOWING NO THING",
+        canonicalUrl: "https://events.humanitix.com/georgina-dacheff-single-launch",
+        ogDescription: "A single launch with support from Savanah Solomon.",
+        imageUrl: "https://images.humanitix.com/i/georgina@seo-500.jpg",
+        twitterLocation: "The Bird, 181 William St, Northbridge WA 6003, Australia",
+        twitterDate: "Thursday 7th May 2026",
+        eventId: "georgina-launch",
+        structuredEvents: buildStructuredEvent({
+          title: "Georgina Dacheff Single Launch: KNOWING NO THING",
+          url: "https://events.humanitix.com/georgina-dacheff-single-launch",
+          startDate: "2026-05-07T19:30:00+0800",
+          venueName: "The Bird",
+          streetAddress: "181 William St, Northbridge WA 6003, Australia",
+          locality: "Northbridge",
+          postalCode: "6003",
+          performers: [
+            {
+              name: "Georgina Dacheff",
+              description:
+                "tune in\nGeorgina Dacheff ··'s instagram\nher music blends gentle guitars, warm harmonies and vivid lyricism"
+            },
+            {
+              name: "Savanah Solomon",
+              description:
+                "listen closely\nSavanah Solomon ··'s spotify\nSavanah’s songs explore hope, heartbreak and healing"
+            }
+          ]
+        })
+      })
+    });
+
+    expect(gigs).toHaveLength(1);
+    expect(gigs[0]?.artists).toEqual(["Georgina Dacheff", "Savanah Solomon"]);
+  });
+
   it("parses lineup artists from Humanitix page sections when structured performers are missing", () => {
     const gigs = normalizeHumanitixDetailPage({
       eventUrl: "https://events.humanitix.com/alt-thursdays",

@@ -234,7 +234,16 @@ const HUMANITIX_GENERIC_ARTIST_WORDS = new Set([
   "keywords",
   "lineup",
   "artists",
-  "description"
+  "description",
+  "event",
+  "events",
+  "performance",
+  "play",
+  "shows",
+  "sound",
+  "style",
+  "tickets",
+  "venue"
 ]);
 
 interface HumanitixStructuredAddress {
@@ -883,6 +892,7 @@ function normalizeHumanitixArtistToken(value: string): string {
   return normalizeWhitespace(
     value
       .replace(HUMANITIX_ARTIST_LABEL_PREFIX_PATTERN, "")
+      .replace(/^(?:and|&)\s+/i, "")
       .replace(/\s*\/\/\s*[^,;+•]+$/u, "")
       .replace(HUMANITIX_ARTIST_TRAILING_NOISE_PATTERN, "")
       .replace(/^[-–•]+|[-–•]+$/g, "")
@@ -910,26 +920,53 @@ function isLikelyArtistName(value: string): boolean {
     return false;
   }
 
-  if (HUMANITIX_GENERIC_ARTIST_WORDS.has(value.toLowerCase())) {
+  const normalized = normalizeWhitespace(value);
+  const normalizedLower = normalized.toLowerCase();
+
+  if (HUMANITIX_GENERIC_ARTIST_WORDS.has(normalizedLower)) {
     return false;
   }
 
-  if (value.length > 80) {
+  if (normalized.length > 80) {
     return false;
   }
 
-  if (/[.?!,]/.test(value) || /https?:\/\//i.test(value) || /@/.test(value)) {
+  if (/[.?!,]/.test(normalized) || /https?:\/\//i.test(normalized) || /@/.test(normalized)) {
     return false;
   }
 
-  const wordCount = value.split(/\s+/).filter(Boolean).length;
+  if (
+    /\b(?:instagram|website|spotify|facebook|tiktok|ticket|tickets)\b/i.test(
+      normalized
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    /^(?:at|her|his|their|making|listen|tune|style|shows?|music\s+by|carried\s+by)\b/i.test(
+      normalized
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    /\b(?:annual tribute festivals|music blends|gentle guitars|warm harmonies|vivid lyricism|songs explore|heartbreak|healing|popular choice|voice that|town of|city of|wine|coffee|dinner service|bakery|wearables|puzzles|lunch|culture ireland|small projects|liquid architecture|audio foundation|frontrunner av|sponsor|soundwalk|pre-gathering|gathering|playlists|late night set|whimsy|spiralling|bar)\b/i.test(
+      normalized
+    )
+  ) {
+    return false;
+  }
+
+  const wordCount = normalized.split(/\s+/).filter(Boolean).length;
 
   if (wordCount > 8) {
     return false;
   }
 
-  return !/\b(is|are|from|with|and carried|writing|performs|supported|building|offering|reflects|creating|co-creates|beyond the stage|crowned|journey|grounded|audiences|acclaimed|contemporary|orchestra presents|wide-ranging|repertoire|spanning|classical)\b/i.test(
-    value
+  return !/\b(is|are|from|with|and carried|writing|performs|presents?|present|hosts?|launch(?:es)?|supported|building|offering|reflects|creating|co-creates|beyond the stage|crowned|journey|grounded|audiences|acclaimed|contemporary|orchestra presents|wide-ranging|repertoire|spanning|classical)\b/i.test(
+    normalized
   );
 }
 
@@ -941,10 +978,16 @@ function extractStructuredHumanitixArtists(structuredEvent: HumanitixStructuredE
   const artists: string[] = [];
 
   for (const performer of candidates) {
-    const performerName = normalizeWhitespace(performer.name ?? "");
+    const rawPerformerName = normalizeWhitespace(performer.name ?? "");
+    const performerName = normalizeHumanitixArtistToken(rawPerformerName);
+    const namesAreInDescription = /\bincluding:?\s*$/i.test(rawPerformerName);
 
-    if (performerName && !performerName.toLowerCase().endsWith("including:")) {
+    if (performerName && !namesAreInDescription && isLikelyArtistName(performerName)) {
       artists.push(performerName);
+    }
+
+    if (!namesAreInDescription) {
+      continue;
     }
 
     for (const name of splitArtistNames(performer.description ?? "")) {

@@ -15,6 +15,8 @@ import { queryAlgolia } from "../algolia";
 import type { SourceAdapter, SourceAdapterResult } from "../types";
 
 const SOURCE_URL = "https://milkbarperth.com.au/gigs/";
+const MILK_BAR_ARTIST_SEPARATOR_PATTERN = /\s*(?:,|\+|;|•)\s*/u;
+const MILK_BAR_FEATURE_PREFIX_PATTERN = /^(?:ft\.?|feat\.?|featuring)\s+/i;
 
 interface MilkBarSearchConfig {
   appId: string;
@@ -125,13 +127,41 @@ export function extractMilkBarArtists(hit: MilkBarHit) {
   const fromPerformances = Array.isArray(hit.Performances)
     ? hit.Performances.map((performance) => performance.Name ?? "")
     : [];
+  const structuredArtists = [...fromBands, ...fromPerformances]
+    .flatMap(splitMilkBarArtistToken)
+    .filter(Boolean);
+  const lineupArtists = splitMilkBarArtistToken(hit.SpecialGuests);
 
-  return createArtistExtraction(
-    [...fromBands, ...fromPerformances]
-      .map((artist) => normalizeWhitespace(artist))
-      .filter(Boolean),
-    "structured"
+  if (structuredArtists.length > 0) {
+    return createArtistExtraction(structuredArtists, "structured");
+  }
+
+  return createArtistExtraction(lineupArtists, "explicit_lineup");
+}
+
+function splitMilkBarArtistToken(value: string | null | undefined): string[] {
+  const normalized = normalizeWhitespace(value ?? "").replace(
+    MILK_BAR_FEATURE_PREFIX_PATTERN,
+    ""
   );
+
+  if (!normalized) {
+    return [];
+  }
+
+  return normalized
+    .split(MILK_BAR_ARTIST_SEPARATOR_PATTERN)
+    .flatMap((artist) => {
+      const trimmed = normalizeWhitespace(artist);
+
+      if (/^[A-Z0-9 '&./-]+$/.test(trimmed) && /\s&\s/.test(trimmed)) {
+        return trimmed.split(/\s*&\s*/);
+      }
+
+      return [trimmed];
+    })
+    .map((artist) => normalizeWhitespace(artist))
+    .filter(Boolean);
 }
 
 function normalizeGigStatus(hit: MilkBarHit, title: string): GigStatus {

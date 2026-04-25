@@ -4,10 +4,12 @@ import {
   areCanonicalTitlesCompatible,
   buildGigChecksum,
   buildGigSlug,
+  decodeHtmlEntities,
   normalizeCanonicalTitleForMatch,
   normalizeTitleForMatch,
   normalizeVenueName,
   normalizeVenueWebsiteUrl,
+  normalizeWhitespace,
   slugify,
   slugifyVenueName
 } from "./index";
@@ -31,6 +33,13 @@ describe("normalization helpers", () => {
   it("normalizes titles for canonical matching", () => {
     expect(normalizeTitleForMatch("TIME  ")).toBe("time");
     expect(normalizeTitleForMatch("Time")).toBe("time");
+  });
+
+  it("decodes common HTML entities before normalizing display text", () => {
+    expect(decodeHtmlEntities("Mojo&#39;s Bar &amp; Grill")).toBe("Mojo's Bar & Grill");
+    expect(normalizeWhitespace("Cleaver Street &amp; Co. Studio")).toBe(
+      "Cleaver Street & Co. Studio"
+    );
   });
 
   it("normalizes canonical titles without changing checksum matching rules", () => {
