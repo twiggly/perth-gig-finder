@@ -211,6 +211,7 @@ const HUMANITIX_TITLE_PLUS_PATTERN = /^(.+?)\s+\+\s+(.+)$/;
 const HUMANITIX_TITLE_LAUNCH_PATTERN = /^(.+?)\s+(?:single|ep|album)\s+launch\b/i;
 const HUMANITIX_TITLE_SUPPORT_PATTERN =
   /^(.+?)\s+(?:with|w\/)\s+support\s+from\s+(.+)$/i;
+const HUMANITIX_TITLE_WITH_LINEUP_PATTERN = /\bw[/.]\s+(.+)$/i;
 const HUMANITIX_EXPLICIT_ARTIST_PATTERNS = [
   /\b(?:featuring|feat\.?|ft\.?)\s+(.+?)(?:\s+\/\/|[.!?]|$)/i,
   /\bwith support from\s+(.+?)(?:\s+\/\/|[.!?]|$)/i,
@@ -1042,6 +1043,18 @@ function parseHumanitixTitleArtists(title: string): string[] {
     candidates.push(
       ...splitHumanitixArtistLine(supportMatch[1]),
       ...splitHumanitixArtistLine(supportMatch[2])
+    );
+  }
+
+  const withLineupMatch = normalized.match(HUMANITIX_TITLE_WITH_LINEUP_PATTERN);
+
+  if (withLineupMatch?.[1]) {
+    candidates.push(
+      ...splitHumanitixArtistLine(
+        withLineupMatch[1]
+          .replace(/\s+@\s+.+$/i, "")
+          .replace(/\s+&\s+more\b.*$/i, "")
+      )
     );
   }
 

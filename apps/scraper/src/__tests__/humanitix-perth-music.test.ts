@@ -423,6 +423,36 @@ describe("humanitix perth music source adapter", () => {
     expect(gigs[0]?.artistExtractionKind).toBe("parsed_text");
   });
 
+  it("parses concise Humanitix title w/ lineups without keeping venue suffixes", () => {
+    const gigs = normalizeHumanitixDetailPage({
+      eventUrl: "https://events.humanitix.com/perm-res-alldayer-2",
+      html: buildEventPage({
+        title: "Perm Res Alldayer #2 w/ Stepmother, Loose Lips & more @ Seasonal Brewing, Perth",
+        canonicalUrl: "https://events.humanitix.com/perm-res-alldayer-2",
+        ogDescription: "A live music alldayer with Perth bands.",
+        imageUrl: "https://images.humanitix.com/i/perm-res@seo-500.jpg",
+        twitterLocation: "Seasonal Brewing Co, 175 Guildford Rd, Maylands WA 6051, Australia",
+        twitterDate: "Saturday 23rd May 2026",
+        eventId: "perm-res-alldayer-2",
+        structuredEvents: buildStructuredEvent({
+          title: "Perm Res Alldayer #2 w/ Stepmother, Loose Lips & more @ Seasonal Brewing, Perth",
+          url: "https://events.humanitix.com/perm-res-alldayer-2",
+          startDate: "2026-05-23T14:00:00+0800",
+          venueName: "Seasonal Brewing Co",
+          streetAddress: "175 Guildford Rd, Maylands WA 6051, Australia",
+          locality: "Maylands",
+          postalCode: "6051",
+          description: "A live music alldayer with Perth bands."
+        }),
+        paragraphs: ["A live music alldayer with Perth bands."]
+      })
+    });
+
+    expect(gigs).toHaveLength(1);
+    expect(gigs[0]?.artists).toEqual(["Stepmother", "Loose Lips"]);
+    expect(gigs[0]?.artistExtractionKind).toBe("parsed_text");
+  });
+
   it("merges explicit support artists from page text with structured Humanitix performers", () => {
     const gigs = normalizeHumanitixDetailPage({
       eventUrl: "https://events.humanitix.com/headline-artist-live",

@@ -330,6 +330,7 @@ function normalizeTitle(value: string | null | undefined): string {
 function normalizeMoshtixIdentity(value: string): string {
   return normalizeWhitespace(value)
     .toLowerCase()
+    .replace(/\([^)]*\)/g, " ")
     .replace(/&/g, " and ")
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/^the\s+/, "")
@@ -584,6 +585,24 @@ function parseMoshtixDescriptionArtists(descriptionHtml: string | null | undefin
   return candidates;
 }
 
+function dedupeMoshtixArtistsByIdentity(artists: string[]): string[] {
+  const seenIdentities = new Set<string>();
+  const dedupedArtists: string[] = [];
+
+  for (const artist of artists) {
+    const identity = normalizeMoshtixIdentity(artist);
+
+    if (!identity || seenIdentities.has(identity)) {
+      continue;
+    }
+
+    seenIdentities.add(identity);
+    dedupedArtists.push(artist);
+  }
+
+  return dedupedArtists;
+}
+
 function buildPostalAddress(address: MoshtixStructuredAddress | undefined): string | null {
   if (!address) {
     return null;
@@ -773,10 +792,16 @@ export function extractMoshtixArtists(input: {
       ? [...parsedTitleCandidates, ...candidates, ...parsedDescriptionCandidates]
       : [...candidates, ...parsedCandidates];
 
-    return createArtistExtraction(orderedCandidates, "structured");
+    return createArtistExtraction(
+      dedupeMoshtixArtistsByIdentity(orderedCandidates),
+      "structured"
+    );
   }
 
-  return createArtistExtraction(parsedCandidates, "parsed_text");
+  return createArtistExtraction(
+    dedupeMoshtixArtistsByIdentity(parsedCandidates),
+    "parsed_text"
+  );
 }
 
 function normalizeStatus(input: {

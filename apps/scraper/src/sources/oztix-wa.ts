@@ -134,6 +134,10 @@ const TITLE_HEADLINER_SEPARATOR_PATTERN = /\s[-–—:]\s|[,+]/;
 const OZTIX_BROKEN_EMOJI_QUESTION_RUN_PATTERN = /\?{3,}/g;
 const OZTIX_NOISY_ARTIST_FRAGMENT_PATTERN =
   /^(?:djs?\s+playing\s+the\s+best\s+of\b.*|support\s+set\s+of\b.*|the\s+greatest\s+emo|metalcore|alternative\s+tracks\s+of\s+all\s+time\b.*|hlh\/dod\s+after\s+party!?|friday\s+fright\s+night|past|present(?:\s+members?)?)$/i;
+const OZTIX_GENERIC_ARTIST_TOKEN_PATTERN =
+  /^(?:dj|band|live\s+abba\s+tribute\s+act|.+\btribute\s+set)$/i;
+const OZTIX_TITLE_LINEUP_NOISE_PATTERN =
+  /\b(?:party|night|brunch|rave|session|sessions|tribute|show|festival|all-?dayer|experience|appreciation|karaoke|worship|launch|single|album|tour|tickets?|pres\.?|presented|presents?|vs)\b/i;
 const ARTIST_LOCATION_SUFFIX_PATTERN =
   /\s*\((?:wa|nsw|vic|qld|sa|tas|nt|act|australia|aus|nz|usa|uk|eng|swe|ger|deu|jpn|can|ire|irl|sco|fra|ita|esp|nl|nld)\)\s*$/gi;
 const OZTIX_ARTIST_DESCRIPTOR_PARENTHESES_PATTERN =
@@ -551,7 +555,10 @@ function isLikelyOztixArtistName(value: string): boolean {
     return false;
   }
 
-  if (OZTIX_NOISY_ARTIST_FRAGMENT_PATTERN.test(normalized)) {
+  if (
+    OZTIX_NOISY_ARTIST_FRAGMENT_PATTERN.test(normalized) ||
+    OZTIX_GENERIC_ARTIST_TOKEN_PATTERN.test(normalized)
+  ) {
     return false;
   }
 
@@ -601,6 +608,27 @@ export function parseOztixTitleHeadlinerArtists(
   }
 
   return createArtistExtraction([headliner], "parsed_text").artists;
+}
+
+export function parseOztixTitleLineupArtists(
+  title: string | null | undefined
+): string[] {
+  const normalized = normalizeOztixTitle(title);
+
+  if (
+    !normalized ||
+    normalized.length > 120 ||
+    !normalized.includes(",") ||
+    OZTIX_TITLE_LINEUP_NOISE_PATTERN.test(normalized)
+  ) {
+    return [];
+  }
+
+  const artists = splitOztixArtistList(normalized);
+
+  return artists.length >= 2
+    ? createArtistExtraction(artists, "parsed_text").artists
+    : [];
 }
 
 function getOztixTributeSubject(title: string | null | undefined): string | null {
@@ -730,7 +758,10 @@ export function extractOztixArtists(hit: OztixHit) {
     .filter((artist) => !isOztixThemePartySubject(hit.EventName, artist));
   const titleHeadlinerArtists =
     structuredArtists.length === 0
-      ? parseOztixTitleHeadlinerArtists(hit.EventName)
+      ? [
+          ...parseOztixTitleHeadlinerArtists(hit.EventName),
+          ...parseOztixTitleLineupArtists(hit.EventName)
+        ]
       : [];
   const parsedSpecialGuests = parseOztixSpecialGuests(hit.SpecialGuests);
   const knownArtistsBeforeSpecialGuests = [
