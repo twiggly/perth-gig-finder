@@ -459,6 +459,40 @@ describe("humanitix perth music source adapter", () => {
     expect(gigs[0]?.artistExtractionKind).toBe("structured");
   });
 
+  it("does not treat hit-song feature credits as Humanitix performers", () => {
+    const gigs = normalizeHumanitixDetailPage({
+      eventUrl: "https://events.humanitix.com/tsrperth",
+      html: buildEventPage({
+        title: "Diamond Platnumz Live in PERTH - Full Band Experience",
+        canonicalUrl: "https://events.humanitix.com/tsrperth",
+        ogDescription: "A full band live music experience in Perth.",
+        imageUrl: "https://images.humanitix.com/i/diamond-platnumz@seo-500.jpg",
+        twitterLocation: "Metro City, 146 Roe St, Northbridge WA 6003, Australia",
+        twitterDate: "Saturday 2nd May 2026",
+        eventId: "diamond-platnumz-live",
+        structuredEvents: buildStructuredEvent({
+          title: "Diamond Platnumz Live in PERTH - Full Band Experience",
+          url: "https://events.humanitix.com/tsrperth",
+          startDate: "2026-05-02T20:00:00+0800",
+          venueName: "Metro City",
+          streetAddress: "146 Roe St, Northbridge WA 6003, Australia",
+          locality: "Northbridge",
+          postalCode: "6003",
+          description: "A full band live music experience in Perth.",
+          performers: [{ name: "Diamond Platnumz" }]
+        }),
+        headings: ["Description"],
+        paragraphs: [
+          "With an unmatched catalogue of hits including Marry You ft Ne-Yo, Komasava ft. Jason Derulo, Number One ft. Davido, Waka Waka ft. Rick Ross and many more hits."
+        ]
+      })
+    });
+
+    expect(gigs).toHaveLength(1);
+    expect(gigs[0]?.artists).toEqual(["Diamond Platnumz"]);
+    expect(gigs[0]?.artistExtractionKind).toBe("structured");
+  });
+
   it("drops sentence-like Humanitix prose fragments from structured performer descriptions", () => {
     const gigs = normalizeHumanitixDetailPage({
       eventUrl: "https://events.humanitix.com/2026-christmas-in-the-quad",

@@ -294,6 +294,7 @@ describe("oztix wa source adapter", () => {
         "POGUE MAHONE - TRIBUTE TO THE POGUES & SALV DI CRISCITO (Solo - Nirvana Unplugged)"
       )
     ).toEqual(["POGUE MAHONE", "SALV DI CRISCITO"]);
+    expect(parseOztixSpecialGuests("FRIDAY FRIGHT NIGHT")).toEqual([]);
   });
 
   it("uses parsed special guests when Oztix has no structured artist arrays", () => {
@@ -313,6 +314,20 @@ describe("oztix wa source adapter", () => {
         "SCAR TISSUE"
       ],
       artistExtractionKind: "parsed_text"
+    });
+  });
+
+  it("does not treat Oztix theme labels as artists", () => {
+    expect(
+      extractOztixArtists({
+        EventName: "HORNOGRAPHY",
+        SpecialGuests: "FRIDAY FRIGHT NIGHT",
+        Bands: [],
+        Performances: []
+      })
+    ).toEqual({
+      artists: [],
+      artistExtractionKind: "unknown"
     });
   });
 

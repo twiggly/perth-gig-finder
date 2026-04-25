@@ -94,6 +94,20 @@ describe("milk bar source adapter", () => {
     });
   });
 
+  it("does not treat Milk Bar theme labels as artist lineups", () => {
+    expect(
+      extractMilkBarArtists({
+        EventName: "HORNOGRAPHY",
+        SpecialGuests: "FRIDAY FRIGHT NIGHT",
+        Bands: [],
+        Performances: []
+      })
+    ).toEqual({
+      artists: [],
+      artistExtractionKind: "unknown"
+    });
+  });
+
   it("fetches the page and the event API without requiring a browser", async () => {
     const html = readFileSync(resolve(FIXTURE_DIR, "milk-bar-page.html"), "utf8");
     const responseBody = readFileSync(

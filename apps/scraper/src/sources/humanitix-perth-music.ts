@@ -224,6 +224,8 @@ const HUMANITIX_ARTIST_LABEL_PREFIX_PATTERN =
   /^(?:featuring|feat\.?|ft\.?|with support from|support from|supported by|lineup|artists?)\s*[:\-]?\s*/i;
 const HUMANITIX_ARTIST_TRAILING_NOISE_PATTERN =
   /\s+(?:and more!?|plus more!?|more to be announced|tba|tbc)$/i;
+const HUMANITIX_SONG_CREDIT_CONTEXT_PATTERN =
+  /\b(?:catalogue|catalog|hits?|songs?|singles?|tracks?)\b.{0,90}\bincluding\b/i;
 const HUMANITIX_GENERIC_ARTIST_WORDS = new Set([
   "plus",
   "band",
@@ -915,6 +917,12 @@ function splitHumanitixArtistLine(value: string): string[] {
     .filter((entry) => isLikelyArtistName(entry));
 }
 
+function isHumanitixSongCreditArtistMatch(value: string, matchIndex: number): boolean {
+  const contextBeforeMatch = value.slice(Math.max(0, matchIndex - 140), matchIndex);
+
+  return HUMANITIX_SONG_CREDIT_CONTEXT_PATTERN.test(contextBeforeMatch);
+}
+
 function isLikelyArtistName(value: string): boolean {
   if (!value) {
     return false;
@@ -924,6 +932,10 @@ function isLikelyArtistName(value: string): boolean {
   const normalizedLower = normalized.toLowerCase();
 
   if (HUMANITIX_GENERIC_ARTIST_WORDS.has(normalizedLower)) {
+    return false;
+  }
+
+  if (/\b(?:ft|feat|featuring)$/i.test(normalized)) {
     return false;
   }
 
@@ -1100,6 +1112,10 @@ function parseHumanitixExplicitTextArtists(
       const match = normalized.match(pattern);
 
       if (match?.[1]) {
+        if (isHumanitixSongCreditArtistMatch(normalized, match.index ?? 0)) {
+          continue;
+        }
+
         candidates.push(...splitHumanitixArtistLine(match[1]));
       }
     }

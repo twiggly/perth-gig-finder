@@ -17,6 +17,7 @@ import type { SourceAdapter, SourceAdapterResult } from "../types";
 const SOURCE_URL = "https://milkbarperth.com.au/gigs/";
 const MILK_BAR_ARTIST_SEPARATOR_PATTERN = /\s*(?:,|\+|;|•)\s*/u;
 const MILK_BAR_FEATURE_PREFIX_PATTERN = /^(?:ft\.?|feat\.?|featuring)\s+/i;
+const MILK_BAR_NON_ARTIST_TOKEN_PATTERN = /^(?:friday fright night)$/i;
 
 interface MilkBarSearchConfig {
   appId: string;
@@ -161,7 +162,8 @@ function splitMilkBarArtistToken(value: string | null | undefined): string[] {
       return [trimmed];
     })
     .map((artist) => normalizeWhitespace(artist))
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((artist) => !MILK_BAR_NON_ARTIST_TOKEN_PATTERN.test(artist));
 }
 
 function normalizeGigStatus(hit: MilkBarHit, title: string): GigStatus {

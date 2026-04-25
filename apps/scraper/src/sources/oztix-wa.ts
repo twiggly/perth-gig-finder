@@ -133,7 +133,7 @@ const TITLE_SLASH_TRIBUTE_SUBJECT_PATTERN =
 const TITLE_HEADLINER_SEPARATOR_PATTERN = /\s[-–—:]\s|[,+]/;
 const OZTIX_BROKEN_EMOJI_QUESTION_RUN_PATTERN = /\?{3,}/g;
 const OZTIX_NOISY_ARTIST_FRAGMENT_PATTERN =
-  /^(?:djs?\s+playing\s+the\s+best\s+of\b.*|support\s+set\s+of\b.*|the\s+greatest\s+emo|metalcore|alternative\s+tracks\s+of\s+all\s+time\b.*|hlh\/dod\s+after\s+party!?|past|present(?:\s+members?)?)$/i;
+  /^(?:djs?\s+playing\s+the\s+best\s+of\b.*|support\s+set\s+of\b.*|the\s+greatest\s+emo|metalcore|alternative\s+tracks\s+of\s+all\s+time\b.*|hlh\/dod\s+after\s+party!?|friday\s+fright\s+night|past|present(?:\s+members?)?)$/i;
 const ARTIST_LOCATION_SUFFIX_PATTERN =
   /\s*\((?:wa|nsw|vic|qld|sa|tas|nt|act|australia|aus|nz|usa|uk|eng|swe|ger|deu|jpn|can|ire|irl|sco|fra|ita|esp|nl|nld)\)\s*$/gi;
 const OZTIX_ARTIST_DESCRIPTOR_PARENTHESES_PATTERN =
