@@ -261,10 +261,21 @@ function formatSourceReconciliationExample(row) {
   };
 }
 
+function formatSourceOwnershipExample(row, publicCard) {
+  return {
+    ...formatSourceReconciliationExample(row),
+    publicSource: publicCard?.source_name ?? null,
+    publicSourceUrl: publicCard?.source_url ?? null
+  };
+}
+
 function createEmptySourceReconciliationRow(source) {
   return {
     activeSourceGigCount: 0,
     activeSourceGigsNotPublicCardsCount: 0,
+    activeSourceGigsNotPublicCardExamples: [],
+    activeSourceGigsWithoutPublicCardCount: 0,
+    activeSourceGigsWithoutPublicCardExamples: [],
     cancelledCount: 0,
     hiddenByStatusCount: 0,
     hiddenByStatusExamples: [],
@@ -279,7 +290,12 @@ function createEmptySourceReconciliationRow(source) {
 async function loadSupabaseSourceReconciliation(payload, options) {
   const { supabaseKey, supabaseUrl } = getSupabaseConfig({ requireServiceRole: true });
   const activePublicRows = toGigRows(payload);
+  const activePublicRowsByGigId = new Map(
+    activePublicRows.map((row) => [row.id, row])
+  );
   const publicActiveCounts = new Map();
+  const ownershipHandoffs = new Map();
+  const ownershipExampleLimit = Math.min(options.limit, 5);
 
   for (const row of activePublicRows) {
     const sourceName = row.source_name ?? "(none)";
@@ -314,6 +330,48 @@ async function loadSupabaseSourceReconciliation(payload, options) {
 
     if (status === "active") {
       summary.activeSourceGigCount += 1;
+      const publicCard = activePublicRowsByGigId.get(row.gigs?.id);
+
+      if (!publicCard) {
+        summary.activeSourceGigsWithoutPublicCardCount += 1;
+
+        if (
+          summary.activeSourceGigsWithoutPublicCardExamples.length <
+          ownershipExampleLimit
+        ) {
+          summary.activeSourceGigsWithoutPublicCardExamples.push(
+            formatSourceReconciliationExample(row)
+          );
+        }
+      } else if (publicCard.source_name !== sourceName) {
+        const publicSourceName = publicCard.source_name ?? "(none)";
+        const ownershipKey = `${sourceName}\n${publicSourceName}`;
+        const ownershipSummary =
+          ownershipHandoffs.get(ownershipKey) ?? {
+            count: 0,
+            examples: [],
+            fromSourceName: sourceName,
+            toSourceName: publicSourceName
+          };
+        const example = formatSourceOwnershipExample(row, publicCard);
+
+        summary.activeSourceGigsNotPublicCardsCount += 1;
+
+        if (
+          summary.activeSourceGigsNotPublicCardExamples.length <
+          ownershipExampleLimit
+        ) {
+          summary.activeSourceGigsNotPublicCardExamples.push(example);
+        }
+
+        ownershipSummary.count += 1;
+
+        if (ownershipSummary.examples.length < ownershipExampleLimit) {
+          ownershipSummary.examples.push(example);
+        }
+
+        ownershipHandoffs.set(ownershipKey, ownershipSummary);
+      }
     } else {
       summary.hiddenByStatusCount += 1;
 
@@ -344,17 +402,21 @@ async function loadSupabaseSourceReconciliation(payload, options) {
   }
 
   const rows = [...bySourceName.values()]
-    .map((summary) => ({
-      ...summary,
-      activeSourceGigsNotPublicCardsCount: Math.max(
-        summary.activeSourceGigCount - summary.publicActiveCardCount,
-        0
-      )
-    }))
     .sort((left, right) => left.sourceName.localeCompare(right.sourceName));
 
   return {
     generatedAt: new Date().toISOString(),
+    ownershipHandoffs: [...ownershipHandoffs.values()].sort((left, right) => {
+      if (right.count !== left.count) {
+        return right.count - left.count;
+      }
+
+      const fromDifference = left.fromSourceName.localeCompare(right.fromSourceName);
+
+      return fromDifference !== 0
+        ? fromDifference
+        : left.toSourceName.localeCompare(right.toSourceName);
+    }),
     rows,
     totals: rows.reduce(
       (totals, row) => ({
@@ -363,6 +425,9 @@ async function loadSupabaseSourceReconciliation(payload, options) {
         activeSourceGigsNotPublicCardsCount:
           totals.activeSourceGigsNotPublicCardsCount +
           row.activeSourceGigsNotPublicCardsCount,
+        activeSourceGigsWithoutPublicCardCount:
+          totals.activeSourceGigsWithoutPublicCardCount +
+          row.activeSourceGigsWithoutPublicCardCount,
         cancelledCount: totals.cancelledCount + row.cancelledCount,
         hiddenByStatusCount:
           totals.hiddenByStatusCount + row.hiddenByStatusCount,
@@ -375,6 +440,7 @@ async function loadSupabaseSourceReconciliation(payload, options) {
       {
         activeSourceGigCount: 0,
         activeSourceGigsNotPublicCardsCount: 0,
+        activeSourceGigsWithoutPublicCardCount: 0,
         cancelledCount: 0,
         hiddenByStatusCount: 0,
         postponedCount: 0,
@@ -928,13 +994,26 @@ function printSourceReconciliation(reconciliation, limit) {
     "Stored source-gigs are upcoming rows from public sources; public active cards are the active homepage rows after canonical source selection."
   );
   console.log(
-    `Totals: source_gigs=${reconciliation.totals.sourceGigTotalCount}, active_source_gigs=${reconciliation.totals.activeSourceGigCount}, public_active_cards=${reconciliation.totals.publicActiveCardCount}, hidden_by_status=${reconciliation.totals.hiddenByStatusCount} (postponed=${reconciliation.totals.postponedCount}, cancelled=${reconciliation.totals.cancelledCount})`
+    `Totals: source_gigs=${reconciliation.totals.sourceGigTotalCount}, active_source_gigs=${reconciliation.totals.activeSourceGigCount}, public_active_cards=${reconciliation.totals.publicActiveCardCount}, active_not_public_cards=${reconciliation.totals.activeSourceGigsNotPublicCardsCount}, active_without_public_card=${reconciliation.totals.activeSourceGigsWithoutPublicCardCount}, hidden_by_status=${reconciliation.totals.hiddenByStatusCount} (postponed=${reconciliation.totals.postponedCount}, cancelled=${reconciliation.totals.cancelledCount})`
   );
 
   for (const row of reconciliation.rows) {
     console.log(
-      `- ${row.sourceName}: source_gigs=${row.sourceGigTotalCount}, active_source_gigs=${row.activeSourceGigCount}, public_active_cards=${row.publicActiveCardCount}, active_not_public_cards=${row.activeSourceGigsNotPublicCardsCount}, hidden_by_status=${row.hiddenByStatusCount} (postponed=${row.postponedCount}, cancelled=${row.cancelledCount})`
+      `- ${row.sourceName}: source_gigs=${row.sourceGigTotalCount}, active_source_gigs=${row.activeSourceGigCount}, public_active_cards=${row.publicActiveCardCount}, active_not_public_cards=${row.activeSourceGigsNotPublicCardsCount}, active_without_public_card=${row.activeSourceGigsWithoutPublicCardCount}, hidden_by_status=${row.hiddenByStatusCount} (postponed=${row.postponedCount}, cancelled=${row.cancelledCount})`
     );
+
+    for (const example of row.activeSourceGigsWithoutPublicCardExamples.slice(
+      0,
+      limit
+    )) {
+      console.log(`  missing_public: ${JSON.stringify(example)}`);
+    }
+
+    if (row.activeSourceGigsWithoutPublicCardExamples.length > limit) {
+      console.log(
+        `  missing_public: ... ${row.activeSourceGigsWithoutPublicCardExamples.length - limit} more`
+      );
+    }
 
     for (const example of row.hiddenByStatusExamples.slice(0, limit)) {
       console.log(`  hidden: ${JSON.stringify(example)}`);
@@ -942,6 +1021,28 @@ function printSourceReconciliation(reconciliation, limit) {
 
     if (row.hiddenByStatusExamples.length > limit) {
       console.log(`  hidden: ... ${row.hiddenByStatusExamples.length - limit} more`);
+    }
+  }
+
+  if (reconciliation.ownershipHandoffs.length > 0) {
+    console.log("");
+    console.log("Active Ownership Handoffs");
+    console.log(
+      "These active source-gig rows are attached to public gigs whose visible card is owned by another source."
+    );
+
+    for (const handoff of reconciliation.ownershipHandoffs) {
+      console.log(
+        `- ${handoff.fromSourceName} -> ${handoff.toSourceName}: ${handoff.count}`
+      );
+
+      for (const example of handoff.examples.slice(0, limit)) {
+        console.log(`  example: ${JSON.stringify(example)}`);
+      }
+
+      if (handoff.examples.length > limit) {
+        console.log(`  example: ... ${handoff.examples.length - limit} more`);
+      }
     }
   }
 }
