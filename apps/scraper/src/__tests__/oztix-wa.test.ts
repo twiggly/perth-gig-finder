@@ -454,6 +454,19 @@ describe("oztix wa source adapter", () => {
     });
   });
 
+  it("drops tribute support-set descriptions without dropping the named performer", () => {
+    expect(
+      extractOztixArtists({
+        EventName: "LANDSLIDE - Fleetwood Mac and Stevie Nicks Tribute Show",
+        Bands: ["LandSlide", "support set of EAGLES GREATEST HITS"],
+        Performances: []
+      })
+    ).toEqual({
+      artists: ["LandSlide"],
+      artistExtractionKind: "structured"
+    });
+  });
+
   it("removes broken emoji question-mark runs from Oztix titles and avoids theme-party subjects as artists", () => {
     const normalized = normalizeOztixHit({
       EventGuid: "sleep-token-party",

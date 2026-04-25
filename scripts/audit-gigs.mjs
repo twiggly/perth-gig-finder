@@ -579,8 +579,7 @@ function findNonMusicLeakageCandidates(gigs) {
         gig.title,
         gig.description,
         gig.venue_name,
-        gig.venue_suburb,
-        ...gig.artist_names
+        gig.venue_suburb
       ]
         .filter(Boolean)
         .join(" ");
@@ -603,11 +602,17 @@ function findMissingArtistCandidates(gigs) {
     /\b(?:feat\.?|ft\.?|featuring|with special guest|with support|support from|supported by|lineup|presents)\b/i;
   const likelyArtistPlusPattern =
     /\b[A-Za-z][A-Za-z0-9'’&./-]*(?:\s+[A-Za-z][A-Za-z0-9'’&./-]*){0,5}\s+\+\s+[A-Za-z][A-Za-z0-9'’&./-]*(?:\s+[A-Za-z][A-Za-z0-9'’&./-]*){0,5}\b/;
+  const themePartyWithoutRealPerformerPattern =
+    /\b(?:worship party|after party|djs?\s+playing\s+the\s+best\s+of|vs\b.+\bparty)\b/i;
 
   return gigs
     .filter((gig) => gig.artist_names.length === 0)
     .filter((gig) => {
       const text = [gig.title, gig.description].join(" ");
+      if (themePartyWithoutRealPerformerPattern.test(text)) {
+        return false;
+      }
+
       return explicitLineupPattern.test(text) || likelyArtistPlusPattern.test(text);
     })
     .map(formatGigSummary);
