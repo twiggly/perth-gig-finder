@@ -259,7 +259,8 @@ pnpm verify
 
   Omit `--vercel` for publicly fetchable URLs. Use `--strict` if warning-level findings such as unexpected no-image rows or heuristic non-music matches should fail the command.
   The Bird rows without images are expected and counted separately from no-image warnings because the official venue feed does not provide posters.
-  Hosted refreshes run `pnpm audit:gigs -- --supabase --limit 30` against the hosted `gig_cards` public view using the workflow Supabase secrets.
+  Hosted refreshes run `pnpm audit:gigs -- --supabase --reconcile-sources --limit 30` against the hosted `gig_cards` public view using the workflow Supabase secrets.
+  When checking why scraper/source totals differ from public homepage totals, run `pnpm audit:gigs -- --supabase --reconcile-sources`; it reports stored source-gig totals, active public cards, and postponed/cancelled rows hidden only because of status.
 
 - Scraper-only verification:
 

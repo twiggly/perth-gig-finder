@@ -19,11 +19,13 @@ function printUsage() {
   pnpm audit:gigs -- --url https://your-deployment.vercel.app
   pnpm audit:gigs -- --file /tmp/homepage.html
   pnpm audit:gigs -- --supabase
+  pnpm audit:gigs -- --supabase --reconcile-sources
 
 Options:
   --url <url>           Homepage URL to fetch. Falls back to AUDIT_GIGS_URL.
   --file <path>         Read a saved homepage HTML file instead of fetching.
   --supabase            Audit the Supabase gig_cards view using SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
+  --reconcile-sources   With --supabase, compare source_gigs totals with active public gig_cards counts.
   --vercel              Fetch a protected Vercel deployment with vercel curl.
   --match <regex>       Include notable rows whose title matches the regex. Repeatable.
   --json                Print machine-readable JSON only.
@@ -39,6 +41,7 @@ function parseArgs(argv) {
     json: false,
     limit: DEFAULT_EXAMPLE_LIMIT,
     matchPatterns: [],
+    reconcileSources: false,
     strict: false,
     supabase: false,
     url: process.env.AUDIT_GIGS_URL ?? null,
@@ -68,6 +71,9 @@ function parseArgs(argv) {
       case "--match":
         options.matchPatterns.push(argv[++index] ?? "");
         break;
+      case "--reconcile-sources":
+        options.reconcileSources = true;
+        break;
       case "--strict":
         options.strict = true;
         break;
@@ -96,6 +102,10 @@ function parseArgs(argv) {
 
   if (!Number.isInteger(options.limit) || options.limit <= 0) {
     throw new Error("--limit must be a positive integer");
+  }
+
+  if (options.reconcileSources && !options.supabase) {
+    throw new Error("--reconcile-sources requires --supabase.");
   }
 
   return options;
@@ -134,10 +144,11 @@ function groupRowsByDate(rows) {
   }));
 }
 
-async function loadSupabasePayload() {
+function getSupabaseConfig({ requireServiceRole = false } = {}) {
   const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/$/, "");
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const supabaseKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    serviceRoleKey ??
     process.env.SUPABASE_ANON_KEY ??
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -147,10 +158,52 @@ async function loadSupabasePayload() {
     );
   }
 
-  const url = new URL(`${supabaseUrl}/rest/v1/gig_cards`);
-  url.searchParams.set(
-    "select",
-    [
+  if (requireServiceRole && !serviceRoleKey) {
+    throw new Error(
+      "--reconcile-sources requires SUPABASE_SERVICE_ROLE_KEY so private source_gigs rows can be audited."
+    );
+  }
+
+  return {
+    supabaseKey,
+    supabaseUrl
+  };
+}
+
+async function fetchSupabaseRows(supabaseUrl, supabaseKey, tableName, searchParams) {
+  const url = new URL(`${supabaseUrl}/rest/v1/${tableName}`);
+
+  for (const [key, value] of Object.entries(searchParams)) {
+    url.searchParams.set(key, value);
+  }
+
+  const response = await fetch(url, {
+    headers: {
+      accept: "application/json",
+      apikey: supabaseKey,
+      authorization: `Bearer ${supabaseKey}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Supabase ${tableName} request failed with status ${response.status}: ${await response.text()}`
+    );
+  }
+
+  const rows = await response.json();
+
+  if (!Array.isArray(rows)) {
+    throw new Error(`Supabase ${tableName} response was not an array.`);
+  }
+
+  return rows;
+}
+
+async function loadSupabasePayload() {
+  const { supabaseKey, supabaseUrl } = getSupabaseConfig();
+  const rows = await fetchSupabaseRows(supabaseUrl, supabaseKey, "gig_cards", {
+    select: [
       "id",
       "slug",
       "title",
@@ -169,32 +222,12 @@ async function loadSupabasePayload() {
       "venue_suburb",
       "venue_website_url",
       "status"
-    ].join(",")
-  );
-  url.searchParams.set("status", "eq.active");
-  url.searchParams.set("starts_at", `gte.${new Date().toISOString()}`);
-  url.searchParams.set("order", "starts_at.asc");
-  url.searchParams.set("limit", "5000");
-
-  const response = await fetch(url, {
-    headers: {
-      accept: "application/json",
-      apikey: supabaseKey,
-      authorization: `Bearer ${supabaseKey}`
-    }
+    ].join(","),
+    status: "eq.active",
+    starts_at: `gte.${new Date().toISOString()}`,
+    order: "starts_at.asc",
+    limit: "5000"
   });
-
-  if (!response.ok) {
-    throw new Error(
-      `Supabase gig_cards request failed with status ${response.status}: ${await response.text()}`
-    );
-  }
-
-  const rows = await response.json();
-
-  if (!Array.isArray(rows)) {
-    throw new Error("Supabase gig_cards response was not an array.");
-  }
 
   const normalizedRows = rows.map((row) => ({
     ...row,
@@ -211,6 +244,144 @@ async function loadSupabasePayload() {
       target: `${supabaseUrl}/rest/v1/gig_cards`,
       targetKind: "supabase"
     }
+  };
+}
+
+function formatSourceReconciliationExample(row) {
+  const gig = row.gigs ?? {};
+
+  return {
+    artists: Array.isArray(row.artist_names) ? row.artist_names : [],
+    date: gig.starts_at ? getPerthDateKey(gig.starts_at) : null,
+    sourceUrl: row.source_url,
+    startsAt: gig.starts_at ?? null,
+    status: gig.status ?? "unknown",
+    title: gig.title ?? null,
+    venue: gig.venues?.name ?? null
+  };
+}
+
+function createEmptySourceReconciliationRow(source) {
+  return {
+    activeSourceGigCount: 0,
+    activeSourceGigsNotPublicCardsCount: 0,
+    cancelledCount: 0,
+    hiddenByStatusCount: 0,
+    hiddenByStatusExamples: [],
+    postponedCount: 0,
+    publicActiveCardCount: 0,
+    sourceGigTotalCount: 0,
+    sourceName: source.name,
+    sourceSlug: source.slug ?? null
+  };
+}
+
+async function loadSupabaseSourceReconciliation(payload, options) {
+  const { supabaseKey, supabaseUrl } = getSupabaseConfig({ requireServiceRole: true });
+  const activePublicRows = toGigRows(payload);
+  const publicActiveCounts = new Map();
+
+  for (const row of activePublicRows) {
+    const sourceName = row.source_name ?? "(none)";
+    publicActiveCounts.set(sourceName, (publicActiveCounts.get(sourceName) ?? 0) + 1);
+  }
+
+  const sourceGigRows = await fetchSupabaseRows(supabaseUrl, supabaseKey, "source_gigs", {
+    select: [
+      "source_url",
+      "artist_names",
+      "sources!inner(slug,name,priority,is_public_listing_source)",
+      "gigs!inner(id,title,starts_at,status,venues(name,slug,suburb))"
+    ].join(","),
+    "sources.is_public_listing_source": "eq.true",
+    "gigs.starts_at": `gte.${new Date().toISOString()}`,
+    limit: "10000"
+  });
+  const bySourceName = new Map();
+
+  for (const row of sourceGigRows) {
+    const source = row.sources ?? {};
+    const sourceName = source.name ?? "(unknown source)";
+    const summary =
+      bySourceName.get(sourceName) ??
+      createEmptySourceReconciliationRow({
+        name: sourceName,
+        slug: source.slug
+      });
+    const status = row.gigs?.status ?? "unknown";
+
+    summary.sourceGigTotalCount += 1;
+
+    if (status === "active") {
+      summary.activeSourceGigCount += 1;
+    } else {
+      summary.hiddenByStatusCount += 1;
+
+      if (status === "postponed") {
+        summary.postponedCount += 1;
+      } else if (status === "cancelled") {
+        summary.cancelledCount += 1;
+      }
+
+      if (summary.hiddenByStatusExamples.length < options.limit) {
+        summary.hiddenByStatusExamples.push(formatSourceReconciliationExample(row));
+      }
+    }
+
+    bySourceName.set(sourceName, summary);
+  }
+
+  for (const [sourceName, count] of publicActiveCounts) {
+    const summary =
+      bySourceName.get(sourceName) ??
+      createEmptySourceReconciliationRow({
+        name: sourceName,
+        slug: null
+      });
+
+    summary.publicActiveCardCount = count;
+    bySourceName.set(sourceName, summary);
+  }
+
+  const rows = [...bySourceName.values()]
+    .map((summary) => ({
+      ...summary,
+      activeSourceGigsNotPublicCardsCount: Math.max(
+        summary.activeSourceGigCount - summary.publicActiveCardCount,
+        0
+      )
+    }))
+    .sort((left, right) => left.sourceName.localeCompare(right.sourceName));
+
+  return {
+    generatedAt: new Date().toISOString(),
+    rows,
+    totals: rows.reduce(
+      (totals, row) => ({
+        activeSourceGigCount:
+          totals.activeSourceGigCount + row.activeSourceGigCount,
+        activeSourceGigsNotPublicCardsCount:
+          totals.activeSourceGigsNotPublicCardsCount +
+          row.activeSourceGigsNotPublicCardsCount,
+        cancelledCount: totals.cancelledCount + row.cancelledCount,
+        hiddenByStatusCount:
+          totals.hiddenByStatusCount + row.hiddenByStatusCount,
+        postponedCount: totals.postponedCount + row.postponedCount,
+        publicActiveCardCount:
+          totals.publicActiveCardCount + row.publicActiveCardCount,
+        sourceGigTotalCount:
+          totals.sourceGigTotalCount + row.sourceGigTotalCount
+      }),
+      {
+        activeSourceGigCount: 0,
+        activeSourceGigsNotPublicCardsCount: 0,
+        cancelledCount: 0,
+        hiddenByStatusCount: 0,
+        postponedCount: 0,
+        publicActiveCardCount: 0,
+        sourceGigTotalCount: 0
+      }
+    )
   };
 }
 
@@ -630,7 +801,7 @@ function findNotableRows(gigs, matchPatterns) {
   });
 }
 
-function buildAudit(payload, options, target) {
+function buildAudit(payload, options, target, sourceReconciliation = null) {
   const gigs = toGigRows(payload);
   const exactDuplicates = findExactDuplicates(gigs);
   const fuzzyDuplicates = findFuzzyDuplicates(gigs);
@@ -706,6 +877,7 @@ function buildAudit(payload, options, target) {
       initialActiveDateKey: payload.initialActiveDateKey,
       sourceCounts: getSourceCounts(gigs)
     },
+    sourceReconciliation,
     target,
     warnings,
     checks: {
@@ -745,6 +917,35 @@ function printList(title, items, limit) {
   }
 }
 
+function printSourceReconciliation(reconciliation, limit) {
+  if (!reconciliation) {
+    return;
+  }
+
+  console.log("");
+  console.log("Source Reconciliation");
+  console.log(
+    "Stored source-gigs are upcoming rows from public sources; public active cards are the active homepage rows after canonical source selection."
+  );
+  console.log(
+    `Totals: source_gigs=${reconciliation.totals.sourceGigTotalCount}, active_source_gigs=${reconciliation.totals.activeSourceGigCount}, public_active_cards=${reconciliation.totals.publicActiveCardCount}, hidden_by_status=${reconciliation.totals.hiddenByStatusCount} (postponed=${reconciliation.totals.postponedCount}, cancelled=${reconciliation.totals.cancelledCount})`
+  );
+
+  for (const row of reconciliation.rows) {
+    console.log(
+      `- ${row.sourceName}: source_gigs=${row.sourceGigTotalCount}, active_source_gigs=${row.activeSourceGigCount}, public_active_cards=${row.publicActiveCardCount}, active_not_public_cards=${row.activeSourceGigsNotPublicCardsCount}, hidden_by_status=${row.hiddenByStatusCount} (postponed=${row.postponedCount}, cancelled=${row.cancelledCount})`
+    );
+
+    for (const example of row.hiddenByStatusExamples.slice(0, limit)) {
+      console.log(`  hidden: ${JSON.stringify(example)}`);
+    }
+
+    if (row.hiddenByStatusExamples.length > limit) {
+      console.log(`  hidden: ... ${row.hiddenByStatusExamples.length - limit} more`);
+    }
+  }
+}
+
 function printHumanReport(audit, options) {
   console.log("Public gig audit");
   console.log(`Target: ${audit.target.target}`);
@@ -776,6 +977,7 @@ function printHumanReport(audit, options) {
   printList("Errors", audit.errors, options.limit);
   printList("Warnings", audit.warnings, options.limit);
   printList("Notable Rows", audit.notableRows, options.limit);
+  printSourceReconciliation(audit.sourceReconciliation, options.limit);
 
   console.log("");
   console.log(
@@ -799,10 +1001,18 @@ try {
   const payload = options.supabase
     ? loaded.payload
     : extractHomepagePayload(loaded.html);
-  const audit = buildAudit(payload, options, {
-    kind: loaded.targetKind ?? loaded.target.targetKind,
-    target: loaded.target.target ?? loaded.target
-  });
+  const sourceReconciliation = options.reconcileSources
+    ? await loadSupabaseSourceReconciliation(payload, options)
+    : null;
+  const audit = buildAudit(
+    payload,
+    options,
+    {
+      kind: loaded.targetKind ?? loaded.target.targetKind,
+      target: loaded.target.target ?? loaded.target
+    },
+    sourceReconciliation
+  );
 
   if (options.json) {
     console.log(JSON.stringify(audit, null, 2));
