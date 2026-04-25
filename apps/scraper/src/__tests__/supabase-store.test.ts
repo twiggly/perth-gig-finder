@@ -68,6 +68,38 @@ describe("supabase store artist sync planning", () => {
     ]);
   });
 
+  it("plans a rewrite when stored artist display text still contains encoded entities", () => {
+    const writePlan = planGigArtistWrites({
+      gigIds: ["gig-1"],
+      candidatesByGigId: new Map([
+        [
+          "gig-1",
+          [
+            {
+              artists: ["SEUN KUTI & EGYPT 80", "SEUN KUTI"],
+              artistExtractionKind: "structured",
+              priority: 10,
+              lastSeenAt: "2026-04-24T04:46:00.000Z"
+            }
+          ]
+        ]
+      ]),
+      currentArtistNamesByGigId: new Map([
+        [
+          "gig-1",
+          ["SEUN KUTI & EGYPT 80", "SEUN KUTI", "SEUN KUTI &amp; EGYPT 80"]
+        ]
+      ])
+    });
+
+    expect(writePlan).toEqual([
+      {
+        gigId: "gig-1",
+        artistNames: ["SEUN KUTI & EGYPT 80", "SEUN KUTI"]
+      }
+    ]);
+  });
+
   it("plans a clear when every attached source has unknown artists", () => {
     const writePlan = planGigArtistWrites({
       gigIds: ["gig-1"],
