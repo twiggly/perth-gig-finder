@@ -43,6 +43,7 @@ describe("resolveSourcesToRun", () => {
     expect(selected.map((source) => source.slug)).toEqual([
       "humanitix-perth-music",
       "milk-bar",
+      "rosemount-hotel",
       "the-bird",
       "oztix-wa",
       "ticketek-wa"

@@ -132,8 +132,18 @@ const TITLE_HEADLINER_SEPARATOR_PATTERN = /\s[-–—:]\s|[,+]/;
 const OZTIX_BROKEN_EMOJI_QUESTION_RUN_PATTERN = /\?{3,}/g;
 const OZTIX_NOISY_ARTIST_FRAGMENT_PATTERN =
   /^(?:djs?\s+playing\s+the\s+best\s+of\b.*|support\s+set\s+of\b.*|the\s+greatest\s+emo|metalcore|alternative\s+tracks\s+of\s+all\s+time\b.*|hlh\/dod\s+after\s+party!?|past|present(?:\s+members?)?)$/i;
+const ARTIST_LOCATION_SUFFIX_PATTERN =
+  /\s*\((?:wa|nsw|vic|qld|sa|tas|nt|act|australia|aus|nz)\)\s*$/gi;
+const LEETSPEAK_ARTIST_CHARACTERS: Record<string, string> = {
+  "0": "o",
+  "1": "i",
+  "3": "e",
+  "4": "a",
+  "5": "s",
+  "7": "t"
+};
 
-interface OztixVenue {
+export interface OztixVenue {
   Name?: string;
   Address?: string;
   Locality?: string;
@@ -142,11 +152,11 @@ interface OztixVenue {
   Timezone?: string;
 }
 
-interface OztixPerformance {
+export interface OztixPerformance {
   Name?: string;
 }
 
-interface OztixHit {
+export interface OztixHit {
   EventGuid?: string;
   EventName?: string;
   SpecialGuests?: string;
@@ -283,7 +293,7 @@ function parseImageArea(urlValue: string): number | null {
   return null;
 }
 
-function selectPreferredImageUrl(hit: OztixHit): string | null {
+export function selectPreferredImageUrl(hit: OztixHit): string | null {
   const candidates = [hit.EventImage1, hit.HomepageImage]
     .map((value) => normalizeUrl(value))
     .filter((value): value is string => Boolean(value))
@@ -318,7 +328,7 @@ function selectPreferredImageUrl(hit: OztixHit): string | null {
   return preferred.preferred;
 }
 
-function normalizeOztixTitle(value: string | null | undefined): string {
+export function normalizeOztixTitle(value: string | null | undefined): string {
   return normalizeWhitespace(value ?? "")
     .replace(/^\?{3,}\s*/g, "")
     .replace(/\s*\?{3,}(?=\s|$)/g, "")
@@ -405,9 +415,41 @@ export function parseOztixSpecialGuests(value: string | null | undefined): strin
 
 function normalizeArtistIdentity(value: string): string {
   return normalizeWhitespace(value)
+    .replace(ARTIST_LOCATION_SUFFIX_PATTERN, "")
     .toLowerCase()
+    .replace(/[013457]/g, (character) => LEETSPEAK_ARTIST_CHARACTERS[character] ?? character)
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function isDuplicateOrCompositeOztixArtist(
+  artist: string,
+  knownArtists: string[]
+): boolean {
+  const knownArtistIdentities = new Set(
+    knownArtists
+      .map((knownArtist) => normalizeArtistIdentity(knownArtist))
+      .filter(Boolean)
+  );
+  const artistIdentity = normalizeArtistIdentity(artist);
+
+  if (!artistIdentity) {
+    return true;
+  }
+
+  if (knownArtistIdentities.has(artistIdentity)) {
+    return true;
+  }
+
+  const compositeParts = artist
+    .split(/\s+(?:&|and)\s+/i)
+    .map((part) => normalizeArtistIdentity(part))
+    .filter(Boolean);
+
+  return (
+    compositeParts.length > 1 &&
+    compositeParts.every((part) => knownArtistIdentities.has(part))
+  );
 }
 
 function splitOztixArtistList(value: string): string[] {
@@ -600,12 +642,22 @@ export function extractOztixArtists(hit: OztixHit) {
       ? parseOztixTitleHeadlinerArtists(hit.EventName)
       : [];
   const parsedSpecialGuests = parseOztixSpecialGuests(hit.SpecialGuests);
-  const combinedArtists = [
+  const knownArtistsBeforeSpecialGuests = [
     ...structuredArtists,
     ...titleHeadlinerArtists,
     ...titlePresentedArtists,
-    ...titleFeaturedArtists,
+    ...titleFeaturedArtists
+  ];
+  const combinedArtists = [
+    ...knownArtistsBeforeSpecialGuests,
     ...parsedSpecialGuests
+      .filter(
+        (artist) =>
+          !isDuplicateOrCompositeOztixArtist(
+            artist,
+            knownArtistsBeforeSpecialGuests
+          )
+      )
   ]
     .filter(
       (artist) =>

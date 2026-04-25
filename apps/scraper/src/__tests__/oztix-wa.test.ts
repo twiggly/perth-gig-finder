@@ -319,6 +319,36 @@ describe("oztix wa source adapter", () => {
     });
   });
 
+  it("does not re-add duplicate composite special-guest text when structured artists are present", () => {
+    expect(
+      extractOztixArtists({
+        EventName: "The Kid fez supported by GR33DY GR33N & Lill Miss JoJo",
+        Bands: ["The Kid Fez", "GR33DY GR33N", "Lill Miss JoJo"],
+        Performances: [
+          { Name: "The Kid Fez" },
+          { Name: "GR33DY GR33N" },
+          { Name: "Lill Miss JoJo" }
+        ],
+        SpecialGuests: "Lill Miss JoJo, Greedy Green & The Kid Fez"
+      })
+    ).toEqual({
+      artists: ["The Kid Fez", "GR33DY GR33N", "Lill Miss JoJo"],
+      artistExtractionKind: "structured"
+    });
+
+    expect(
+      extractOztixArtists({
+        EventName: "Adele Oliver & Jacob Vincent (QLD)",
+        Bands: ["Adele Oliver", "Jacob Vincent"],
+        Performances: [{ Name: "Adele Oliver" }, { Name: "Jacob Vincent" }],
+        SpecialGuests: "Adele Oliver & Jacob Vincent (QLD)"
+      })
+    ).toEqual({
+      artists: ["Adele Oliver", "Jacob Vincent"],
+      artistExtractionKind: "structured"
+    });
+  });
+
   it("cleans parsed support prefixes without dropping structured headliners", () => {
     expect(
       extractOztixArtists({
