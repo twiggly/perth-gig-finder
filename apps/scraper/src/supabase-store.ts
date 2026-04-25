@@ -306,7 +306,8 @@ function areNullableIsoDatesEqual(left: string | null, right: string | null): bo
 
 function getJoinedArtistName(row: CurrentGigArtistRow): string | null {
   const artist = Array.isArray(row.artists) ? row.artists[0] : row.artists;
-  return normalizeWhitespace(artist?.name ?? "") || null;
+  const normalized = (artist?.name ?? "").replace(/\s+/g, " ").trim();
+  return normalized || null;
 }
 
 export function planGigArtistWrites(input: {
@@ -318,11 +319,15 @@ export function planGigArtistWrites(input: {
     const desiredArtistNames = selectCanonicalArtistNames(
       input.candidatesByGigId.get(gigId) ?? []
     );
-    const currentArtistNames = normalizeArtistNames(
-      input.currentArtistNamesByGigId.get(gigId) ?? []
-    );
+    const currentStoredArtistNames = (input.currentArtistNamesByGigId.get(gigId) ?? [])
+      .map((artist) => artist.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    const currentArtistNames = normalizeArtistNames(currentStoredArtistNames);
 
-    if (areStringArraysEqual(currentArtistNames, desiredArtistNames)) {
+    if (
+      areStringArraysEqual(currentArtistNames, desiredArtistNames) &&
+      areStringArraysEqual(currentStoredArtistNames, desiredArtistNames)
+    ) {
       return [];
     }
 
