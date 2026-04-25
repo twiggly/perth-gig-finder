@@ -1750,26 +1750,24 @@ export class SupabaseGigStore implements GigStore {
     return new Map(
       [...rowsByGigId.entries()].map(([gigId, gigRows]) => [
         gigId,
-        normalizeArtistNames(
-          gigRows
-            .slice()
-            .sort((left, right) => {
-              const sortOrderDiff =
-                (left.sort_order ?? Number.MAX_SAFE_INTEGER) -
-                (right.sort_order ?? Number.MAX_SAFE_INTEGER);
+        gigRows
+          .slice()
+          .sort((left, right) => {
+            const sortOrderDiff =
+              (left.sort_order ?? Number.MAX_SAFE_INTEGER) -
+              (right.sort_order ?? Number.MAX_SAFE_INTEGER);
 
-              if (sortOrderDiff !== 0) {
-                return sortOrderDiff;
-              }
+            if (sortOrderDiff !== 0) {
+              return sortOrderDiff;
+            }
 
-              return (getJoinedArtistName(left) ?? "").localeCompare(
-                getJoinedArtistName(right) ?? "",
-                "en-AU"
-              );
-            })
-            .map((row) => getJoinedArtistName(row))
-            .filter((artist): artist is string => Boolean(artist))
-        )
+            return (getJoinedArtistName(left) ?? "").localeCompare(
+              getJoinedArtistName(right) ?? "",
+              "en-AU"
+            );
+          })
+          .map((row) => getJoinedArtistName(row))
+          .filter((artist): artist is string => Boolean(artist))
       ])
     );
   }
@@ -1929,12 +1927,17 @@ export class SupabaseGigStore implements GigStore {
         const normalizedArtists = normalizeArtistNames(extraction.artists);
         const nextKind =
           normalizedArtists.length === 0 ? "unknown" : extraction.artistExtractionKind;
+        const currentStoredArtists = (row.artist_names ?? [])
+          .map((artist) => artist.replace(/\s+/g, " ").trim())
+          .filter(Boolean);
         const currentArtists = normalizeArtistNames(row.artist_names ?? []);
 
         if (
           nextKind === row.artist_extraction_kind &&
           currentArtists.length === normalizedArtists.length &&
-          currentArtists.every((artist, index) => artist === normalizedArtists[index])
+          currentArtists.every((artist, index) => artist === normalizedArtists[index]) &&
+          currentStoredArtists.length === normalizedArtists.length &&
+          currentStoredArtists.every((artist, index) => artist === normalizedArtists[index])
         ) {
           touchedGigIds.add(row.gig_id);
           continue;
