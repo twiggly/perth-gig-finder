@@ -268,6 +268,32 @@ describe("oztix wa source adapter", () => {
       "Greg Dear",
       "Perth Folk"
     ]);
+    expect(parseOztixSpecialGuests("Bat Soup, Misery Inc. & Zaria")).toEqual([
+      "Bat Soup",
+      "Misery Inc",
+      "Zaria"
+    ]);
+    expect(parseOztixSpecialGuests("CNTR & Somerly")).toEqual(["CNTR", "Somerly"]);
+    expect(parseOztixSpecialGuests("with Pontianak & MOT1SS")).toEqual([
+      "Pontianak",
+      "MOT1SS"
+    ]);
+    expect(parseOztixSpecialGuests("CoCo & The VOH Dancers")).toEqual([
+      "CoCo & The VOH Dancers"
+    ]);
+    expect(
+      parseOztixSpecialGuests(
+        "Emotion Sickness & Chemically Disheartened with Phoenix Nights"
+      )
+    ).toEqual(["Emotion Sickness", "Chemically Disheartened", "Phoenix Nights"]);
+    expect(
+      parseOztixSpecialGuests("Elise Lynelle. Support from Your Girl Persia.")
+    ).toEqual(["Elise Lynelle", "Your Girl Persia"]);
+    expect(
+      parseOztixSpecialGuests(
+        "POGUE MAHONE - TRIBUTE TO THE POGUES & SALV DI CRISCITO (Solo - Nirvana Unplugged)"
+      )
+    ).toEqual(["POGUE MAHONE", "SALV DI CRISCITO"]);
   });
 
   it("uses parsed special guests when Oztix has no structured artist arrays", () => {
@@ -480,6 +506,44 @@ describe("oztix wa source adapter", () => {
       })
     ).toEqual({
       artists: ["The Beautiful People", "The Maggots", "Rated R"],
+      artistExtractionKind: "structured"
+    });
+  });
+
+  it("cleans live Rosemount tribute, album, and country-suffix artist noise", () => {
+    expect(
+      extractOztixArtists({
+        EventName: "SILVERSPOON – A Tribute to Silverchair & Grinspoon",
+        Bands: ["SILVERCHAIR"],
+        Performances: [{ Name: "SILVERCHAIR" }],
+        SpecialGuests: "Emotion Sickness & Chemically Disheartened with Phoenix Nights"
+      })
+    ).toEqual({
+      artists: ["Emotion Sickness", "Chemically Disheartened", "Phoenix Nights"],
+      artistExtractionKind: "parsed_text"
+    });
+
+    expect(
+      extractOztixArtists({
+        EventName: "The Miseducation of Lauryn Hill Album played in full",
+        Bands: [],
+        Performances: [],
+        SpecialGuests: "with Elise Lynelle. Support from Your Girl Persia."
+      })
+    ).toEqual({
+      artists: ["Elise Lynelle", "Your Girl Persia"],
+      artistExtractionKind: "parsed_text"
+    });
+
+    expect(
+      extractOztixArtists({
+        EventName: "ARMAGEDOOM VIII ft. Candlemass (SWE)",
+        Bands: ["Candlemass"],
+        Performances: [{ Name: "Candlemass" }],
+        SpecialGuests: ""
+      })
+    ).toEqual({
+      artists: ["Candlemass"],
       artistExtractionKind: "structured"
     });
   });
