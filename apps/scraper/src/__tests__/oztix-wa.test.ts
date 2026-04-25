@@ -13,6 +13,7 @@ import {
   parseOztixTitleHeadlinerArtists,
   parseOztixHits,
   parseOztixTitleFeaturedArtists,
+  parseOztixTitleLineupArtists,
   parseOztixTitlePresentedArtists
 } from "../sources/oztix-wa";
 
@@ -295,6 +296,16 @@ describe("oztix wa source adapter", () => {
       )
     ).toEqual(["POGUE MAHONE", "SALV DI CRISCITO"]);
     expect(parseOztixSpecialGuests("FRIDAY FRIGHT NIGHT")).toEqual([]);
+    expect(
+      parseOztixSpecialGuests(
+        "STEVE SIMMONS + LAINEY WILSON TRIBUTE SET + DJ + MC HOLLY DENTON"
+      )
+    ).toEqual(["STEVE SIMMONS", "MC HOLLY DENTON"]);
+    expect(parseOztixSpecialGuests("Jolie, Band, Maira Trindade, DJ Glaucio")).toEqual([
+      "Jolie",
+      "Maira Trindade",
+      "DJ Glaucio"
+    ]);
   });
 
   it("uses parsed special guests when Oztix has no structured artist arrays", () => {
@@ -436,6 +447,25 @@ describe("oztix wa source adapter", () => {
     ).toEqual({
       artists: ["Tim Schilperoort", "Anika Louise"],
       artistExtractionKind: "structured"
+    });
+  });
+
+  it("parses clear comma-separated title lineups when Oztix has no artist arrays", () => {
+    expect(
+      parseOztixTitleLineupArtists("Sonic Haze, Retromode, Mustard & Draz n' the Druzy")
+    ).toEqual(["Sonic Haze", "Retromode", "Mustard", "Draz n' the Druzy"]);
+    expect(parseOztixTitleLineupArtists("Rave & Brunch")).toEqual([]);
+
+    expect(
+      extractOztixArtists({
+        EventName: "Sonic Haze, Retromode, Mustard & Draz n' the Druzy",
+        Bands: [],
+        Performances: [],
+        SpecialGuests: ""
+      })
+    ).toEqual({
+      artists: ["Sonic Haze", "Retromode", "Mustard", "Draz n' the Druzy"],
+      artistExtractionKind: "parsed_text"
     });
   });
 

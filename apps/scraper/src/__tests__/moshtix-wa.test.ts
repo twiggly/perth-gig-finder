@@ -473,6 +473,41 @@ describe("moshtix wa source adapter", () => {
     });
   });
 
+  it("dedupes parenthetical tribute variants in Moshtix artist arrays", () => {
+    const extraction = extractMoshtixArtists({
+      title: "The Buzz Lovers (Nirvana Tribute) (Spain)",
+      descriptionHtml: null,
+      structuredEvent: {
+        performers: [
+          { name: "The Buzz Lovers" },
+          { name: "The Buzz Lovers (Nirvana Tribute)" }
+        ]
+      },
+      eventData: {
+        name: "The Buzz Lovers (Nirvana Tribute) (Spain)",
+        artists: ["The Buzz Lovers", "The Buzz Lovers (Nirvana Tribute)"],
+        venue: {
+          name: "Freo.Social"
+        },
+        client: {
+          name: "Freo.Social"
+        }
+      },
+      venue: {
+        name: "Freo.Social",
+        slug: "freo-social",
+        suburb: "Fremantle",
+        address: null,
+        websiteUrl: null
+      }
+    });
+
+    expect(extraction).toEqual({
+      artists: ["The Buzz Lovers"],
+      artistExtractionKind: "structured"
+    });
+  });
+
   it("drops noisy Moshtix title support placeholders", () => {
     const extraction = extractMoshtixArtists({
       title: "Fever Dream with Alias Error + Special Guest TBA + Local Supports TBA + More",
