@@ -12,6 +12,12 @@ const BROKEN_QUESTION_MARK_RUN_PATTERN = /\?{3,}/;
 const ARTIST_DELIMITER_LEAK_PATTERN = /[•;]|(?:\s[|+]\s)|(?:··)/u;
 const ARTIST_SENTENCE_FRAGMENT_PATTERN =
   /^(?:and\s+|ft\.?\s+|performed\s+by\s+|at\s+local\b|style$|shows?$|making\b|listen\b|tune\b|her\s+music\b|his\s+music\b|their\s+music\b|music\s+by\b|support\s+set\b|past$|present\s+members?$)/i;
+const GENERIC_ARTIST_TOKEN_PATTERN =
+  /^(?:dj|band|live\s+abba\s+tribute\s+act|.+\btribute\s+set)$/i;
+const EMPTY_ARTIST_TITLE_LINEUP_SEPARATOR_PATTERN =
+  /(?:,|\sw[/.]\s|\s\+\s)/i;
+const EMPTY_ARTIST_TITLE_LINEUP_EXCLUSION_PATTERN =
+  /\b(?:vs|party|appreciation|karaoke|tickets?|conference|concert|calypso|euphoric|worship|pre-party|long weekend|top 100|after party|brunch|rave|tribute|show|experience|anthems|session|sessions)\b|man from snowy river/i;
 const execFileAsync = promisify(execFile);
 
 function printUsage() {
@@ -575,6 +581,17 @@ function normalizedTitleKey(value) {
     .join(" ");
 }
 
+function normalizeArtistVariantIdentity(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(the|tribute|show|set|act|band|dj|mc)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function tokenSet(value) {
   return new Set(normalizedTitleKey(value).split(" ").filter(Boolean));
 }
@@ -762,6 +779,63 @@ function findArtistSentenceFragmentCandidates(gigs) {
   );
 }
 
+function findGenericArtistTokenCandidates(gigs) {
+  return gigs.flatMap((gig) =>
+    gig.artist_names
+      .filter((artist) => GENERIC_ARTIST_TOKEN_PATTERN.test(artist))
+      .map((artist) => ({
+        ...formatGigSummary(gig),
+        artist
+      }))
+  );
+}
+
+function findDuplicateArtistVariantCandidates(gigs) {
+  return gigs.flatMap((gig) => {
+    const artistsByIdentity = new Map();
+
+    for (const artist of gig.artist_names) {
+      const identity = normalizeArtistVariantIdentity(artist);
+
+      if (!identity) {
+        continue;
+      }
+
+      artistsByIdentity.set(identity, [
+        ...(artistsByIdentity.get(identity) ?? []),
+        artist
+      ]);
+    }
+
+    const duplicateArtistGroups = [...artistsByIdentity.values()].filter(
+      (artists) => new Set(artists).size > 1
+    );
+
+    return duplicateArtistGroups.length > 0
+      ? [
+          {
+            ...formatGigSummary(gig),
+            duplicateArtistGroups
+          }
+        ]
+      : [];
+  });
+}
+
+function findEmptyArtistTitleLineupCandidates(gigs) {
+  return gigs
+    .filter((gig) => gig.artist_names.length === 0)
+    .filter((gig) => {
+      const title = gig.title ?? "";
+
+      return (
+        EMPTY_ARTIST_TITLE_LINEUP_SEPARATOR_PATTERN.test(title) &&
+        !EMPTY_ARTIST_TITLE_LINEUP_EXCLUSION_PATTERN.test(title)
+      );
+    })
+    .map(formatGigSummary);
+}
+
 function classifyImages(gigs) {
   const renderable = [];
   const expectedNoImage = [];
@@ -878,6 +952,9 @@ function buildAudit(payload, options, target, sourceReconciliation = null) {
   const publicTextEncodingIssues = findPublicTextEncodingIssues(gigs);
   const artistDelimiterLeaks = findArtistDelimiterLeaks(gigs);
   const artistSentenceFragmentCandidates = findArtistSentenceFragmentCandidates(gigs);
+  const genericArtistTokenCandidates = findGenericArtistTokenCandidates(gigs);
+  const duplicateArtistVariantCandidates = findDuplicateArtistVariantCandidates(gigs);
+  const emptyArtistTitleLineupCandidates = findEmptyArtistTitleLineupCandidates(gigs);
   const notableRows = findNotableRows(gigs, options.matchPatterns);
   const errors = [
     ...exactDuplicates.map((items) => ({
@@ -931,6 +1008,21 @@ function buildAudit(payload, options, target, sourceReconciliation = null) {
       kind: "artist_sentence_fragment",
       message: "Artist text looks like prose or a descriptor rather than a performer.",
       item
+    })),
+    ...genericArtistTokenCandidates.map((item) => ({
+      kind: "generic_artist_token",
+      message: "Artist text is a generic token rather than a performer.",
+      item
+    })),
+    ...duplicateArtistVariantCandidates.map((item) => ({
+      kind: "duplicate_artist_variant",
+      message: "Artist list contains duplicate variants of the same performer.",
+      item
+    })),
+    ...emptyArtistTitleLineupCandidates.map((item) => ({
+      kind: "empty_artist_title_lineup",
+      message: "Gig has no artists but the title appears to contain a concrete lineup.",
+      item
     }))
   ];
 
@@ -961,6 +1053,9 @@ function buildAudit(payload, options, target, sourceReconciliation = null) {
       publicTextEncodingIssueCount: publicTextEncodingIssues.length,
       artistDelimiterLeakCount: artistDelimiterLeaks.length,
       artistSentenceFragmentCandidateCount: artistSentenceFragmentCandidates.length,
+      genericArtistTokenCandidateCount: genericArtistTokenCandidates.length,
+      duplicateArtistVariantCandidateCount: duplicateArtistVariantCandidates.length,
+      emptyArtistTitleLineupCandidateCount: emptyArtistTitleLineupCandidates.length,
       notableRowCount: notableRows.length
     }
   };
@@ -1074,6 +1169,9 @@ function printHumanReport(audit, options) {
   console.log(`- public text encoding issues: ${audit.checks.publicTextEncodingIssueCount}`);
   console.log(`- artist delimiter leaks: ${audit.checks.artistDelimiterLeakCount}`);
   console.log(`- artist sentence-fragment candidates: ${audit.checks.artistSentenceFragmentCandidateCount}`);
+  console.log(`- generic artist-token candidates: ${audit.checks.genericArtistTokenCandidateCount}`);
+  console.log(`- duplicate artist-variant candidates: ${audit.checks.duplicateArtistVariantCandidateCount}`);
+  console.log(`- empty-artist title-lineup candidates: ${audit.checks.emptyArtistTitleLineupCandidateCount}`);
 
   printList("Errors", audit.errors, options.limit);
   printList("Warnings", audit.warnings, options.limit);
