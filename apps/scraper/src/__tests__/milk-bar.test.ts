@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  extractMilkBarArtists,
   extractMilkBarSearchConfig,
   milkBarSource,
   parseMilkBarHits
@@ -48,6 +49,48 @@ describe("milk bar source adapter", () => {
     expect(parsed.gigs[1]).toMatchObject({
       externalId: "319bc90e-b8b5-4d98-b79f-c3317150658b",
       status: "cancelled"
+    });
+  });
+
+  it("cleans Milk Bar featured prefixes and uppercase ampersand lineups", () => {
+    expect(
+      extractMilkBarArtists({
+        EventName: "THORNS & THUNDER",
+        Bands: ["ft. AMMIFY", "UNDENIABLE", "EDGE OF ETERNAL & PEASANT"],
+        Performances: []
+      })
+    ).toEqual({
+      artists: ["AMMIFY", "UNDENIABLE", "EDGE OF ETERNAL", "PEASANT"],
+      artistExtractionKind: "structured"
+    });
+
+    expect(
+      extractMilkBarArtists({
+        EventName: "AJ Hix Rhythm Six",
+        Bands: ["AJ Hix and His Rhythm Six"],
+        Performances: []
+      })
+    ).toEqual({
+      artists: ["AJ Hix and His Rhythm Six"],
+      artistExtractionKind: "structured"
+    });
+
+    expect(
+      extractMilkBarArtists({
+        EventName: "VELVET GROOVES",
+        SpecialGuests: "ft. ADAM LEBRANSKY, BRAINBOUND, COUPLA STUDS, MISTER SISTER & WEST ENVY",
+        Bands: [],
+        Performances: []
+      })
+    ).toEqual({
+      artists: [
+        "ADAM LEBRANSKY",
+        "BRAINBOUND",
+        "COUPLA STUDS",
+        "MISTER SISTER",
+        "WEST ENVY"
+      ],
+      artistExtractionKind: "explicit_lineup"
     });
   });
 

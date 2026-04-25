@@ -263,6 +263,11 @@ describe("oztix wa source adapter", () => {
     expect(
       parseOztixSpecialGuests("Everything Around You Tour with Special Guest Codee-lee")
     ).toEqual(["Codee-lee"]);
+    expect(parseOztixSpecialGuests("Neil Fernandes • Greg Dear • Perth Folk")).toEqual([
+      "Neil Fernandes",
+      "Greg Dear",
+      "Perth Folk"
+    ]);
   });
 
   it("uses parsed special guests when Oztix has no structured artist arrays", () => {
@@ -408,6 +413,75 @@ describe("oztix wa source adapter", () => {
       artists: ["Lindsay Wells"],
       artistExtractionKind: "parsed_text"
     });
+  });
+
+  it("splits Oztix bullet-delimited structured artist strings", () => {
+    expect(
+      extractOztixArtists({
+        EventName: "VOICES OF HOUSE - PERTH",
+        Bands: [
+          "Darren Bouthier • Chappers • Mitchell James Plus the electric energy of Creo Saxman with Percussion by CoCo & The VOH Dancers"
+        ],
+        Performances: []
+      })
+    ).toEqual({
+      artists: [
+        "Darren Bouthier",
+        "Chappers",
+        "Mitchell James",
+        "Creo Saxman",
+        "CoCo & The VOH Dancers"
+      ],
+      artistExtractionKind: "structured"
+    });
+  });
+
+  it("keeps tribute performers and drops slash-separated tribute subjects", () => {
+    expect(
+      extractOztixArtists({
+        EventName: "Rammstein / Slipknot / Marilyn Manson Tribute Night",
+        Bands: [
+          "Marilyn Manson",
+          "performed by The Beautiful People / Slipknot",
+          "performed by The Maggots / Rammstein",
+          "performed by Rated R"
+        ],
+        Performances: []
+      })
+    ).toEqual({
+      artists: ["The Beautiful People", "The Maggots", "Rated R"],
+      artistExtractionKind: "structured"
+    });
+  });
+
+  it("removes broken emoji question-mark runs from Oztix titles and avoids theme-party subjects as artists", () => {
+    const normalized = normalizeOztixHit({
+      EventGuid: "sleep-token-party",
+      EventName:
+        "????SLEEP TOKEN vs BAD OMENS: WORSHIP PARTY???? + HLH/DOD AFTER PARTY - PERTH",
+      DateStart: "2026-04-26T12:00:00",
+      EventUrl: "https://tickets.oztix.com.au/outlet/event/sleep-token-party",
+      Categories: ["Music"],
+      _geoloc: { lat: -31.9523, lng: 115.8613 },
+      Venue: {
+        Name: "Amplifier Bar",
+        Locality: "Perth"
+      },
+      Bands: [
+        "DJs playing the best of Sleep Token",
+        "Bad Omens",
+        "the greatest emo",
+        "metalcore",
+        "alternative tracks of all time ALL. NIGHT. LONG",
+        "HLH/DOD after party!"
+      ]
+    });
+
+    expect(normalized.title).toBe(
+      "SLEEP TOKEN vs BAD OMENS: WORSHIP PARTY + HLH/DOD AFTER PARTY - PERTH"
+    );
+    expect(normalized.artists).toEqual([]);
+    expect(normalized.artistExtractionKind).toBe("unknown");
   });
 
   it("parses WA hits into normalized gigs, skips non-gig events, and counts failures", () => {

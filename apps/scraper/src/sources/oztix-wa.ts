@@ -112,10 +112,10 @@ const EXPLICIT_MUSIC_TEXT_PATTERNS = [
 ];
 
 const SPECIAL_GUEST_PREFIX_PATTERN =
-  /^(?:with|plus)?\s*special guests?[:,]?\s*|^(?:with|plus)\s+guests?[:,]?\s*|^w[/.]\s*|^(?:with|plus)\s+|^starring\s+|^featuring\s+|^feat\.?\s+/i;
+  /^(?:with|plus)?\s*special guests?[:,]?\s*|^(?:with|plus)\s+guests?[:,]?\s*|^w[/.]\s*|^(?:with|plus)\s+|^starring\s+|^featuring\s+|^feat\.?\s+|^ft\.?\s+/i;
 const GENERIC_SPECIAL_GUEST_PATTERN =
-  /^(?:(?:a|an)\s+)?(?:special\s+)?guests?\s*(?:to be announced|tba|tbc)?$|^(?:(?:local|more|additional|special)\s+)*(?:support|supports|support acts?)\s*(?:to be announced|tba|tbc)?$|^(?:secret|mystery)\s+(?:act|artist|guest|set)s?[!.]?$|^(?:more|more\s+(?:acts?|artists?|guests?))[!.]?$|^(?:tba|tbc|to be announced|more\s+(?:tba|tbc|to be announced)|more to be announced)$/i;
-const SPECIAL_GUEST_SEPARATOR_PATTERN = /\s*(?:,|\+|\^|\||\s-\s)\s*/;
+  /^(?:(?:a|an)\s+)?(?:special\s+)?guests?\s*(?:to be announced|tba|tbc)?$|^(?:(?:local|more|additional|special)\s+)*(?:support|supports|support acts?)\s*(?:to be announced|tba|tbc)?$|^(?:secret|mystery)\s+(?:act|artist|guest|set)s?[!.]?$|^(?:more|more\s+(?:acts?|artists?|guests?))[!.]?$|^(?:tba|tbc|to be announced|more\s+(?:tba|tbc|to be announced)|more to be announced)$|^(?:past|present(?:\s+members?)?)$/i;
+const SPECIAL_GUEST_SEPARATOR_PATTERN = /\s*(?:,|\+|\^|\||[•·]|\s-\s)\s*/u;
 const SPECIAL_GUEST_TOUR_LEAD_IN_PATTERN =
   /^.+?\b(?:tour|single|album|ep|launch|show)\b\s+with\s+special guests?[:,]?\s+/i;
 const TITLE_FEATURED_ARTIST_PATTERN =
@@ -126,7 +126,12 @@ const TITLE_QUOTED_TOUR_HEADLINER_PATTERN =
   /^(.+?)\s+(?:"[^"]+"|'[^']+'|“[^”]+”|‘[^’]+’)$/;
 const TITLE_TRIBUTE_SUBJECT_PATTERN =
   /^(.+?)\s+the\s+australian\s+tribute\b/i;
+const TITLE_SLASH_TRIBUTE_SUBJECT_PATTERN =
+  /^(.+?)\s+tribute(?:\s+(?:night|show))?\b/i;
 const TITLE_HEADLINER_SEPARATOR_PATTERN = /\s[-–—:]\s|[,+]/;
+const OZTIX_BROKEN_EMOJI_QUESTION_RUN_PATTERN = /\?{3,}/g;
+const OZTIX_NOISY_ARTIST_FRAGMENT_PATTERN =
+  /^(?:djs?\s+playing\s+the\s+best\s+of\b.*|the\s+greatest\s+emo|metalcore|alternative\s+tracks\s+of\s+all\s+time\b.*|hlh\/dod\s+after\s+party!?|past|present(?:\s+members?)?)$/i;
 
 interface OztixVenue {
   Name?: string;
@@ -313,6 +318,15 @@ function selectPreferredImageUrl(hit: OztixHit): string | null {
   return preferred.preferred;
 }
 
+function normalizeOztixTitle(value: string | null | undefined): string {
+  return normalizeWhitespace(value ?? "")
+    .replace(/^\?{3,}\s*/g, "")
+    .replace(/\s*\?{3,}(?=\s|$)/g, "")
+    .replace(OZTIX_BROKEN_EMOJI_QUESTION_RUN_PATTERN, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function collectNamedArtists(hit: OztixHit): string[] {
   const fromBands = Array.isArray(hit.Bands) ? hit.Bands : [];
   const fromPerformances = Array.isArray(hit.Performances)
@@ -328,9 +342,7 @@ function collectNamedArtists(hit: OztixHit): string[] {
       : [];
 
   return [
-    ...fromBands,
-    ...fromPerformances,
-    ...fromTourName,
+    ...[...fromBands, ...fromPerformances, ...fromTourName].flatMap(splitOztixStructuredArtist),
     ...fromTitleHeadliner,
     ...fromTitlePresented,
     ...fromSpecialGuests,
@@ -347,7 +359,7 @@ function collectStructuredArtists(hit: OztixHit): string[] {
     : [];
 
   return [...fromBands, ...fromPerformances]
-    .map((artist) => normalizeWhitespace(artist))
+    .flatMap(splitOztixStructuredArtist)
     .filter(Boolean);
 }
 
@@ -362,7 +374,14 @@ function stripOztixArtistPrefix(value: string): string {
 }
 
 function cleanOztixArtistToken(value: string): string {
-  return stripOztixArtistPrefix(value).replace(/^["'“”‘’]+|["'“”‘’]+$/g, "");
+  let normalized = stripOztixArtistPrefix(value).replace(/^["'“”‘’]+|["'“”‘’]+$/g, "");
+  const performedByMatch = normalized.match(/^performed\s+by\s+(.+?)(?:\s*\/\s*.+)?$/i);
+
+  if (performedByMatch?.[1]) {
+    normalized = performedByMatch[1];
+  }
+
+  return normalizeWhitespace(normalized);
 }
 
 function normalizeSpecialGuestToken(value: string): string {
@@ -381,14 +400,7 @@ export function parseOztixSpecialGuests(value: string | null | undefined): strin
     return [];
   }
 
-  const candidates = normalized
-    .split(SPECIAL_GUEST_SEPARATOR_PATTERN)
-    .flatMap((token) => token.split(/\s*,\s*/))
-    .map(cleanOztixArtistToken)
-    .filter(Boolean)
-    .filter((token) => !GENERIC_SPECIAL_GUEST_PATTERN.test(token));
-
-  return createArtistExtraction(candidates, "parsed_text").artists;
+  return createArtistExtraction(splitOztixArtistList(normalized), "parsed_text").artists;
 }
 
 function normalizeArtistIdentity(value: string): string {
@@ -400,18 +412,52 @@ function normalizeArtistIdentity(value: string): string {
 
 function splitOztixArtistList(value: string): string[] {
   return value
+    .replace(/\s+plus\s+the\s+electric\s+energy\s+of\s+/gi, ", ")
+    .replace(/\s+with\s+percussion\s+by\s+/gi, ", ")
     .replace(/\s+and\s+/gi, ", ")
     .split(SPECIAL_GUEST_SEPARATOR_PATTERN)
     .flatMap((token) => token.split(/\s*,\s*/))
+    .flatMap((token) => {
+      const normalized = normalizeWhitespace(token);
+
+      if (/^[A-Z0-9 '&./-]+$/.test(normalized) && /\s&\s/.test(normalized)) {
+        return normalized.split(/\s*&\s*/);
+      }
+
+      return [normalized];
+    })
     .map(cleanOztixArtistToken)
     .filter(Boolean)
+    .filter(isLikelyOztixArtistName)
     .filter((token) => !GENERIC_SPECIAL_GUEST_PATTERN.test(token));
+}
+
+function splitOztixStructuredArtist(value: string | null | undefined): string[] {
+  const normalized = normalizeWhitespace(value ?? "")
+    .replace(/\s+plus\s+the\s+electric\s+energy\s+of\s+/i, ", ")
+    .replace(/\s+with\s+percussion\s+by\s+/i, ", ");
+
+  return splitOztixArtistList(normalized);
+}
+
+function isLikelyOztixArtistName(value: string): boolean {
+  const normalized = normalizeWhitespace(value);
+
+  if (!normalized || normalized.length > 90) {
+    return false;
+  }
+
+  if (OZTIX_NOISY_ARTIST_FRAGMENT_PATTERN.test(normalized)) {
+    return false;
+  }
+
+  return !/\ball\.?\s+night\.?\s+long\b/i.test(normalized);
 }
 
 export function parseOztixTitleFeaturedArtists(
   title: string | null | undefined
 ): string[] {
-  const normalized = normalizeWhitespace(title ?? "");
+  const normalized = normalizeOztixTitle(title);
   const match = normalized.match(TITLE_FEATURED_ARTIST_PATTERN);
 
   if (!match?.[1]) {
@@ -424,7 +470,7 @@ export function parseOztixTitleFeaturedArtists(
 export function parseOztixTitlePresentedArtists(
   title: string | null | undefined
 ): string[] {
-  const normalized = normalizeWhitespace(title ?? "");
+  const normalized = normalizeOztixTitle(title);
   const match = normalized.match(TITLE_PRESENTED_ARTIST_PATTERN);
 
   if (!match?.[1]) {
@@ -437,7 +483,7 @@ export function parseOztixTitlePresentedArtists(
 export function parseOztixTitleHeadlinerArtists(
   title: string | null | undefined
 ): string[] {
-  const normalized = normalizeWhitespace(title ?? "");
+  const normalized = normalizeOztixTitle(title);
   const match = normalized.match(TITLE_QUOTED_TOUR_HEADLINER_PATTERN);
 
   if (!match?.[1]) {
@@ -454,10 +500,50 @@ export function parseOztixTitleHeadlinerArtists(
 }
 
 function getOztixTributeSubject(title: string | null | undefined): string | null {
-  const normalized = normalizeWhitespace(title ?? "");
+  const normalized = normalizeOztixTitle(title);
   const match = normalized.match(TITLE_TRIBUTE_SUBJECT_PATTERN);
 
   return match?.[1] ? normalizeWhitespace(match[1]) : null;
+}
+
+function getOztixTributeSubjects(title: string | null | undefined): string[] {
+  const subjects = [];
+  const australianTributeSubject = getOztixTributeSubject(title);
+
+  if (australianTributeSubject) {
+    subjects.push(australianTributeSubject);
+  }
+
+  const normalized = normalizeOztixTitle(title);
+  const slashTributeMatch = normalized.match(TITLE_SLASH_TRIBUTE_SUBJECT_PATTERN);
+
+  if (slashTributeMatch?.[1] && slashTributeMatch[1].includes("/")) {
+    subjects.push(
+      ...slashTributeMatch[1]
+        .split(/\s*\/\s*/)
+        .map((subject) => normalizeWhitespace(subject))
+        .filter(Boolean)
+    );
+  }
+
+  return subjects;
+}
+
+function isOztixThemePartyTitle(title: string | null | undefined): boolean {
+  const normalized = normalizeOztixTitle(title);
+
+  return /\bparty\b/i.test(normalized) && /\b(?:vs|playing the best of|worship|after party)\b/i.test(normalized);
+}
+
+function isOztixThemePartySubject(title: string | null | undefined, artist: string): boolean {
+  if (!isOztixThemePartyTitle(title)) {
+    return false;
+  }
+
+  const titleIdentity = normalizeArtistIdentity(normalizeOztixTitle(title));
+  const artistIdentity = normalizeArtistIdentity(artist);
+
+  return Boolean(artistIdentity && titleIdentity.includes(artistIdentity));
 }
 
 function normalizeCategories(hit: OztixHit): string[] {
@@ -489,26 +575,26 @@ function hasExplicitMusicSignal(hit: OztixHit): boolean {
 export function extractOztixArtists(hit: OztixHit) {
   const titleFeaturedArtists = parseOztixTitleFeaturedArtists(hit.EventName);
   const titlePresentedArtists = parseOztixTitlePresentedArtists(hit.EventName);
-  const tributeSubject = titleFeaturedArtists.length > 0
-    ? getOztixTributeSubject(hit.EventName)
-    : null;
-  const tributeSubjectIdentity = tributeSubject
-    ? normalizeArtistIdentity(tributeSubject)
-    : null;
+  const tributeSubjectIdentities = new Set(
+    getOztixTributeSubjects(hit.EventName).map(normalizeArtistIdentity)
+  );
   const structuredArtists = [
-    ...(Array.isArray(hit.Bands) ? hit.Bands : []),
+    ...(Array.isArray(hit.Bands) ? hit.Bands : []).flatMap(splitOztixStructuredArtist),
     ...(Array.isArray(hit.Performances)
-      ? hit.Performances.map((performance) => performance.Name ?? "")
+      ? hit.Performances.flatMap((performance) =>
+          splitOztixStructuredArtist(performance.Name ?? "")
+        )
       : []),
-    ...(hit.TourName ? [hit.TourName] : [])
+    ...(hit.TourName ? splitOztixStructuredArtist(hit.TourName) : [])
   ]
     .map((artist) => normalizeWhitespace(artist))
     .filter(Boolean)
+    .filter(isLikelyOztixArtistName)
     .filter(
       (artist) =>
-        !tributeSubjectIdentity ||
-        normalizeArtistIdentity(artist) !== tributeSubjectIdentity
-    );
+        !tributeSubjectIdentities.has(normalizeArtistIdentity(artist))
+    )
+    .filter((artist) => !isOztixThemePartySubject(hit.EventName, artist));
   const titleHeadlinerArtists =
     structuredArtists.length === 0
       ? parseOztixTitleHeadlinerArtists(hit.EventName)
@@ -520,7 +606,12 @@ export function extractOztixArtists(hit: OztixHit) {
     ...titlePresentedArtists,
     ...titleFeaturedArtists,
     ...parsedSpecialGuests
-  ];
+  ]
+    .filter(
+      (artist) =>
+        !tributeSubjectIdentities.has(normalizeArtistIdentity(artist))
+    )
+    .filter((artist) => !isOztixThemePartySubject(hit.EventName, artist));
   const extractionKind = structuredArtists.length > 0 ? "structured" : "parsed_text";
 
   return createArtistExtraction(combinedArtists, extractionKind);
@@ -612,7 +703,7 @@ function normalizeGigStatus(hit: OztixHit, title: string): GigStatus {
 }
 
 export function normalizeOztixHit(hit: OztixHit): NormalizedGig {
-  const title = normalizeWhitespace(hit.EventName ?? "");
+  const title = normalizeOztixTitle(hit.EventName);
   const startsAt = normalizeUtcDate(hit.DateStart);
 
   if (!title || !startsAt) {

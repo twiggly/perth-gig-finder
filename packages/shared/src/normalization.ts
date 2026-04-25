@@ -36,9 +36,43 @@ const VENUE_WEBSITE_OVERRIDES = new Map<string, string>([
   ["four5nine-bar-rosemount", "https://www.rosemounthotel.com.au/"],
   ["rosemount-hotel", "https://www.rosemounthotel.com.au/"]
 ]);
+const HTML_ENTITIES = new Map<string, string>([
+  ["amp", "&"],
+  ["apos", "'"],
+  ["gt", ">"],
+  ["lt", "<"],
+  ["nbsp", " "],
+  ["quot", "\""]
+]);
+
+function decodeHtmlEntity(entity: string): string {
+  const normalizedEntity = entity.toLowerCase();
+
+  if (normalizedEntity.startsWith("#x")) {
+    const codePoint = Number.parseInt(normalizedEntity.slice(2), 16);
+    return Number.isFinite(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+      ? String.fromCodePoint(codePoint)
+      : `&${entity};`;
+  }
+
+  if (normalizedEntity.startsWith("#")) {
+    const codePoint = Number.parseInt(normalizedEntity.slice(1), 10);
+    return Number.isFinite(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff
+      ? String.fromCodePoint(codePoint)
+      : `&${entity};`;
+  }
+
+  return HTML_ENTITIES.get(normalizedEntity) ?? `&${entity};`;
+}
+
+export function decodeHtmlEntities(value: string): string {
+  return value.replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]+);/gi, (_, entity: string) =>
+    decodeHtmlEntity(entity)
+  );
+}
 
 export function normalizeWhitespace(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
+  return decodeHtmlEntities(value).replace(/\s+/g, " ").trim();
 }
 
 export function slugify(value: string): string {

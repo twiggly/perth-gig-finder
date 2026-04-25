@@ -7,6 +7,11 @@ import { promisify } from "node:util";
 const DEFAULT_EXAMPLE_LIMIT = 10;
 const DEFAULT_FUZZY_THRESHOLD = 0.72;
 const EXPECTED_NO_IMAGE_SOURCE_NAMES = new Set(["The Bird"]);
+const HTML_ENTITY_LEAK_PATTERN = /&(?:amp|apos|gt|lt|nbsp|quot|#\d+|#x[0-9a-f]+);/i;
+const BROKEN_QUESTION_MARK_RUN_PATTERN = /\?{3,}/;
+const ARTIST_DELIMITER_LEAK_PATTERN = /[•;]|(?:\s[|+]\s)|(?:··)/u;
+const ARTIST_SENTENCE_FRAGMENT_PATTERN =
+  /^(?:and\s+|ft\.?\s+|performed\s+by\s+|at\s+local\b|style$|shows?$|making\b|listen\b|tune\b|her\s+music\b|his\s+music\b|their\s+music\b|music\s+by\b|support\s+set\b|past$|present\s+members?$)/i;
 const execFileAsync = promisify(execFile);
 
 function printUsage() {
@@ -465,6 +470,61 @@ function findArtistPlaceholderLeaks(gigs) {
   );
 }
 
+function findPublicTextEncodingIssues(gigs) {
+  return gigs.flatMap((gig) => {
+    const fields = [];
+
+    if (HTML_ENTITY_LEAK_PATTERN.test(gig.title ?? "")) {
+      fields.push("title");
+    }
+
+    if (HTML_ENTITY_LEAK_PATTERN.test(gig.venue_name ?? "")) {
+      fields.push("venue");
+    }
+
+    gig.artist_names.forEach((artist, index) => {
+      if (HTML_ENTITY_LEAK_PATTERN.test(artist)) {
+        fields.push(`artist_names[${index}]`);
+      }
+    });
+
+    if (BROKEN_QUESTION_MARK_RUN_PATTERN.test(gig.title ?? "")) {
+      fields.push("title_question_marks");
+    }
+
+    return fields.length > 0
+      ? [
+          {
+            ...formatGigSummary(gig),
+            fields
+          }
+        ]
+      : [];
+  });
+}
+
+function findArtistDelimiterLeaks(gigs) {
+  return gigs.flatMap((gig) =>
+    gig.artist_names
+      .filter((artist) => ARTIST_DELIMITER_LEAK_PATTERN.test(artist))
+      .map((artist) => ({
+        ...formatGigSummary(gig),
+        artist
+      }))
+  );
+}
+
+function findArtistSentenceFragmentCandidates(gigs) {
+  return gigs.flatMap((gig) =>
+    gig.artist_names
+      .filter((artist) => ARTIST_SENTENCE_FRAGMENT_PATTERN.test(artist))
+      .map((artist) => ({
+        ...formatGigSummary(gig),
+        artist
+      }))
+  );
+}
+
 function classifyImages(gigs) {
   const renderable = [];
   const expectedNoImage = [];
@@ -573,6 +633,9 @@ function buildAudit(payload, options, target) {
   const images = classifyImages(gigs);
   const nonMusicLeakageCandidates = findNonMusicLeakageCandidates(gigs);
   const missingArtistCandidates = findMissingArtistCandidates(gigs);
+  const publicTextEncodingIssues = findPublicTextEncodingIssues(gigs);
+  const artistDelimiterLeaks = findArtistDelimiterLeaks(gigs);
+  const artistSentenceFragmentCandidates = findArtistSentenceFragmentCandidates(gigs);
   const notableRows = findNotableRows(gigs, options.matchPatterns);
   const errors = [
     ...exactDuplicates.map((items) => ({
@@ -611,6 +674,21 @@ function buildAudit(payload, options, target) {
       kind: "missing_artist_candidate",
       message: "Gig has no artists but title/description suggests an explicit lineup.",
       item
+    })),
+    ...publicTextEncodingIssues.map((item) => ({
+      kind: "public_text_encoding",
+      message: "Public gig text contains encoded HTML entities or broken replacement punctuation.",
+      item
+    })),
+    ...artistDelimiterLeaks.map((item) => ({
+      kind: "artist_delimiter",
+      message: "Artist text appears to contain multiple artists or decoration in one value.",
+      item
+    })),
+    ...artistSentenceFragmentCandidates.map((item) => ({
+      kind: "artist_sentence_fragment",
+      message: "Artist text looks like prose or a descriptor rather than a performer.",
+      item
     }))
   ];
 
@@ -637,6 +715,9 @@ function buildAudit(payload, options, target) {
       },
       missingArtistCandidateCount: missingArtistCandidates.length,
       nonMusicLeakageCandidateCount: nonMusicLeakageCandidates.length,
+      publicTextEncodingIssueCount: publicTextEncodingIssues.length,
+      artistDelimiterLeakCount: artistDelimiterLeaks.length,
+      artistSentenceFragmentCandidateCount: artistSentenceFragmentCandidates.length,
       notableRowCount: notableRows.length
     }
   };
@@ -683,6 +764,9 @@ function printHumanReport(audit, options) {
   console.log(`- expected no-image public gigs: ${audit.checks.imageStats.expectedNoImageCount}`);
   console.log(`- Humanitix/Ticketek non-music candidates: ${audit.checks.nonMusicLeakageCandidateCount}`);
   console.log(`- missing artist candidates: ${audit.checks.missingArtistCandidateCount}`);
+  console.log(`- public text encoding issues: ${audit.checks.publicTextEncodingIssueCount}`);
+  console.log(`- artist delimiter leaks: ${audit.checks.artistDelimiterLeakCount}`);
+  console.log(`- artist sentence-fragment candidates: ${audit.checks.artistSentenceFragmentCandidateCount}`);
 
   printList("Errors", audit.errors, options.limit);
   printList("Warnings", audit.warnings, options.limit);
