@@ -140,7 +140,7 @@ Good first pages:
 - The hosted refresh workflow:
   - scrapes source data into hosted Supabase
   - backfills mirrored images as best effort
-  - audits the hosted `gig_cards` public view that feeds the homepage
+  - audits the hosted `gig_cards` public view that feeds the homepage and records audit history in Supabase
 - The hosted public payload audit runs in non-strict mode: hard errors fail the workflow, while warning-level findings stay visible in the workflow logs.
 - For manual checks, run `pnpm audit:gigs -- --url <deployment-url> --vercel` for Vercel-protected deployments.
 
@@ -259,8 +259,9 @@ pnpm verify
 
   Omit `--vercel` for publicly fetchable URLs. Use `--strict` if warning-level findings such as unexpected no-image rows, heuristic non-music matches, or artist-quality candidates should fail the command.
   The Bird rows without images are expected and counted separately from no-image warnings because the official venue feed does not provide posters.
-  Hosted refreshes run `pnpm audit:gigs -- --supabase --reconcile-sources --limit 30` against the hosted `gig_cards` public view using the workflow Supabase secrets.
+  Hosted refreshes run `pnpm audit:gigs -- --supabase --reconcile-sources --record-history --limit 30` against the hosted `gig_cards` public view using the workflow Supabase secrets.
   When checking why scraper/source totals differ from public homepage totals, run `pnpm audit:gigs -- --supabase --reconcile-sources`; it reports stored source-gig totals, active public cards, source ownership handoffs, and postponed/cancelled rows hidden only because of status.
+  Add `--record-history` when an operational audit should insert a private `audit_runs` row; this requires `SUPABASE_SERVICE_ROLE_KEY`.
 
 - Scraper-only verification:
 

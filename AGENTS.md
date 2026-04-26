@@ -50,8 +50,9 @@ This file is for coding agents working in this repository. Keep it short, practi
 - The hosted workflow:
   - runs `scrape` against hosted Supabase
   - runs `mirror-images` as best effort
-  - runs `audit:gigs -- --supabase --reconcile-sources` against the hosted `gig_cards` public view and private source-gig status breakdown
+  - runs `audit:gigs -- --supabase --reconcile-sources --record-history --limit 30` against the hosted `gig_cards` public view and private source-gig status breakdown
 - Hosted refresh audits run in non-strict mode: hard audit errors fail, warning-level findings remain visible.
+- Hosted audit history rows live in private `public.audit_runs` records and require `SUPABASE_SERVICE_ROLE_KEY`; do not grant public access to that table.
 - Use `pnpm audit:gigs -- --supabase --reconcile-sources` when comparing scraper/source counts with public homepage counts; it reports active public cards separately from source ownership handoffs and postponed/cancelled source rows.
 - The hosted GitHub runner currently excludes `ticketmaster-au`, because Ticketmaster blocks it with `403` responses there.
 - A few poster mirror failures should not fail the whole hosted refresh workflow.

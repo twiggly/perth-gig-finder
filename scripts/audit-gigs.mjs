@@ -6,6 +6,8 @@ import { promisify } from "node:util";
 
 const DEFAULT_EXAMPLE_LIMIT = 10;
 const DEFAULT_FUZZY_THRESHOLD = 0.72;
+const AUDIT_HISTORY_NAME = "public_gig_cards";
+const AUDIT_HISTORY_TREND_LIMIT = 5;
 const EXPECTED_NO_IMAGE_SOURCE_NAMES = new Set(["The Bird"]);
 const HTML_ENTITY_LEAK_PATTERN = /&(?:amp|apos|gt|lt|nbsp|quot|#\d+|#x[0-9a-f]+);/i;
 const BROKEN_QUESTION_MARK_RUN_PATTERN = /\?{3,}/;
@@ -32,6 +34,7 @@ Options:
   --file <path>         Read a saved homepage HTML file instead of fetching.
   --supabase            Audit the Supabase gig_cards view using SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
   --reconcile-sources   With --supabase, compare source_gigs totals with active public gig_cards counts.
+  --record-history      Store the audit summary in Supabase audit_runs. Requires SUPABASE_SERVICE_ROLE_KEY.
   --vercel              Fetch a protected Vercel deployment with vercel curl.
   --match <regex>       Include notable rows whose title matches the regex. Repeatable.
   --json                Print machine-readable JSON only.
@@ -47,6 +50,7 @@ function parseArgs(argv) {
     json: false,
     limit: DEFAULT_EXAMPLE_LIMIT,
     matchPatterns: [],
+    recordHistory: false,
     reconcileSources: false,
     strict: false,
     supabase: false,
@@ -79,6 +83,9 @@ function parseArgs(argv) {
         break;
       case "--reconcile-sources":
         options.reconcileSources = true;
+        break;
+      case "--record-history":
+        options.recordHistory = true;
         break;
       case "--strict":
         options.strict = true;
@@ -150,7 +157,7 @@ function groupRowsByDate(rows) {
   }));
 }
 
-function getSupabaseConfig({ requireServiceRole = false } = {}) {
+function getSupabaseConfig({ operationName = "this operation", requireServiceRole = false } = {}) {
   const supabaseUrl = process.env.SUPABASE_URL?.replace(/\/$/, "");
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const supabaseKey =
@@ -166,7 +173,7 @@ function getSupabaseConfig({ requireServiceRole = false } = {}) {
 
   if (requireServiceRole && !serviceRoleKey) {
     throw new Error(
-      "--reconcile-sources requires SUPABASE_SERVICE_ROLE_KEY so private source_gigs rows can be audited."
+      `${operationName} requires SUPABASE_SERVICE_ROLE_KEY so private operational data can be accessed.`
     );
   }
 
@@ -204,6 +211,34 @@ async function fetchSupabaseRows(supabaseUrl, supabaseKey, tableName, searchPara
   }
 
   return rows;
+}
+
+async function insertSupabaseRow(supabaseUrl, supabaseKey, tableName, payload) {
+  const response = await fetch(`${supabaseUrl}/rest/v1/${tableName}`, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      apikey: supabaseKey,
+      authorization: `Bearer ${supabaseKey}`,
+      "content-type": "application/json",
+      prefer: "return=representation"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Supabase ${tableName} insert failed with status ${response.status}: ${await response.text()}`
+    );
+  }
+
+  const rows = await response.json();
+
+  if (!Array.isArray(rows) || !rows[0]) {
+    throw new Error(`Supabase ${tableName} insert did not return the stored row.`);
+  }
+
+  return rows[0];
 }
 
 async function loadSupabasePayload() {
@@ -294,7 +329,10 @@ function createEmptySourceReconciliationRow(source) {
 }
 
 async function loadSupabaseSourceReconciliation(payload, options) {
-  const { supabaseKey, supabaseUrl } = getSupabaseConfig({ requireServiceRole: true });
+  const { supabaseKey, supabaseUrl } = getSupabaseConfig({
+    operationName: "--reconcile-sources",
+    requireServiceRole: true
+  });
   const activePublicRows = toGigRows(payload);
   const activePublicRowsByGigId = new Map(
     activePublicRows.map((row) => [row.id, row])
@@ -1061,6 +1099,80 @@ function buildAudit(payload, options, target, sourceReconciliation = null) {
   };
 }
 
+function getAuditResult(audit, options) {
+  if (audit.errors.length > 0 || (options.strict && audit.warnings.length > 0)) {
+    return "fail";
+  }
+
+  return audit.warnings.length > 0 ? "warning" : "pass";
+}
+
+function shouldAuditFail(audit, options) {
+  return getAuditResult(audit, options) === "fail";
+}
+
+function createAuditHistoryPayload(audit, options) {
+  return {
+    audit_name: AUDIT_HISTORY_NAME,
+    result: getAuditResult(audit, options),
+    target_kind: audit.target.kind ?? "unknown",
+    target_label: audit.target.target ?? "unknown",
+    strict: options.strict,
+    reconcile_sources: options.reconcileSources,
+    github_run_id: process.env.GITHUB_RUN_ID ?? null,
+    github_run_attempt: process.env.GITHUB_RUN_ATTEMPT ?? null,
+    github_workflow: process.env.GITHUB_WORKFLOW ?? null,
+    github_event_name: process.env.GITHUB_EVENT_NAME ?? null,
+    github_repository: process.env.GITHUB_REPOSITORY ?? null,
+    github_ref: process.env.GITHUB_REF ?? null,
+    github_ref_name: process.env.GITHUB_REF_NAME ?? null,
+    git_sha: process.env.GITHUB_SHA ?? null,
+    payload_gig_count: audit.payload.gigCount,
+    payload_day_count: audit.payload.dayCount,
+    initial_active_date_key: audit.payload.initialActiveDateKey,
+    error_count: audit.errors.length,
+    warning_count: audit.warnings.length,
+    check_counts: audit.checks,
+    source_counts: audit.payload.sourceCounts,
+    image_stats: audit.checks.imageStats,
+    source_reconciliation_totals: audit.sourceReconciliation?.totals ?? null,
+    error_examples: audit.errors.slice(0, options.limit),
+    warning_examples: audit.warnings.slice(0, options.limit)
+  };
+}
+
+async function recordAuditHistory(audit, options) {
+  const { supabaseKey, supabaseUrl } = getSupabaseConfig({
+    operationName: "--record-history",
+    requireServiceRole: true
+  });
+  const inserted = await insertSupabaseRow(
+    supabaseUrl,
+    supabaseKey,
+    "audit_runs",
+    createAuditHistoryPayload(audit, options)
+  );
+  const recent = await fetchSupabaseRows(supabaseUrl, supabaseKey, "audit_runs", {
+    select: [
+      "id",
+      "created_at",
+      "result",
+      "payload_gig_count",
+      "warning_count",
+      "error_count",
+      "check_counts"
+    ].join(","),
+    audit_name: `eq.${AUDIT_HISTORY_NAME}`,
+    order: "created_at.desc",
+    limit: String(AUDIT_HISTORY_TREND_LIMIT)
+  });
+
+  return {
+    inserted,
+    recent
+  };
+}
+
 function printList(title, items, limit) {
   if (items.length === 0) {
     return;
@@ -1142,6 +1254,44 @@ function printSourceReconciliation(reconciliation, limit) {
   }
 }
 
+function printAuditHistory(history) {
+  if (!history) {
+    return;
+  }
+
+  console.log("");
+  console.log("Audit History");
+  console.log(
+    `Stored: ${history.inserted.id} (${String(history.inserted.result).toUpperCase()})`
+  );
+
+  const resultCounts = history.recent.reduce(
+    (counts, row) => ({
+      ...counts,
+      [row.result]: (counts[row.result] ?? 0) + 1
+    }),
+    {
+      fail: 0,
+      pass: 0,
+      warning: 0
+    }
+  );
+
+  console.log(
+    `Recent ${history.recent.length}: pass=${resultCounts.pass}, warning=${resultCounts.warning}, fail=${resultCounts.fail}`
+  );
+
+  for (const row of history.recent) {
+    const checks = row.check_counts ?? {};
+    const imageStats = checks.imageStats ?? {};
+    const createdAt = new Date(row.created_at).toISOString();
+
+    console.log(
+      `- ${createdAt}: ${String(row.result).toUpperCase()} gigs=${row.payload_gig_count}, warnings=${row.warning_count}, errors=${row.error_count}, no_image=${imageStats.noImageCount ?? "n/a"}`
+    );
+  }
+}
+
 function printHumanReport(audit, options) {
   console.log("Public gig audit");
   console.log(`Target: ${audit.target.target}`);
@@ -1179,11 +1329,7 @@ function printHumanReport(audit, options) {
   printSourceReconciliation(audit.sourceReconciliation, options.limit);
 
   console.log("");
-  console.log(
-    audit.errors.length === 0 && (!options.strict || audit.warnings.length === 0)
-      ? "Result: PASS"
-      : "Result: FAIL"
-  );
+  console.log(shouldAuditFail(audit, options) ? "Result: FAIL" : "Result: PASS");
 }
 
 try {
@@ -1212,14 +1358,20 @@ try {
     },
     sourceReconciliation
   );
+  const auditHistory = options.recordHistory
+    ? await recordAuditHistory(audit, options)
+    : null;
 
   if (options.json) {
-    console.log(JSON.stringify(audit, null, 2));
+    console.log(
+      JSON.stringify(auditHistory ? { ...audit, auditHistory } : audit, null, 2)
+    );
   } else {
     printHumanReport(audit, options);
+    printAuditHistory(auditHistory);
   }
 
-  process.exitCode = audit.errors.length > 0 || (options.strict && audit.warnings.length > 0) ? 1 : 0;
+  process.exitCode = shouldAuditFail(audit, options) ? 1 : 0;
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   console.error("");
