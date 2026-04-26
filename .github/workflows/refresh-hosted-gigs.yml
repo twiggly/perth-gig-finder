@@ -60,4 +60,4 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: pnpm audit:gigs -- --supabase --reconcile-sources --limit 30
+        run: pnpm audit:gigs -- --supabase --reconcile-sources --record-history --limit 30
