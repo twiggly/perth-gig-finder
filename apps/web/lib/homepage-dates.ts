@@ -365,7 +365,7 @@ export function isWeekendShortcutActiveDate(
 }
 
 export function getHomepageLowerBound(now: Date): Date {
-  return now;
+  return getPerthStartOfDay(now);
 }
 
 export function resolveHomepageDateKey(
