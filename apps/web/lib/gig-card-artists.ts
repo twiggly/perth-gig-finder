@@ -41,5 +41,5 @@ export function formatGigCardArtists(
     return null;
   }
 
-  return displayNames.join(", ");
+  return displayNames.join(" | ");
 }

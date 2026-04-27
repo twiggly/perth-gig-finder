@@ -3,14 +3,14 @@ import { describe, expect, it } from "vitest";
 import { formatGigCardArtists } from "./gig-card-artists";
 
 describe("formatGigCardArtists", () => {
-  it("shows distinct artist names as a comma-separated line", () => {
+  it("shows distinct artist names as a pipe-separated line", () => {
     expect(
       formatGigCardArtists("ALT//THURSDAYS", [
         "Melānija",
         "Esper",
         "softwarebodyIV"
       ])
-    ).toBe("Melānija, Esper, softwarebodyIV");
+    ).toBe("Melānija | Esper | softwarebodyIV");
   });
 
   it("hides the artist line when entries are empty after cleanup", () => {
@@ -29,7 +29,7 @@ describe("formatGigCardArtists", () => {
         "esper",
         "Melanija"
       ])
-    ).toBe("Esper, Melānija");
+    ).toBe("Esper | Melānija");
   });
 
   it("drops title duplicates but keeps other distinct artists", () => {
@@ -39,6 +39,6 @@ describe("formatGigCardArtists", () => {
         "Dani Dray",
         "Amelia Day"
       ])
-    ).toBe("Dani Dray, Amelia Day");
+    ).toBe("Dani Dray | Amelia Day");
   });
 });

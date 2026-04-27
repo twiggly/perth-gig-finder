@@ -1,7 +1,9 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { MantineProvider } from "@mantine/core";
 import { describe, expect, it } from "vitest";
 
+import { theme } from "@/app/theme";
 import type { GigCardRecord } from "@/lib/gigs";
 
 import { GigCard } from "./gig-card";
@@ -35,35 +37,44 @@ function createGig(
 describe("GigCard", () => {
   it("renders the artist line between the title and venue when artists are present", () => {
     const html = renderToStaticMarkup(
-      <GigCard
-        gig={createGig()}
-        isOpen={false}
-        onClose={() => {}}
-        onToggle={() => {}}
-      />
+      <MantineProvider defaultColorScheme="dark" theme={theme}>
+        <GigCard
+          gig={createGig()}
+          isOpen={false}
+          onClose={() => {}}
+          onToggle={() => {}}
+        />
+      </MantineProvider>
     );
 
-    const titleIndex = html.indexOf("ALT//THURSDAYS");
-    const artistsIndex = html.indexOf("Melānija, Esper, softwarebodyIV");
+    const titleIndex = html.indexOf("gig-card__title");
+    const timeIndex = html.indexOf("gig-card__time");
+    const artistsIndex = html.indexOf("Melānija | Esper | softwarebodyIV");
     const venueIndex = html.indexOf("The Bird, Northbridge");
 
+    expect(html).toContain("ALT//THURSDAYS");
     expect(html).toContain("gig-card__artists");
+    expect(html).toContain("gig-card__venue-icon");
+    expect(timeIndex).toBeGreaterThanOrEqual(0);
     expect(titleIndex).toBeGreaterThanOrEqual(0);
+    expect(timeIndex).toBeLessThan(titleIndex);
     expect(artistsIndex).toBeGreaterThan(titleIndex);
     expect(venueIndex).toBeGreaterThan(artistsIndex);
   });
 
   it("omits the artist line when it only repeats the title", () => {
     const html = renderToStaticMarkup(
-      <GigCard
-        gig={createGig({
-          title: "Luude",
-          artist_names: [" luude ", "LUUDE"]
-        })}
-        isOpen={false}
-        onClose={() => {}}
-        onToggle={() => {}}
-      />
+      <MantineProvider defaultColorScheme="dark" theme={theme}>
+        <GigCard
+          gig={createGig({
+            title: "Luude",
+            artist_names: [" luude ", "LUUDE"]
+          })}
+          isOpen={false}
+          onClose={() => {}}
+          onToggle={() => {}}
+        />
+      </MantineProvider>
     );
 
     expect(html).not.toContain("gig-card__artists");

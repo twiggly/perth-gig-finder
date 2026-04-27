@@ -297,22 +297,28 @@ describe("isWeekendShortcutActiveDate", () => {
 });
 
 describe("getHomepageLowerBound", () => {
-  it("does not reopen past dates on Saturday", () => {
+  it("uses the current Perth day start on Saturday", () => {
     expect(
       getHomepageLowerBound(new Date("2026-04-11T04:00:00.000Z")).toISOString()
-    ).toBe("2026-04-11T04:00:00.000Z");
+    ).toBe("2026-04-10T16:00:00.000Z");
   });
 
-  it("does not reopen past dates on Sunday", () => {
+  it("uses the current Perth day start on Sunday", () => {
     expect(
       getHomepageLowerBound(new Date("2026-04-12T04:00:00.000Z")).toISOString()
-    ).toBe("2026-04-12T04:00:00.000Z");
+    ).toBe("2026-04-11T16:00:00.000Z");
   });
 
-  it("uses the current time outside the weekend", () => {
+  it("uses the current Perth day start outside the weekend", () => {
     expect(
       getHomepageLowerBound(new Date("2026-04-08T02:00:00.000Z")).toISOString()
-    ).toBe("2026-04-08T02:00:00.000Z");
+    ).toBe("2026-04-07T16:00:00.000Z");
+  });
+
+  it("uses the correct Perth day start when UTC is still the previous day", () => {
+    expect(
+      getHomepageLowerBound(new Date("2026-04-08T18:30:00.000Z")).toISOString()
+    ).toBe("2026-04-08T16:00:00.000Z");
   });
 });
 

@@ -14,6 +14,8 @@
   "dependencies": {
     "@fontsource/source-serif-4": "^5.2.9",
     "@fontsource/space-grotesk": "^5.2.8",
+    "@mantine/core": "^9.1.0",
+    "@mantine/hooks": "^9.1.0",
     "@perth-gig-finder/shared": "workspace:*",
     "@supabase/supabase-js": "^2.57.4",
     "next": "^16.0.0",
@@ -24,6 +26,9 @@
     "@types/node": "^24.6.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
+    "postcss": "^8.5.10",
+    "postcss-preset-mantine": "^1.18.0",
+    "postcss-simple-vars": "^7.0.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   }

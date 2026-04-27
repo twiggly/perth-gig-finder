@@ -73,6 +73,9 @@ function getImageRemotePatterns() {
 const nextConfig: NextConfig = {
   allowedDevOrigins: getAllowedDevOrigins(),
   assetPrefix: LOCAL_PREVIEW_ASSET_PREFIX || undefined,
+  experimental: {
+    optimizePackageImports: ["@mantine/core", "@mantine/hooks"]
+  },
   images: {
     // Local Supabase Storage resolves to a private IP in development, so Next's
     // image optimizer needs this enabled to serve mirrored gig artwork locally.

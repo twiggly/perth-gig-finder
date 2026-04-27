@@ -10,6 +10,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
+import { Box, Text, TextInput, UnstyledButton } from "@mantine/core";
 
 import {
   getDateShortcutLabel,
@@ -594,7 +595,8 @@ export function HomepageFilters({
   }
 
   return (
-    <section
+    <Box
+      component="section"
       className="filter-panel"
       data-preview-revision={previewAssetRevision}
     >
@@ -608,17 +610,18 @@ export function HomepageFilters({
           <label className="sr-only" htmlFor="gig-search-input">
             Search gigs, artists, venues, and suburbs
           </label>
-          <input
-            className="filter-input filter-input--compact"
+          <TextInput
             id="gig-search-input"
             aria-controls={searchMenuId}
             aria-expanded={isSearchMenuOpen}
             aria-haspopup="listbox"
+            classNames={{ input: "filter-input filter-input--compact" }}
             onChange={handleSearchInputChange}
             onFocus={handleSearchInputFocus}
             onKeyDown={handleSearchKeyDown}
             placeholder="Search gigs, artists, venues, suburbs"
             type="search"
+            unstyled
             value={searchInput}
           />
           {isSearchMenuOpen && trimmedSearchInput ? (
@@ -646,7 +649,7 @@ export function HomepageFilters({
                           : `${suggestion.type}-${suggestion.label}`
                       }
                     >
-                      <button
+                      <UnstyledButton
                         aria-selected={highlightedSearchIndex === index}
                         className="search-suggestion__button"
                         onClick={() => handleSelectSearchSuggestion(suggestion)}
@@ -666,19 +669,21 @@ export function HomepageFilters({
                             </span>
                           ) : null}
                         </span>
-                      </button>
+                      </UnstyledButton>
                     </li>
                   ))}
                 </ul>
                 {isLoadingSearchSuggestions ? (
-                  <p className="search-menu__status">Loading suggestions…</p>
+                  <Text className="search-menu__status" component="p">
+                    Loading suggestions…
+                  </Text>
                 ) : null}
               </div>
             </div>
           ) : null}
         </form>
         <div className="venue-menu" ref={venueMenuRef}>
-          <button
+          <UnstyledButton
             aria-controls={venueDropdownId}
             aria-expanded={isVenueMenuOpen}
             aria-haspopup="dialog"
@@ -720,7 +725,7 @@ export function HomepageFilters({
                 strokeWidth="1.75"
               />
             </svg>
-          </button>
+          </UnstyledButton>
           {isVenueMenuOpen ? (
             <div
               className="venue-menu__popover"
@@ -730,20 +735,23 @@ export function HomepageFilters({
               <label className="sr-only" htmlFor="venue-filter-input">
                 Search venues
               </label>
-              <input
+              <TextInput
                 autoComplete="off"
-                className="filter-input filter-input--compact"
+                classNames={{ input: "filter-input filter-input--compact" }}
                 id="venue-filter-input"
                 onChange={(event) => setVenueInput(event.target.value)}
                 onKeyDown={handleVenueKeyDown}
                 placeholder="Search venues"
                 ref={venueSearchInputRef}
                 type="search"
+                unstyled
                 value={venueInput}
               />
               <div className="venue-menu__results">
                 {isLoadingSuggestions ? (
-                  <p className="venue-picker__status">Loading venues…</p>
+                  <Text className="venue-picker__status" component="p">
+                    Loading venues…
+                  </Text>
                 ) : suggestions.length > 0 ? (
                   <ul
                     aria-label="Venue options"
@@ -752,7 +760,7 @@ export function HomepageFilters({
                   >
                     {suggestions.map((venue, index) => (
                       <li key={venue.slug}>
-                        <button
+                        <UnstyledButton
                           aria-selected={highlightedSuggestionIndex === index}
                           className={`venue-suggestion${
                             highlightedSuggestionIndex === index
@@ -765,18 +773,20 @@ export function HomepageFilters({
                         >
                           <span>{venue.name}</span>
                           {venue.suburb ? <span>{venue.suburb}</span> : null}
-                        </button>
+                        </UnstyledButton>
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="venue-picker__status">No matching venues yet.</p>
+                  <Text className="venue-picker__status" component="p">
+                    No matching venues yet.
+                  </Text>
                 )}
               </div>
             </div>
           ) : null}
         </div>
-        <div aria-hidden="true" className="filter-toolbar__profile">
+        <Box aria-hidden="true" className="filter-toolbar__profile">
           <svg
             className="filter-toolbar__profile-icon"
             fill="none"
@@ -799,13 +809,13 @@ export function HomepageFilters({
               strokeWidth="1.6"
             />
           </svg>
-        </div>
+        </Box>
       </div>
 
       {selectedVenues.length > 0 ? (
         <div className="filter-chips" role="list" aria-label="Selected venues">
           {selectedVenues.map((venue) => (
-            <button
+            <UnstyledButton
               className="filter-chip"
               key={venue.slug}
               onClick={() => handleRemoveVenue(venue.slug)}
@@ -814,16 +824,16 @@ export function HomepageFilters({
               <span>{venue.name}</span>
               <span aria-hidden="true">×</span>
               <span className="sr-only">Remove {getVenueSummary(venue)}</span>
-            </button>
+            </UnstyledButton>
           ))}
           {selectedVenues.length > 1 ? (
-            <button
+            <UnstyledButton
               className="filter-chip filter-chip--ghost"
               onClick={() => navigate({ venues: [] })}
               type="button"
             >
               Clear all venues
-            </button>
+            </UnstyledButton>
           ) : null}
         </div>
       ) : null}
@@ -850,7 +860,7 @@ export function HomepageFilters({
                 : isWeekendShortcutActiveDate(currentActiveDateKey, now);
 
             return (
-              <button
+              <UnstyledButton
                 aria-pressed={isPressed}
                 className="date-pill"
                 disabled={isPending}
@@ -861,11 +871,11 @@ export function HomepageFilters({
                 {option.value === "today"
                   ? todayShortcut.label
                   : getDateShortcutLabel(option.value, now)}
-              </button>
+              </UnstyledButton>
             );
           })}
         </div>
       ) : null}
-    </section>
+    </Box>
   );
 }

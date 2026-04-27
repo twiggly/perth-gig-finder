@@ -8,11 +8,11 @@ import {
   type CSSProperties
 } from "react";
 import { usePathname } from "next/navigation";
+import { ActionIcon, Box, Title } from "@mantine/core";
 
 import { GigCard } from "@/components/gig-card";
 import {
   accumulateTrackpadSwipe,
-  DAY_SWIPE_DURATION_MS,
   announceHomepageActiveDate,
   getAdjacentDateKey,
   getDayTransition,
@@ -67,11 +67,12 @@ interface HeadingPaneState {
   phase: BrowserTransition["phase"] | null;
 }
 
-const SWIPE_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
-const CONTENT_TRANSITION_DURATION_MS = 250;
-const CONTENT_TRANSITION_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
-const CONTENT_ENTER_OFFSET_PX = 0;
-const CONTENT_ENTER_SCALE = 1;
+const HEADING_TRANSITION_DURATION_MS = 240;
+const HEADING_TRANSITION_EASING = "cubic-bezier(0.45, 0.05, 0.55, 0.95)";
+const HEADING_TRANSITION_DISTANCE_PX = 36;
+const CONTENT_TRANSITION_DURATION_MS = HEADING_TRANSITION_DURATION_MS;
+const CONTENT_TRANSITION_EASING = HEADING_TRANSITION_EASING;
+const CONTENT_TRANSITION_DISTANCE_PX = HEADING_TRANSITION_DISTANCE_PX;
 const LOCAL_PREVIEW_ASSET_REVISION =
   process.env.NEXT_PUBLIC_LOCAL_PREVIEW_ASSET_REVISION ?? "0";
 const ADJACENT_DAY_IMAGE_PRELOAD_LIMIT = 5;
@@ -107,33 +108,6 @@ function scheduleAdjacentImagePreload(callback: () => void): () => void {
 
   return () => {
     window.clearTimeout(timeoutId);
-  };
-}
-
-function buildTrackLayout(
-  activeDateKey: string,
-  transition: BrowserTransition | null
-): {
-  dateKeys: string[];
-  translatePct: number;
-} {
-  if (!transition) {
-    return {
-      dateKeys: [activeDateKey],
-      translatePct: 0
-    };
-  }
-
-  if (transition.direction === "next") {
-    return {
-      dateKeys: [transition.fromDateKey, transition.toDateKey],
-      translatePct: transition.phase === "animating" ? -50 : 0
-    };
-  }
-
-  return {
-    dateKeys: [transition.toDateKey, transition.fromDateKey],
-    translatePct: transition.phase === "animating" ? 0 : -50
   };
 }
 
@@ -177,30 +151,24 @@ export function HomepageDayBrowser({
   const nextDateKey = getAdjacentDateKey(availableDateKeys, activeDateKey, "next");
   const isAnimating = transition !== null;
   const isContentAnimating = transition?.phase === "animating";
-  const { dateKeys: renderedHeadingDateKeys, translatePct } = buildTrackLayout(
-    activeDateKey,
-    transition
-  );
-  const headingPaneBasis = `${100 / renderedHeadingDateKeys.length}%`;
   const headingTrackStyle = {
-    transform: `translate3d(${translatePct}%, 0, 0)`,
-    transition:
-      transition?.phase === "animating"
-        ? `transform ${DAY_SWIPE_DURATION_MS}ms ${SWIPE_EASING}`
-        : "none",
-    width: `${renderedHeadingDateKeys.length * 100}%`
-  };
+    "--day-browser-heading-duration": `${HEADING_TRANSITION_DURATION_MS}ms`,
+    "--day-browser-heading-easing": HEADING_TRANSITION_EASING,
+    "--day-browser-heading-distance": `${HEADING_TRANSITION_DISTANCE_PX}px`
+  } as CSSProperties;
   const renderedHeadingPanes: HeadingPaneState[] = transition
-    ? renderedHeadingDateKeys.map((dateKey) => ({
-        dateKey,
-        motionRole:
-          dateKey === transition.fromDateKey
-            ? "from"
-            : dateKey === transition.toDateKey
-              ? "to"
-              : "active",
-        phase: transition.phase
-      }))
+    ? [
+        {
+          dateKey: transition.fromDateKey,
+          motionRole: "from",
+          phase: transition.phase
+        },
+        {
+          dateKey: transition.toDateKey,
+          motionRole: "to",
+          phase: transition.phase
+        }
+      ]
     : [
         {
           dateKey: activeDateKey,
@@ -208,29 +176,19 @@ export function HomepageDayBrowser({
           phase: null
         }
       ];
-  // Keep both panes for one setup frame so the incoming pane can animate
-  // from a prepared state without the outgoing pane remaining visible.
   const renderedContentPanes: ContentPaneState[] = transition
-    ? transition.phase === "preparing"
-      ? [
-          {
-            dateKey: transition.fromDateKey,
-            motionRole: "from",
-            phase: transition.phase
-          },
-          {
-            dateKey: transition.toDateKey,
-            motionRole: "to",
-            phase: transition.phase
-          }
-        ]
-      : [
-          {
-            dateKey: transition.toDateKey,
-            motionRole: "to",
-            phase: transition.phase
-          }
-        ]
+    ? [
+        {
+          dateKey: transition.fromDateKey,
+          motionRole: "from",
+          phase: transition.phase
+        },
+        {
+          dateKey: transition.toDateKey,
+          motionRole: "to",
+          phase: transition.phase
+        }
+      ]
     : [
         {
           dateKey: activeDateKey,
@@ -241,8 +199,7 @@ export function HomepageDayBrowser({
   const contentViewportStyle = {
     "--day-browser-content-duration": `${CONTENT_TRANSITION_DURATION_MS}ms`,
     "--day-browser-content-easing": CONTENT_TRANSITION_EASING,
-    "--day-browser-content-enter-offset": `${CONTENT_ENTER_OFFSET_PX}px`,
-    "--day-browser-content-enter-scale": CONTENT_ENTER_SCALE.toString()
+    "--day-browser-content-distance": `${CONTENT_TRANSITION_DISTANCE_PX}px`
   } as CSSProperties;
 
   useEffect(() => {
@@ -402,7 +359,7 @@ export function HomepageDayBrowser({
 
     transitionTimeoutRef.current = window.setTimeout(() => {
       finishTransition(transition.toDateKey);
-    }, Math.max(DAY_SWIPE_DURATION_MS, CONTENT_TRANSITION_DURATION_MS) + 60);
+    }, Math.max(HEADING_TRANSITION_DURATION_MS, CONTENT_TRANSITION_DURATION_MS) + 60);
 
     return () => {
       if (transitionTimeoutRef.current !== null) {
@@ -574,52 +531,55 @@ export function HomepageDayBrowser({
       onPointerUp={handlePointerUp}
       onWheel={handleWheel}
     >
-      <div className="day-browser__header">
-        <button
+      <Box className="day-browser__header">
+        <ActionIcon
           aria-label="Previous date"
           className="day-browser__arrow"
           disabled={!previousDateKey || isAnimating}
           onClick={() => handleNavigate("previous")}
           type="button"
+          variant="subtle"
         >
           <span aria-hidden="true">←</span>
-        </button>
-        <div className="day-browser__heading-viewport">
-          <div
+        </ActionIcon>
+        <Box className="day-browser__heading-viewport">
+          <Box
             className="day-browser__heading-track"
+            data-direction={transition?.direction}
             style={headingTrackStyle}
           >
             {renderedHeadingPanes.map(({ dateKey, motionRole, phase }) => (
-              <div
+              <Box
                 className="day-browser__heading-pane"
                 data-motion-role={motionRole}
                 data-phase={phase ?? undefined}
                 key={`heading-${dateKey}`}
-                style={{ flexBasis: headingPaneBasis }}
               >
-                <h2>{dayMap.get(dateKey)?.heading ?? activeDay.heading}</h2>
-              </div>
+                <Title order={2}>{dayMap.get(dateKey)?.heading ?? activeDay.heading}</Title>
+              </Box>
             ))}
-          </div>
-        </div>
-        <button
+          </Box>
+        </Box>
+        <ActionIcon
           aria-label="Next date"
           className="day-browser__arrow"
           disabled={!nextDateKey || isAnimating}
           onClick={() => handleNavigate("next")}
           type="button"
+          variant="subtle"
         >
           <span aria-hidden="true">→</span>
-        </button>
-      </div>
+        </ActionIcon>
+      </Box>
 
-      <div
+      <Box
         className="day-browser__content-viewport"
         style={contentViewportStyle}
       >
-        <div
+        <Box
           className="day-browser__content-track"
           data-animating={isContentAnimating ? "true" : undefined}
+          data-direction={transition?.direction}
         >
           {renderedContentPanes.map((pane) => {
             const { dateKey, motionRole, phase } = pane;
@@ -630,14 +590,14 @@ export function HomepageDayBrowser({
             }
 
             return (
-              <div
+              <Box
                 aria-hidden={motionRole === "from"}
                 className="day-browser__content-pane"
                 data-motion-role={motionRole}
                 data-phase={phase ?? undefined}
                 key={dateKey}
               >
-                <div className="gig-grid" data-date={dateKey}>
+                <Box className="gig-grid" data-date={dateKey}>
                   {day.items.map((gig) => (
                     <GigCard
                       gig={gig}
@@ -651,12 +611,12 @@ export function HomepageDayBrowser({
                       }
                     />
                   ))}
-                </div>
-              </div>
+                </Box>
+              </Box>
             );
           })}
-        </div>
-      </div>
+        </Box>
+      </Box>
     </section>
   );
 }
