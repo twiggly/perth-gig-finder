@@ -421,8 +421,8 @@ code {
 }
 
 .day-browser__header {
-  display: flex;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: 3.2rem minmax(0, 1fr) 3.2rem;
   align-items: center;
   gap: 0.8rem;
   width: min(100%, 32rem);
@@ -434,8 +434,29 @@ code {
   overflow: hidden;
 }
 
+.day-browser__heading-button {
+  display: block;
+  justify-self: center;
+  width: min(100%, 14.75rem);
+  min-width: min(11.5rem, calc(100% - 7.2rem));
+  padding: 0.4rem 0.65rem;
+  border-radius: 999px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: center;
+}
+
+.day-browser__heading-button:focus-visible {
+  outline: none;
+}
+
+.day-browser__heading-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
 .day-browser__heading-viewport {
-  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
 }
 
@@ -447,6 +468,9 @@ code {
 
 .day-browser__content-viewport {
   position: relative;
+  transition:
+    filter 180ms ease,
+    opacity 180ms ease;
 }
 
 .day-browser__content-track {
@@ -517,13 +541,133 @@ code {
   transform: translate3d(0, 0, 0);
 }
 
-.day-browser__heading-pane h2 {
+.day-browser__heading-title {
+  display: block;
   margin: 0;
   font-family: var(--font-display), sans-serif;
   font-size: clamp(1.65rem, 4vw, 2.5rem);
+  font-weight: 700;
   line-height: 1;
   letter-spacing: -0.04em;
   text-align: center;
+  white-space: nowrap;
+}
+
+.day-calendar {
+  width: min(30rem, calc(100vw - 1rem));
+  padding: 1.35rem;
+  border: 0;
+  border-radius: 1.35rem;
+  background: rgba(16, 12, 22, 0.98);
+  color: var(--text);
+  outline: 0;
+  overscroll-behavior-x: contain;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+  touch-action: pan-y;
+}
+
+.day-calendar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1.15rem;
+}
+
+.day-calendar__month-label {
+  margin: 0;
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.day-calendar__month-button {
+  width: 2.9rem;
+  height: 2.9rem;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+.day-calendar__month-button:hover,
+.day-calendar__month-button:focus-visible {
+  background: rgba(255, 255, 255, 0.1);
+  outline: none;
+}
+
+.day-calendar__month-button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.day-calendar__weekdays,
+.day-calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.day-calendar__weekdays {
+  gap: 0.45rem;
+  margin-bottom: 0.55rem;
+  color: var(--muted);
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.day-calendar__grid {
+  gap: 0.45rem;
+}
+
+.day-calendar__day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  min-width: 0;
+  border-radius: 1.05rem;
+  color: rgba(248, 242, 232, 0.42);
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.08rem;
+  font-weight: 700;
+  cursor: default;
+}
+
+.day-calendar__day--outside {
+  color: rgba(248, 242, 232, 0.22);
+}
+
+.day-calendar__day--enabled {
+  color: var(--text);
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.06);
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
+}
+
+.day-calendar__day--enabled:hover,
+.day-calendar__day--enabled:focus-visible {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.day-calendar__day--today:not(.day-calendar__day--active) {
+  box-shadow: inset 0 0 0 1px rgba(249, 90, 55, 0.55);
+}
+
+.day-calendar__day--active {
+  background: var(--accent);
+  color: #120d0b;
+  box-shadow: 0 0 0 1px rgba(249, 90, 55, 0.5);
 }
 
 .day-browser__content-pane {
@@ -535,6 +679,11 @@ code {
 
 .day-browser__content-pane[data-motion-role="active"] {
   position: relative;
+}
+
+.day-browser[data-calendar-open="true"] .day-browser__content-viewport {
+  filter: blur(5px);
+  opacity: 0.62;
 }
 
 .day-browser__content-pane[data-motion-role="from"] {
@@ -593,7 +742,7 @@ code {
   width: 3.2rem;
   height: 3.2rem;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 0;
   border-radius: 999px;
   appearance: none;
   background: rgba(255, 255, 255, 0.04);
@@ -603,13 +752,11 @@ code {
   font-size: 1.3rem;
   transition:
     background-color 160ms ease,
-    border-color 160ms ease,
     box-shadow 160ms ease;
 }
 
 .day-browser__arrow:hover,
 .day-browser__arrow:focus-visible {
-  border-color: rgba(255, 255, 255, 0.22);
   background: rgba(255, 255, 255, 0.1);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04);
   outline: none;
@@ -620,6 +767,13 @@ code {
   opacity: 0.35;
 }
 
+@media (min-width: 721px) {
+  .day-browser__heading-button {
+    width: min(100%, 20.5rem);
+    min-width: min(18.5rem, calc(100% - 7.2rem));
+  }
+}
+
 .gig-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -627,6 +781,7 @@ code {
 }
 
 .gig-card {
+  --gig-card-highlight-radius: 1rem;
   --gig-card-media-width: clamp(6.25rem, 16vw, 10.5rem);
   --gig-card-gap: 1rem;
   --gig-card-padding: 0rem;
@@ -635,7 +790,18 @@ code {
 }
 
 .gig-card + .gig-card {
-  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  border-top: 0;
+}
+
+.gig-card + .gig-card::before {
+  position: absolute;
+  top: 0;
+  right: var(--gig-card-highlight-radius);
+  left: calc(var(--gig-card-media-width) + var(--gig-card-gap));
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  content: "";
+  pointer-events: none;
 }
 
 .gig-card__surface {
@@ -647,6 +813,7 @@ code {
   padding: 1.05rem 0;
   appearance: none;
   border: 0;
+  border-radius: var(--gig-card-highlight-radius);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -929,10 +1096,11 @@ code {
 
   .day-browser__header {
     gap: 0.5rem;
+    grid-template-columns: 2.85rem minmax(0, 1fr) 2.85rem;
     width: 100%;
   }
 
-  .day-browser__heading-pane h2 {
+  .day-browser__heading-title {
     font-size: clamp(1.35rem, 6vw, 1.85rem);
   }
 

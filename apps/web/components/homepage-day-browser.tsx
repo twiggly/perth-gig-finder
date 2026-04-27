@@ -1,6 +1,6 @@
 "use client";
 
-import {
+import React, {
   useEffect,
   useMemo,
   useRef,
@@ -8,9 +8,14 @@ import {
   type CSSProperties
 } from "react";
 import { usePathname } from "next/navigation";
-import { ActionIcon, Box, Title } from "@mantine/core";
+import { ActionIcon, Box, Popover, Text, UnstyledButton } from "@mantine/core";
 
 import { GigCard } from "@/components/gig-card";
+import {
+  buildHomepageCalendarMonth,
+  CALENDAR_WEEKDAY_LABELS,
+  getInitialHomepageCalendarMonthKey
+} from "@/lib/homepage-calendar";
 import {
   accumulateTrackpadSwipe,
   announceHomepageActiveDate,
@@ -19,8 +24,10 @@ import {
   getRequestedDayTransition,
   getHomepageRequestedDateKey,
   HOMEPAGE_REQUEST_ACTIVE_DATE_EVENT,
+  getPerthDateKey,
   getSwipeDirection,
   replaceHomepageDateInUrl,
+  requestHomepageActiveDate,
   syncHomepageActiveDate,
   shouldConsumeLockedTrackpadMomentum,
   TRACKPAD_GESTURE_LOCK_MS,
@@ -118,6 +125,8 @@ export function HomepageDayBrowser({
   const previewAssetRevision = LOCAL_PREVIEW_ASSET_REVISION;
   const pathname = usePathname();
   const gestureRef = useRef<PointerGesture | null>(null);
+  const calendarGestureRef = useRef<PointerGesture | null>(null);
+  const calendarSwipeConsumedRef = useRef(false);
   const preloadedImageUrlsRef = useRef<Set<string>>(new Set());
   const transitionFrameRef = useRef<number | null>(null);
   const transitionTimeoutRef = useRef<number | null>(null);
@@ -127,13 +136,22 @@ export function HomepageDayBrowser({
     lockedDirection: null,
     lockedUntil: 0
   });
+  const calendarWheelGestureRef = useRef<WheelGesture>({
+    accumulatedDeltaX: 0,
+    lastEventAt: 0,
+    lockedDirection: null,
+    lockedUntil: 0
+  });
   const [activeDateKey, setActiveDateKey] = useState(initialActiveDateKey);
+  const [calendarMonthKey, setCalendarMonthKey] = useState<string | null>(null);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [openGigId, setOpenGigId] = useState<string | null>(null);
   const [transition, setTransition] = useState<BrowserTransition | null>(null);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(() =>
     typeof window !== "undefined" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
+  const [todayDateKey] = useState(() => getPerthDateKey(new Date()));
   const availableDateKeys = useMemo(
     () => days.map((day) => day.dateKey),
     [days]
@@ -151,6 +169,19 @@ export function HomepageDayBrowser({
   const nextDateKey = getAdjacentDateKey(availableDateKeys, activeDateKey, "next");
   const isAnimating = transition !== null;
   const isContentAnimating = transition?.phase === "animating";
+  const activeCalendarMonthKey = getInitialHomepageCalendarMonthKey(
+    activeDateKey,
+    availableDateKeys
+  );
+  const visibleCalendarMonthKey = calendarMonthKey ?? activeCalendarMonthKey;
+  const calendarMonth = visibleCalendarMonthKey
+    ? buildHomepageCalendarMonth({
+        activeDateKey,
+        availableDateKeys,
+        monthKey: visibleCalendarMonthKey,
+        todayDateKey
+      })
+    : null;
   const headingTrackStyle = {
     "--day-browser-heading-duration": `${HEADING_TRANSITION_DURATION_MS}ms`,
     "--day-browser-heading-easing": HEADING_TRANSITION_EASING,
@@ -204,9 +235,13 @@ export function HomepageDayBrowser({
 
   useEffect(() => {
     setActiveDateKey(initialActiveDateKey);
+    setCalendarMonthKey(
+      getInitialHomepageCalendarMonthKey(initialActiveDateKey, availableDateKeys)
+    );
+    setIsCalendarOpen(false);
     setOpenGigId(null);
     setTransition(null);
-  }, [initialActiveDateKey]);
+  }, [availableDateKeys, initialActiveDateKey]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -221,10 +256,14 @@ export function HomepageDayBrowser({
       }
 
       setOpenGigId(null);
+      setIsCalendarOpen(false);
 
       if (prefersReducedMotion) {
         setTransition(null);
         setActiveDateKey(nextDateKey);
+        setCalendarMonthKey(
+          getInitialHomepageCalendarMonthKey(nextDateKey, availableDateKeys)
+        );
         return;
       }
 
@@ -237,6 +276,9 @@ export function HomepageDayBrowser({
       if (!requestedTransition) {
         setTransition(null);
         setActiveDateKey(nextDateKey);
+        setCalendarMonthKey(
+          getInitialHomepageCalendarMonthKey(nextDateKey, availableDateKeys)
+        );
         return;
       }
 
@@ -259,6 +301,12 @@ export function HomepageDayBrowser({
       );
     };
   }, [activeDateKey, availableDateKeys, prefersReducedMotion]);
+
+  useEffect(() => {
+    if (transition) {
+      setIsCalendarOpen(false);
+    }
+  }, [transition]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -385,8 +433,15 @@ export function HomepageDayBrowser({
     gestureRef.current = null;
   }
 
+  function clearCalendarGesture() {
+    calendarGestureRef.current = null;
+  }
+
   function finishTransition(dateKey: string) {
     setActiveDateKey(dateKey);
+    setCalendarMonthKey(
+      getInitialHomepageCalendarMonthKey(dateKey, availableDateKeys)
+    );
     setTransition((current) =>
       current?.toDateKey === dateKey ? null : current
     );
@@ -396,6 +451,8 @@ export function HomepageDayBrowser({
     if (isAnimating) {
       return false;
     }
+
+    setIsCalendarOpen(false);
 
     const nextTransition = getDayTransition(
       availableDateKeys,
@@ -414,6 +471,12 @@ export function HomepageDayBrowser({
 
     if (prefersReducedMotion) {
       setActiveDateKey(nextTransition.toDateKey);
+      setCalendarMonthKey(
+        getInitialHomepageCalendarMonthKey(
+          nextTransition.toDateKey,
+          availableDateKeys
+        )
+      );
       return true;
     }
 
@@ -421,6 +484,52 @@ export function HomepageDayBrowser({
       ...nextTransition,
       phase: "preparing"
     });
+
+    return true;
+  }
+
+  function handleCalendarDateSelect(dateKey: string) {
+    if (isAnimating) {
+      return;
+    }
+
+    if (calendarSwipeConsumedRef.current) {
+      calendarSwipeConsumedRef.current = false;
+      return;
+    }
+
+    setIsCalendarOpen(false);
+
+    if (dateKey === activeDateKey) {
+      return;
+    }
+
+    requestHomepageActiveDate(pathname, dateKey);
+  }
+
+  function markCalendarSwipeConsumed() {
+    calendarSwipeConsumedRef.current = true;
+
+    window.setTimeout(() => {
+      calendarSwipeConsumedRef.current = false;
+    }, 0);
+  }
+
+  function handleCalendarMonthNavigate(direction: SwipeDirection): boolean {
+    if (!calendarMonth) {
+      return false;
+    }
+
+    const nextMonthKey =
+      direction === "next"
+        ? calendarMonth.nextMonthKey
+        : calendarMonth.previousMonthKey;
+
+    if (!nextMonthKey) {
+      return false;
+    }
+
+    setCalendarMonthKey(nextMonthKey);
 
     return true;
   }
@@ -459,6 +568,53 @@ export function HomepageDayBrowser({
     }
 
     handleNavigate(direction);
+  }
+
+  function handleCalendarPointerDown(event: React.PointerEvent<HTMLElement>) {
+    event.stopPropagation();
+
+    if (
+      isAnimating ||
+      (event.pointerType !== "touch" && event.pointerType !== "pen")
+    ) {
+      return;
+    }
+
+    calendarGestureRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY
+    };
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function handleCalendarPointerUp(event: React.PointerEvent<HTMLElement>) {
+    event.stopPropagation();
+
+    const gesture = calendarGestureRef.current;
+
+    clearCalendarGesture();
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    if (!gesture || gesture.pointerId !== event.pointerId || isAnimating) {
+      return;
+    }
+
+    const direction = getSwipeDirection(
+      event.clientX - gesture.startX,
+      event.clientY - gesture.startY
+    );
+
+    if (!direction || !handleCalendarMonthNavigate(direction)) {
+      return;
+    }
+
+    event.preventDefault();
+    markCalendarSwipeConsumed();
   }
 
   function handleWheel(event: React.WheelEvent<HTMLElement>) {
@@ -518,6 +674,65 @@ export function HomepageDayBrowser({
     }
   }
 
+  function handleCalendarWheel(event: React.WheelEvent<HTMLElement>) {
+    event.stopPropagation();
+
+    const now = Date.now();
+    const currentGesture = calendarWheelGestureRef.current;
+
+    if (currentGesture.lockedUntil > now) {
+      if (
+        shouldConsumeLockedTrackpadMomentum(
+          event.deltaX,
+          event.deltaY,
+          currentGesture.lockedDirection
+        )
+      ) {
+        event.preventDefault();
+        currentGesture.lockedUntil = now + TRACKPAD_GESTURE_LOCK_MS;
+        currentGesture.lastEventAt = now;
+      } else if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+        currentGesture.accumulatedDeltaX = 0;
+        currentGesture.lastEventAt = 0;
+        currentGesture.lockedDirection = null;
+        currentGesture.lockedUntil = 0;
+      }
+
+      return;
+    }
+
+    if (isAnimating) {
+      return;
+    }
+
+    if (currentGesture.lastEventAt > 0 && now - currentGesture.lastEventAt > 200) {
+      currentGesture.accumulatedDeltaX = 0;
+    }
+
+    currentGesture.lastEventAt = now;
+
+    const { direction, nextDelta } = accumulateTrackpadSwipe(
+      currentGesture.accumulatedDeltaX,
+      event.deltaX,
+      event.deltaY
+    );
+
+    currentGesture.accumulatedDeltaX = nextDelta;
+
+    if (!direction) {
+      return;
+    }
+
+    event.preventDefault();
+    if (handleCalendarMonthNavigate(direction)) {
+      currentGesture.accumulatedDeltaX = 0;
+      currentGesture.lockedDirection = direction;
+      currentGesture.lockedUntil = now + TRACKPAD_GESTURE_LOCK_MS;
+    } else {
+      currentGesture.lockedDirection = null;
+    }
+  }
+
   if (!activeDay) {
     return null;
   }
@@ -525,12 +740,14 @@ export function HomepageDayBrowser({
   return (
     <section
       data-preview-revision={previewAssetRevision}
+      data-calendar-open={isCalendarOpen ? "true" : undefined}
       className="day-browser"
       onPointerCancel={clearGesture}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       onWheel={handleWheel}
     >
+      <h2 className="sr-only">{activeDay.heading}</h2>
       <Box className="day-browser__header">
         <ActionIcon
           aria-label="Previous date"
@@ -540,26 +757,137 @@ export function HomepageDayBrowser({
           type="button"
           variant="subtle"
         >
-          <span aria-hidden="true">←</span>
+          <span aria-hidden="true">&lt;</span>
         </ActionIcon>
-        <Box className="day-browser__heading-viewport">
-          <Box
-            className="day-browser__heading-track"
-            data-direction={transition?.direction}
-            style={headingTrackStyle}
-          >
-            {renderedHeadingPanes.map(({ dateKey, motionRole, phase }) => (
-              <Box
-                className="day-browser__heading-pane"
-                data-motion-role={motionRole}
-                data-phase={phase ?? undefined}
-                key={`heading-${dateKey}`}
-              >
-                <Title order={2}>{dayMap.get(dateKey)?.heading ?? activeDay.heading}</Title>
+        <Popover
+          middlewares={{ flip: true, shift: true }}
+          onChange={setIsCalendarOpen}
+          opened={isCalendarOpen}
+          position="bottom"
+          shadow="xl"
+          width="auto"
+        >
+          <Popover.Target>
+            <UnstyledButton
+              aria-expanded={isCalendarOpen}
+              aria-haspopup="dialog"
+              aria-label={`Choose date, currently ${activeDay.heading}`}
+              className="day-browser__heading-button"
+              disabled={isAnimating || !calendarMonth}
+              onClick={() => setIsCalendarOpen((current) => !current)}
+              type="button"
+            >
+              <span className="sr-only">{activeDay.heading}</span>
+              <Box className="day-browser__heading-viewport">
+                <Box
+                  className="day-browser__heading-track"
+                  data-direction={transition?.direction}
+                  style={headingTrackStyle}
+                >
+                  {renderedHeadingPanes.map(({ dateKey, motionRole, phase }) => (
+                    <Box
+                      className="day-browser__heading-pane"
+                      data-motion-role={motionRole}
+                      data-phase={phase ?? undefined}
+                      key={`heading-${dateKey}`}
+                    >
+                      <span className="day-browser__heading-title">
+                        {dayMap.get(dateKey)?.heading ?? activeDay.heading}
+                      </span>
+                    </Box>
+                  ))}
+                </Box>
               </Box>
-            ))}
-          </Box>
-        </Box>
+            </UnstyledButton>
+          </Popover.Target>
+          <Popover.Dropdown
+            aria-label="Choose date"
+            className="day-calendar"
+            onPointerCancel={clearCalendarGesture}
+            onPointerDown={handleCalendarPointerDown}
+            onPointerUp={handleCalendarPointerUp}
+            onWheel={handleCalendarWheel}
+            role="dialog"
+          >
+            {calendarMonth ? (
+              <>
+                <div className="day-calendar__header">
+                  <ActionIcon
+                    aria-label="Previous calendar month"
+                    className="day-calendar__month-button"
+                    disabled={!calendarMonth.previousMonthKey}
+                    onClick={() =>
+                      setCalendarMonthKey(calendarMonth.previousMonthKey)
+                    }
+                    type="button"
+                    variant="subtle"
+                  >
+                    <span aria-hidden="true">&lt;</span>
+                  </ActionIcon>
+                  <Text className="day-calendar__month-label" component="p">
+                    {calendarMonth.label}
+                  </Text>
+                  <ActionIcon
+                    aria-label="Next calendar month"
+                    className="day-calendar__month-button"
+                    disabled={!calendarMonth.nextMonthKey}
+                    onClick={() => setCalendarMonthKey(calendarMonth.nextMonthKey)}
+                    type="button"
+                    variant="subtle"
+                  >
+                    <span aria-hidden="true">&gt;</span>
+                  </ActionIcon>
+                </div>
+                <div className="day-calendar__weekdays" aria-hidden="true">
+                  {CALENDAR_WEEKDAY_LABELS.map((weekday) => (
+                    <span key={weekday}>{weekday}</span>
+                  ))}
+                </div>
+                <div
+                  aria-label={`${calendarMonth.label} gig dates`}
+                  className="day-calendar__grid"
+                  role="group"
+                >
+                  {calendarMonth.weeks.flatMap((week) =>
+                    week.map((day) => {
+                      const className = [
+                        "day-calendar__day",
+                        day.isCurrentMonth ? "" : "day-calendar__day--outside",
+                        day.isEnabled ? "day-calendar__day--enabled" : "",
+                        day.isActive ? "day-calendar__day--active" : "",
+                        day.isToday ? "day-calendar__day--today" : ""
+                      ]
+                        .filter(Boolean)
+                        .join(" ");
+
+                      return (
+                        <UnstyledButton
+                          aria-current={day.isActive ? "date" : undefined}
+                          aria-disabled={!day.isEnabled}
+                          aria-label={`${day.dateKey}${
+                            day.isEnabled ? "" : ", no gigs"
+                          }`}
+                          className={className}
+                          disabled={!day.isEnabled}
+                          key={day.dateKey}
+                          onClick={() => handleCalendarDateSelect(day.dateKey)}
+                          style={
+                            day.gridColumnStart
+                              ? { gridColumnStart: day.gridColumnStart }
+                              : undefined
+                          }
+                          type="button"
+                        >
+                          {day.dayOfMonth}
+                        </UnstyledButton>
+                      );
+                    })
+                  )}
+                </div>
+              </>
+            ) : null}
+          </Popover.Dropdown>
+        </Popover>
         <ActionIcon
           aria-label="Next date"
           className="day-browser__arrow"
@@ -568,7 +896,7 @@ export function HomepageDayBrowser({
           type="button"
           variant="subtle"
         >
-          <span aria-hidden="true">→</span>
+          <span aria-hidden="true">&gt;</span>
         </ActionIcon>
       </Box>
 
