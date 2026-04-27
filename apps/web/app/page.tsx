@@ -1,12 +1,9 @@
 import { HomepageFilters } from "@/components/homepage-filters";
 import { HomepageDayBrowser } from "@/components/homepage-day-browser";
 import { SiteHeaderActions } from "@/components/site-header-actions";
-import {
-  groupItemsByPerthDate,
-  resolveHomepageDateKey
-} from "@/lib/homepage-dates";
+import { resolveHomepageDateKey } from "@/lib/homepage-dates";
 import { parseHomepageFilters } from "@/lib/homepage-filters";
-import { listUpcomingGigs } from "@/lib/gigs";
+import { listAvailableGigDates, listGigsForDate } from "@/lib/gigs";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { listSelectedVenues } from "@/lib/venues";
 
@@ -42,22 +39,20 @@ async function ConfiguredHomepage({
   filters: ReturnType<typeof parseHomepageFilters>;
 }) {
   const now = new Date();
-  const [gigs, selectedVenues] = await Promise.all([
-    listUpcomingGigs(filters),
+  const [availableDays, selectedVenues] = await Promise.all([
+    listAvailableGigDates(filters),
     listSelectedVenues(filters.venueSlugs)
   ]);
-  const hasActiveFilters = filters.q.length > 0 || selectedVenues.length > 0;
-  const groupedGigs = groupItemsByPerthDate(gigs);
-  const availableDays = groupedGigs.map((group) => ({
-    dateKey: group.dateKey,
-    heading: group.heading
-  }));
+  const hasActiveFilters = filters.q.length > 0 || filters.venueSlugs.length > 0;
   const activeDateKey = resolveHomepageDateKey(
     availableDays.map((day) => day.dateKey),
     filters.date,
     filters.legacyWhen,
     now
   );
+  const activeDay = activeDateKey
+    ? await listGigsForDate(filters, activeDateKey)
+    : null;
   const dayBrowserKey = [filters.q, filters.venueSlugs.join("|")].join("::");
 
   return (
@@ -77,7 +72,10 @@ async function ConfiguredHomepage({
         </div>
         <SiteHeaderActions />
       </div>
-      {gigs.length === 0 || !activeDateKey ? (
+      {availableDays.length === 0 ||
+      !activeDateKey ||
+      !activeDay ||
+      activeDay.items.length === 0 ? (
         <section className="empty-state">
           <p>
             {hasActiveFilters
@@ -92,9 +90,12 @@ async function ConfiguredHomepage({
         </section>
       ) : (
         <HomepageDayBrowser
-          days={groupedGigs}
+          availableDays={availableDays}
+          currentQuery={filters.q}
           initialActiveDateKey={activeDateKey}
+          initialDay={activeDay}
           key={dayBrowserKey}
+          selectedVenueSlugs={filters.venueSlugs}
         />
       )}
     </>
