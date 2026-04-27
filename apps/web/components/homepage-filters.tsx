@@ -24,6 +24,7 @@ import {
 } from "@/lib/homepage-dates";
 import {
   buildHomepageFilterHref,
+  buildVenueFilterPrefetchHrefs,
   type HomepageFilterNavigationInput
 } from "@/lib/homepage-filters";
 import type {
@@ -323,6 +324,25 @@ export function HomepageFilters({
     setSuggestions(preloadedVenueSuggestions);
     setHighlightedSuggestionIndex(-1);
   }, [preloadedVenueSuggestions, venueInput]);
+
+  useEffect(() => {
+    if (selectedVenueSlugs.length === 0 || typeof window === "undefined") {
+      return;
+    }
+
+    const currentSearch = window.location.search.startsWith("?")
+      ? window.location.search.slice(1)
+      : window.location.search;
+    const hrefs = buildVenueFilterPrefetchHrefs(
+      pathname,
+      currentSearch,
+      selectedVenueSlugs
+    );
+
+    for (const href of hrefs) {
+      router.prefetch(href);
+    }
+  }, [currentActiveDateKey, currentQuery, pathname, router, selectedVenueSlugKey]);
 
   useEffect(() => {
     if (!isSearchMenuOpen) {

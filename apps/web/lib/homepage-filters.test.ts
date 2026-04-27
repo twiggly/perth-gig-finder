@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildHomepageFilterHref,
+  buildVenueFilterPrefetchHrefs,
   matchesGigQuery,
   parseHomepageFilters
 } from "./homepage-filters";
@@ -69,6 +70,36 @@ describe("buildHomepageFilterHref", () => {
     expect(
       buildHomepageFilterHref("/", "q=jazz&date=2026-04-08", { q: " jazz " })
     ).toBe("/?q=jazz&date=2026-04-08");
+  });
+});
+
+describe("buildVenueFilterPrefetchHrefs", () => {
+  it("prefetches clear-all and small individual venue-removal hrefs", () => {
+    expect(
+      buildVenueFilterPrefetchHrefs(
+        "/",
+        "q=jazz&venue=milk-bar&venue=the-bird&date=2026-04-08",
+        ["milk-bar", "the-bird"]
+      )
+    ).toEqual([
+      "/?q=jazz",
+      "/?q=jazz&venue=the-bird",
+      "/?q=jazz&venue=milk-bar"
+    ]);
+  });
+
+  it("only prefetches clear-all when the selected venue count exceeds the limit", () => {
+    expect(
+      buildVenueFilterPrefetchHrefs(
+        "/",
+        "q=jazz&venue=a&venue=b&venue=c&venue=d&venue=e&date=2026-04-08",
+        ["a", "b", "c", "d", "e"]
+      )
+    ).toEqual(["/?q=jazz"]);
+  });
+
+  it("does not prefetch when no venues are selected", () => {
+    expect(buildVenueFilterPrefetchHrefs("/", "q=jazz", [])).toEqual([]);
   });
 });
 
