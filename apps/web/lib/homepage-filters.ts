@@ -20,6 +20,8 @@ export interface SearchableGigRecord {
   artist_names: string[];
 }
 
+const DEFAULT_VENUE_PREFETCH_REMOVAL_LIMIT = 4;
+
 type SearchParamValue = string | string[] | undefined;
 
 const VALID_LEGACY_WHEN_FILTERS = new Set<Exclude<LegacyWhenFilter, null>>([
@@ -125,6 +127,35 @@ export function buildHomepageFilterHref(
   const nextSearch = nextParams.toString();
 
   return nextSearch ? `${pathname}?${nextSearch}` : pathname;
+}
+
+export function buildVenueFilterPrefetchHrefs(
+  pathname: string,
+  currentSearch: string,
+  selectedVenueSlugs: string[],
+  removalLimit = DEFAULT_VENUE_PREFETCH_REMOVAL_LIMIT
+): string[] {
+  const venueSlugs = uniqueVenueSlugs(selectedVenueSlugs);
+
+  if (venueSlugs.length === 0) {
+    return [];
+  }
+
+  const hrefs = new Set<string>();
+
+  hrefs.add(buildHomepageFilterHref(pathname, currentSearch, { venues: [] }));
+
+  if (venueSlugs.length <= removalLimit) {
+    for (const slug of venueSlugs) {
+      hrefs.add(
+        buildHomepageFilterHref(pathname, currentSearch, {
+          venues: venueSlugs.filter((venueSlug) => venueSlug !== slug)
+        })
+      );
+    }
+  }
+
+  return [...hrefs];
 }
 
 export function matchesGigQuery(
