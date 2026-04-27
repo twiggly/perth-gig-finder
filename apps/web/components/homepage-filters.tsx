@@ -160,6 +160,11 @@ export function HomepageFilters({
   const [isLoadingSearchSuggestions, setIsLoadingSearchSuggestions] = useState(false);
   const [highlightedSearchIndex, setHighlightedSearchIndex] = useState(-1);
   const [isVenueMenuOpen, setIsVenueMenuOpen] = useState(false);
+  const [preloadedVenueSuggestions, setPreloadedVenueSuggestions] = useState<
+    VenueOption[]
+  >([]);
+  const [isPreloadingVenueSuggestions, setIsPreloadingVenueSuggestions] =
+    useState(false);
   const [suggestions, setSuggestions] = useState<VenueOption[]>([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
@@ -185,6 +190,9 @@ export function HomepageFilters({
     : [];
   const isVenueSuggestionsPending =
     isLoadingSuggestions ||
+    (isVenueMenuOpen &&
+      !deferredVenueInput.trim() &&
+      isPreloadingVenueSuggestions) ||
     (isVenueMenuOpen && venueInput.trim() !== deferredVenueInput.trim());
 
   useEffect(() => {
@@ -227,6 +235,57 @@ export function HomepageFilters({
     setIsSearchMenuOpen(false);
     setHighlightedSearchIndex(-1);
   }, [currentQuery]);
+
+  useEffect(() => {
+    const abortController = new AbortController();
+    const params = new URLSearchParams();
+    const excludedSlugs = selectedVenueSlugKey
+      ? selectedVenueSlugKey.split("|")
+      : [];
+
+    excludedSlugs.forEach((slug) => params.append("exclude", slug));
+    setIsPreloadingVenueSuggestions(true);
+
+    fetch(`/api/venues?${params.toString()}`, {
+      signal: abortController.signal
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Could not preload venue suggestions.");
+        }
+
+        return (await response.json()) as VenueOption[];
+      })
+      .then((venues) => {
+        setPreloadedVenueSuggestions(venues);
+      })
+      .catch((error) => {
+        if (abortController.signal.aborted) {
+          return;
+        }
+
+        console.error(error);
+        setPreloadedVenueSuggestions([]);
+      })
+      .finally(() => {
+        if (!abortController.signal.aborted) {
+          setIsPreloadingVenueSuggestions(false);
+        }
+      });
+
+    return () => {
+      abortController.abort();
+    };
+  }, [selectedVenueSlugKey]);
+
+  useEffect(() => {
+    if (venueInput.trim()) {
+      return;
+    }
+
+    setSuggestions(preloadedVenueSuggestions);
+    setHighlightedSuggestionIndex(-1);
+  }, [preloadedVenueSuggestions, venueInput]);
 
   useEffect(() => {
     if (!isSearchMenuOpen) {
@@ -292,7 +351,6 @@ export function HomepageFilters({
 
   useEffect(() => {
     if (!isVenueMenuOpen) {
-      setSuggestions([]);
       setIsLoadingSuggestions(false);
       setHighlightedSuggestionIndex(-1);
       return;
@@ -300,12 +358,17 @@ export function HomepageFilters({
 
     const trimmedInput = deferredVenueInput.trim();
 
+    if (!trimmedInput) {
+      setSuggestions(preloadedVenueSuggestions);
+      setIsLoadingSuggestions(false);
+      setHighlightedSuggestionIndex(-1);
+      return;
+    }
+
     const abortController = new AbortController();
     const params = new URLSearchParams();
 
-    if (trimmedInput) {
-      params.set("q", trimmedInput);
-    }
+    params.set("q", trimmedInput);
     selectedVenueSlugs.forEach((slug) => params.append("exclude", slug));
     setIsLoadingSuggestions(true);
     setHighlightedSuggestionIndex(-1);
@@ -344,7 +407,12 @@ export function HomepageFilters({
     return () => {
       abortController.abort();
     };
-  }, [deferredVenueInput, isVenueMenuOpen, selectedVenueSlugKey]);
+  }, [
+    deferredVenueInput,
+    isVenueMenuOpen,
+    preloadedVenueSuggestions,
+    selectedVenueSlugKey
+  ]);
 
   useEffect(() => {
     if (!isVenueMenuOpen) {
@@ -483,6 +551,7 @@ export function HomepageFilters({
   function closeVenueMenu() {
     setIsVenueMenuOpen(false);
     setVenueInput("");
+    setSuggestions(preloadedVenueSuggestions);
     setHighlightedSuggestionIndex(-1);
   }
 
