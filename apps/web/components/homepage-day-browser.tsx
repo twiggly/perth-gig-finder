@@ -17,6 +17,12 @@ import {
   getInitialHomepageCalendarMonthKey
 } from "@/lib/homepage-calendar";
 import {
+  buildHomepageDayRequestPath,
+  isHomepageDayPayload,
+  mergeHomepageDayCache,
+  type HomepageDayPayload
+} from "@/lib/homepage-day-loading";
+import {
   accumulateTrackpadSwipe,
   announceHomepageActiveDate,
   getAdjacentDateKey,
@@ -27,22 +33,23 @@ import {
   getPerthDateKey,
   getSwipeDirection,
   replaceHomepageDateInUrl,
-  requestHomepageActiveDate,
   syncHomepageActiveDate,
   shouldConsumeLockedTrackpadMomentum,
   TRACKPAD_GESTURE_LOCK_MS,
-  type DateGroup,
+  type DateSummary,
   type DayTransition,
   type SwipeDirection
 } from "@/lib/homepage-dates";
 import {
-  getAdjacentGigImagePreloadUrls,
-  type GigCardRecord
+  getAdjacentGigImagePreloadUrls
 } from "@/lib/gigs";
 
 interface HomepageDayBrowserProps {
-  days: Array<DateGroup<GigCardRecord>>;
+  availableDays: DateSummary[];
+  currentQuery: string;
   initialActiveDateKey: string;
+  initialDay: HomepageDayPayload;
+  selectedVenueSlugs: string[];
 }
 
 interface PointerGesture {
@@ -119,14 +126,21 @@ function scheduleAdjacentImagePreload(callback: () => void): () => void {
 }
 
 export function HomepageDayBrowser({
-  days,
-  initialActiveDateKey
+  availableDays,
+  currentQuery,
+  initialActiveDateKey,
+  initialDay,
+  selectedVenueSlugs
 }: HomepageDayBrowserProps) {
   const previewAssetRevision = LOCAL_PREVIEW_ASSET_REVISION;
   const pathname = usePathname();
   const gestureRef = useRef<PointerGesture | null>(null);
   const calendarGestureRef = useRef<PointerGesture | null>(null);
   const calendarSwipeConsumedRef = useRef(false);
+  const pendingDayLoadsRef = useRef<Map<string, Promise<HomepageDayPayload>>>(
+    new Map()
+  );
+  const isMountedRef = useRef(true);
   const preloadedImageUrlsRef = useRef<Set<string>>(new Set());
   const stickySentinelRef = useRef<HTMLSpanElement | null>(null);
   const stickyFrameRef = useRef<number | null>(null);
@@ -146,6 +160,11 @@ export function HomepageDayBrowser({
     lockedUntil: 0
   });
   const [activeDateKey, setActiveDateKey] = useState(initialActiveDateKey);
+  const [loadedDays, setLoadedDays] = useState<HomepageDayPayload[]>(() => [
+    initialDay
+  ]);
+  const [loadingDateKey, setLoadingDateKey] = useState<string | null>(null);
+  const [dayLoadError, setDayLoadError] = useState<string | null>(null);
   const [calendarMonthKey, setCalendarMonthKey] = useState<string | null>(null);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [isDateHeaderStuck, setIsDateHeaderStuck] = useState(false);
@@ -156,15 +175,20 @@ export function HomepageDayBrowser({
     window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
   const [todayDateKey] = useState(() => getPerthDateKey(new Date()));
+  const selectedVenueSlugKey = selectedVenueSlugs.join("|");
   const availableDateKeys = useMemo(
-    () => days.map((day) => day.dateKey),
-    [days]
+    () => availableDays.map((day) => day.dateKey),
+    [availableDays]
   );
-  const dayMap = useMemo(
-    () => new Map(days.map((day) => [day.dateKey, day])),
-    [days]
+  const availableDayMap = useMemo(
+    () => new Map(availableDays.map((day) => [day.dateKey, day])),
+    [availableDays]
   );
-  const activeDay = dayMap.get(activeDateKey) ?? days[0];
+  const loadedDayMap = useMemo(
+    () => new Map(loadedDays.map((day) => [day.dateKey, day])),
+    [loadedDays]
+  );
+  const activeDay = loadedDayMap.get(activeDateKey) ?? initialDay;
   const previousDateKey = getAdjacentDateKey(
     availableDateKeys,
     activeDateKey,
@@ -172,6 +196,8 @@ export function HomepageDayBrowser({
   );
   const nextDateKey = getAdjacentDateKey(availableDateKeys, activeDateKey, "next");
   const isAnimating = transition !== null;
+  const isLoadingDay = loadingDateKey !== null;
+  const isNavigationLocked = isAnimating || isLoadingDay;
   const isContentAnimating = transition?.phase === "animating";
   const activeCalendarMonthKey = getInitialHomepageCalendarMonthKey(
     activeDateKey,
@@ -238,6 +264,15 @@ export function HomepageDayBrowser({
   } as CSSProperties;
 
   useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      pendingDayLoadsRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
@@ -288,13 +323,18 @@ export function HomepageDayBrowser({
 
   useEffect(() => {
     setActiveDateKey(initialActiveDateKey);
+    setLoadedDays([initialDay]);
+    setLoadingDateKey(null);
+    setDayLoadError(null);
     setCalendarMonthKey(
       getInitialHomepageCalendarMonthKey(initialActiveDateKey, availableDateKeys)
     );
     setIsCalendarOpen(false);
     setOpenGigId(null);
     setTransition(null);
-  }, [availableDateKeys, initialActiveDateKey]);
+    pendingDayLoadsRef.current.clear();
+    preloadedImageUrlsRef.current.clear();
+  }, [availableDateKeys, initialActiveDateKey, initialDay]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -308,37 +348,9 @@ export function HomepageDayBrowser({
         return;
       }
 
-      setOpenGigId(null);
-      setIsCalendarOpen(false);
-
-      if (prefersReducedMotion) {
-        setTransition(null);
-        setActiveDateKey(nextDateKey);
-        setCalendarMonthKey(
-          getInitialHomepageCalendarMonthKey(nextDateKey, availableDateKeys)
-        );
-        return;
-      }
-
-      const requestedTransition = getRequestedDayTransition(
-        availableDateKeys,
-        activeDateKey,
-        nextDateKey
-      );
-
-      if (!requestedTransition) {
-        setTransition(null);
-        setActiveDateKey(nextDateKey);
-        setCalendarMonthKey(
-          getInitialHomepageCalendarMonthKey(nextDateKey, availableDateKeys)
-        );
-        return;
-      }
-
-      wheelGestureRef.current.accumulatedDeltaX = 0;
-      setTransition({
-        ...requestedTransition,
-        phase: "preparing"
+      void startDateChange(nextDateKey, {
+        revertUrlOnFailure: true,
+        urlAlreadyUpdated: true
       });
     }
 
@@ -353,7 +365,16 @@ export function HomepageDayBrowser({
         handleRequestedActiveDate
       );
     };
-  }, [activeDateKey, availableDateKeys, prefersReducedMotion]);
+  }, [
+    activeDateKey,
+    availableDateKeys,
+    currentQuery,
+    isNavigationLocked,
+    loadedDayMap,
+    pathname,
+    prefersReducedMotion,
+    selectedVenueSlugKey
+  ]);
 
   useEffect(() => {
     if (transition) {
@@ -400,6 +421,25 @@ export function HomepageDayBrowser({
   }, [activeDateKey, pathname]);
 
   useEffect(() => {
+    if (typeof window === "undefined" || !activeDateKey) {
+      return;
+    }
+
+    for (const dateKey of [previousDateKey, nextDateKey]) {
+      if (dateKey) {
+        prefetchHomepageDay(dateKey);
+      }
+    }
+  }, [
+    activeDateKey,
+    currentQuery,
+    loadedDayMap,
+    nextDateKey,
+    previousDateKey,
+    selectedVenueSlugKey
+  ]);
+
+  useEffect(() => {
     if (
       typeof window === "undefined" ||
       !activeDateKey ||
@@ -409,7 +449,7 @@ export function HomepageDayBrowser({
     }
 
     const preloadUrls = getAdjacentGigImagePreloadUrls(
-      dayMap,
+      loadedDayMap,
       [previousDateKey, nextDateKey].filter(
         (dateKey): dateKey is string => Boolean(dateKey)
       ),
@@ -430,7 +470,7 @@ export function HomepageDayBrowser({
         void image.decode?.().catch(() => {});
       }
     });
-  }, [activeDateKey, dayMap, nextDateKey, previousDateKey]);
+  }, [activeDateKey, loadedDayMap, nextDateKey, previousDateKey]);
 
   useEffect(() => {
     if (!transition || transition.phase !== "preparing" || prefersReducedMotion) {
@@ -490,6 +530,102 @@ export function HomepageDayBrowser({
     calendarGestureRef.current = null;
   }
 
+  function cacheHomepageDay(day: HomepageDayPayload) {
+    setLoadedDays((currentDays) =>
+      mergeHomepageDayCache(currentDays, day, availableDateKeys)
+    );
+  }
+
+  async function fetchHomepageDay(
+    dateKey: string
+  ): Promise<HomepageDayPayload | null> {
+    if (!availableDateKeys.includes(dateKey)) {
+      return null;
+    }
+
+    const cachedDay = loadedDayMap.get(dateKey);
+
+    if (cachedDay) {
+      return cachedDay;
+    }
+
+    const pendingLoad = pendingDayLoadsRef.current.get(dateKey);
+
+    if (pendingLoad) {
+      return pendingLoad;
+    }
+
+    const requestPath = buildHomepageDayRequestPath({
+      dateKey,
+      query: currentQuery,
+      venueSlugs: selectedVenueSlugs
+    });
+    const request = fetch(requestPath, {
+      cache: "no-store",
+      headers: {
+        Accept: "application/json"
+      }
+    }).then(async (response) => {
+      if (!response.ok) {
+        throw new Error("Could not load gigs for that date.");
+      }
+
+      const payload: unknown = await response.json();
+
+      if (!isHomepageDayPayload(payload)) {
+        throw new Error("The date payload was malformed.");
+      }
+
+      if (isMountedRef.current) {
+        cacheHomepageDay(payload);
+      }
+
+      return payload;
+    });
+
+    pendingDayLoadsRef.current.set(dateKey, request);
+
+    try {
+      return await request;
+    } finally {
+      pendingDayLoadsRef.current.delete(dateKey);
+    }
+  }
+
+  function prefetchHomepageDay(dateKey: string) {
+    if (
+      loadedDayMap.has(dateKey) ||
+      pendingDayLoadsRef.current.has(dateKey)
+    ) {
+      return;
+    }
+
+    void fetchHomepageDay(dateKey).catch(() => {});
+  }
+
+  async function ensureHomepageDayForNavigation(dateKey: string): Promise<boolean> {
+    if (loadedDayMap.has(dateKey)) {
+      return true;
+    }
+
+    setLoadingDateKey(dateKey);
+
+    try {
+      const day = await fetchHomepageDay(dateKey);
+
+      return Boolean(day);
+    } catch (error) {
+      console.error(error);
+      setDayLoadError("Could not load that date. Try again.");
+
+      return false;
+    } finally {
+      setLoadingDateKey((currentDateKey) =>
+        currentDateKey === dateKey ? null : currentDateKey
+      );
+    }
+  }
+
   function finishTransition(dateKey: string) {
     setActiveDateKey(dateKey);
     setCalendarMonthKey(
@@ -500,12 +636,83 @@ export function HomepageDayBrowser({
     );
   }
 
-  function handleNavigate(direction: SwipeDirection): boolean {
-    if (isAnimating) {
+  async function startDateChange(
+    nextDateKey: string,
+    options: {
+      announce?: boolean;
+      replaceUrl?: boolean;
+      revertUrlOnFailure?: boolean;
+      transition?: DayTransition;
+      urlAlreadyUpdated?: boolean;
+    } = {}
+  ): Promise<boolean> {
+    if (isNavigationLocked || !availableDateKeys.includes(nextDateKey)) {
       return false;
     }
 
+    setOpenGigId(null);
     setIsCalendarOpen(false);
+    setDayLoadError(null);
+    wheelGestureRef.current.accumulatedDeltaX = 0;
+
+    if (nextDateKey === activeDateKey) {
+      return true;
+    }
+
+    const hasDay = await ensureHomepageDayForNavigation(nextDateKey);
+
+    if (!hasDay) {
+      if (options.revertUrlOnFailure || options.urlAlreadyUpdated) {
+        replaceHomepageDateInUrl(pathname, activeDateKey);
+      }
+
+      return false;
+    }
+
+    if (options.replaceUrl) {
+      replaceHomepageDateInUrl(pathname, nextDateKey);
+    }
+
+    if (options.announce) {
+      announceHomepageActiveDate(nextDateKey);
+    }
+
+    if (prefersReducedMotion) {
+      setTransition(null);
+      setActiveDateKey(nextDateKey);
+      setCalendarMonthKey(
+        getInitialHomepageCalendarMonthKey(nextDateKey, availableDateKeys)
+      );
+
+      return true;
+    }
+
+    const requestedTransition =
+      options.transition ??
+      getRequestedDayTransition(availableDateKeys, activeDateKey, nextDateKey);
+
+    if (!requestedTransition) {
+      setTransition(null);
+      setActiveDateKey(nextDateKey);
+      setCalendarMonthKey(
+        getInitialHomepageCalendarMonthKey(nextDateKey, availableDateKeys)
+      );
+
+      return true;
+    }
+
+    setTransition({
+      ...requestedTransition,
+      phase: "preparing"
+    });
+
+    return true;
+  }
+
+  function handleNavigate(direction: SwipeDirection): boolean {
+    if (isNavigationLocked) {
+      return false;
+    }
 
     const nextTransition = getDayTransition(
       availableDateKeys,
@@ -517,32 +724,17 @@ export function HomepageDayBrowser({
       return false;
     }
 
-    replaceHomepageDateInUrl(pathname, nextTransition.toDateKey);
-    announceHomepageActiveDate(nextTransition.toDateKey);
-    setOpenGigId(null);
-    wheelGestureRef.current.accumulatedDeltaX = 0;
-
-    if (prefersReducedMotion) {
-      setActiveDateKey(nextTransition.toDateKey);
-      setCalendarMonthKey(
-        getInitialHomepageCalendarMonthKey(
-          nextTransition.toDateKey,
-          availableDateKeys
-        )
-      );
-      return true;
-    }
-
-    setTransition({
-      ...nextTransition,
-      phase: "preparing"
+    void startDateChange(nextTransition.toDateKey, {
+      announce: true,
+      replaceUrl: true,
+      transition: nextTransition
     });
 
     return true;
   }
 
   function handleCalendarDateSelect(dateKey: string) {
-    if (isAnimating) {
+    if (isNavigationLocked) {
       return;
     }
 
@@ -557,7 +749,10 @@ export function HomepageDayBrowser({
       return;
     }
 
-    requestHomepageActiveDate(pathname, dateKey);
+    void startDateChange(dateKey, {
+      announce: true,
+      replaceUrl: true
+    });
   }
 
   function markCalendarSwipeConsumed() {
@@ -589,7 +784,7 @@ export function HomepageDayBrowser({
 
   function handlePointerDown(event: React.PointerEvent<HTMLElement>) {
     if (
-      isAnimating ||
+      isNavigationLocked ||
       (event.pointerType !== "touch" && event.pointerType !== "pen")
     ) {
       return;
@@ -607,7 +802,7 @@ export function HomepageDayBrowser({
 
     clearGesture();
 
-    if (!gesture || gesture.pointerId !== event.pointerId || isAnimating) {
+    if (!gesture || gesture.pointerId !== event.pointerId || isNavigationLocked) {
       return;
     }
 
@@ -627,7 +822,7 @@ export function HomepageDayBrowser({
     event.stopPropagation();
 
     if (
-      isAnimating ||
+      isNavigationLocked ||
       (event.pointerType !== "touch" && event.pointerType !== "pen")
     ) {
       return;
@@ -653,7 +848,7 @@ export function HomepageDayBrowser({
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
 
-    if (!gesture || gesture.pointerId !== event.pointerId || isAnimating) {
+    if (!gesture || gesture.pointerId !== event.pointerId || isNavigationLocked) {
       return;
     }
 
@@ -695,7 +890,7 @@ export function HomepageDayBrowser({
       return;
     }
 
-    if (isAnimating) {
+    if (isNavigationLocked) {
       return;
     }
 
@@ -754,7 +949,7 @@ export function HomepageDayBrowser({
       return;
     }
 
-    if (isAnimating) {
+    if (isNavigationLocked) {
       return;
     }
 
@@ -792,6 +987,7 @@ export function HomepageDayBrowser({
 
   return (
     <section
+      aria-busy={isLoadingDay ? "true" : undefined}
       data-preview-revision={previewAssetRevision}
       data-calendar-open={isCalendarOpen ? "true" : undefined}
       className="day-browser"
@@ -813,7 +1009,7 @@ export function HomepageDayBrowser({
         <ActionIcon
           aria-label="Previous date"
           className="day-browser__arrow"
-          disabled={!previousDateKey || isAnimating}
+          disabled={!previousDateKey || isNavigationLocked}
           onClick={() => handleNavigate("previous")}
           type="button"
           variant="subtle"
@@ -835,7 +1031,7 @@ export function HomepageDayBrowser({
               aria-haspopup="dialog"
               aria-label={`Choose date, currently ${activeDay.heading}`}
               className="day-browser__heading-button"
-              disabled={isAnimating || !calendarMonth}
+              disabled={isNavigationLocked || !calendarMonth}
               onClick={() => setIsCalendarOpen((current) => !current)}
               type="button"
             >
@@ -854,7 +1050,9 @@ export function HomepageDayBrowser({
                       key={`heading-${dateKey}`}
                     >
                       <span className="day-browser__heading-title">
-                        {dayMap.get(dateKey)?.heading ?? activeDay.heading}
+                        {loadedDayMap.get(dateKey)?.heading ??
+                          availableDayMap.get(dateKey)?.heading ??
+                          activeDay.heading}
                       </span>
                     </Box>
                   ))}
@@ -953,7 +1151,7 @@ export function HomepageDayBrowser({
         <ActionIcon
           aria-label="Next date"
           className="day-browser__arrow"
-          disabled={!nextDateKey || isAnimating}
+          disabled={!nextDateKey || isNavigationLocked}
           onClick={() => handleNavigate("next")}
           type="button"
           variant="subtle"
@@ -961,6 +1159,16 @@ export function HomepageDayBrowser({
           <span aria-hidden="true">&gt;</span>
         </ActionIcon>
       </Box>
+      {isLoadingDay ? (
+        <span className="sr-only" role="status">
+          Loading gigs for the selected date.
+        </span>
+      ) : null}
+      {dayLoadError ? (
+        <Text className="sr-only" component="p" role="status">
+          {dayLoadError}
+        </Text>
+      ) : null}
 
       <Box
         className="day-browser__content-viewport"
@@ -973,7 +1181,7 @@ export function HomepageDayBrowser({
         >
           {renderedContentPanes.map((pane) => {
             const { dateKey, motionRole, phase } = pane;
-            const day = dayMap.get(dateKey);
+            const day = loadedDayMap.get(dateKey);
 
             if (!day) {
               return null;

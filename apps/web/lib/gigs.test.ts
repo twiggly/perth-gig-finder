@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildAvailableGigDates,
   getAdjacentGigImagePreloadUrls,
   getGigImagePreloadUrls,
   getRenderableGigImageUrl,
+  type HomepageDateAvailabilityRecord,
   type GigCardRecord
 } from "./gigs";
 
@@ -33,6 +35,94 @@ function createGig(
     ...overrides
   };
 }
+
+function createAvailabilityRecord(
+  id: string,
+  overrides: Partial<HomepageDateAvailabilityRecord> = {}
+): HomepageDateAvailabilityRecord {
+  return {
+    id,
+    title: `Gig ${id}`,
+    starts_at: "2026-04-13T12:00:00.000Z",
+    artist_names: [],
+    venue_slug: "the-bird",
+    venue_name: "The Bird",
+    venue_suburb: "Northbridge",
+    status: "active",
+    ...overrides
+  };
+}
+
+describe("available gig date helpers", () => {
+  it("groups matching records into unique Perth date summaries", () => {
+    expect(
+      buildAvailableGigDates(
+        [
+          createAvailabilityRecord("1", {
+            starts_at: "2026-04-13T12:00:00.000Z"
+          }),
+          createAvailabilityRecord("2", {
+            starts_at: "2026-04-13T14:00:00.000Z"
+          }),
+          createAvailabilityRecord("3", {
+            starts_at: "2026-04-14T12:00:00.000Z"
+          })
+        ],
+        {
+          date: "",
+          legacyWhen: null,
+          q: "",
+          venueSlugs: []
+        }
+      )
+    ).toEqual([
+      {
+        dateKey: "2026-04-13",
+        heading: "Mon, Apr 13th"
+      },
+      {
+        dateKey: "2026-04-14",
+        heading: "Tue, Apr 14th"
+      }
+    ]);
+  });
+
+  it("filters availability records by venue and search query", () => {
+    expect(
+      buildAvailableGigDates(
+        [
+          createAvailabilityRecord("the-bird-match", {
+            artist_names: ["AJ Hix Rhythm Six"],
+            title: "Tuesday Night",
+            venue_slug: "the-bird"
+          }),
+          createAvailabilityRecord("wrong-venue", {
+            artist_names: ["AJ Hix Rhythm Six"],
+            title: "Tuesday Night",
+            venue_slug: "milk-bar",
+            venue_name: "Milk Bar"
+          }),
+          createAvailabilityRecord("wrong-query", {
+            artist_names: ["Someone Else"],
+            title: "Tuesday Night",
+            venue_slug: "the-bird"
+          })
+        ],
+        {
+          date: "",
+          legacyWhen: null,
+          q: "AJ Hix",
+          venueSlugs: ["the-bird"]
+        }
+      )
+    ).toEqual([
+      {
+        dateKey: "2026-04-13",
+        heading: "Mon, Apr 13th"
+      }
+    ]);
+  });
+});
 
 describe("gig image preload helpers", () => {
   it("returns a renderable image url only when card metadata is valid", () => {

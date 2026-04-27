@@ -12,6 +12,7 @@ import {
   getDayTransition,
   getRequestedDayTransition,
   getHomepageLowerBound,
+  getPerthDayBounds,
   isWeekendShortcutActiveDate,
   getPerthDateKey,
   getSwipeDirection,
@@ -28,6 +29,20 @@ describe("getPerthDateKey", () => {
   it("maps UTC timestamps into the correct Perth local date", () => {
     expect(getPerthDateKey("2026-04-06T12:00:00.000Z")).toBe("2026-04-06");
     expect(getPerthDateKey("2026-04-06T17:30:00.000Z")).toBe("2026-04-07");
+  });
+});
+
+describe("getPerthDayBounds", () => {
+  it("returns UTC bounds for a Perth calendar day", () => {
+    expect(getPerthDayBounds("2026-04-29")).toEqual({
+      start: new Date("2026-04-28T16:00:00.000Z"),
+      end: new Date("2026-04-29T16:00:00.000Z")
+    });
+  });
+
+  it("rejects invalid date keys", () => {
+    expect(getPerthDayBounds("not-a-date")).toBeNull();
+    expect(getPerthDayBounds("2026-02-31")).toBeNull();
   });
 });
 

@@ -8,6 +8,11 @@ export interface DateGroup<T> {
   items: T[];
 }
 
+export interface DateSummary {
+  dateKey: string;
+  heading: string;
+}
+
 export interface DayTransition {
   direction: SwipeDirection;
   fromDateKey: string;
@@ -124,6 +129,34 @@ function getPerthDayOfWeek(date: Date): number {
 
 function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * DAY_MS);
+}
+
+export function getPerthDayBounds(
+  dateKey: string
+): { start: Date; end: Date } | null {
+  if (!isDateKey(dateKey)) {
+    return null;
+  }
+
+  const [year, month, day] = dateKey
+    .split("-")
+    .map((value) => Number.parseInt(value, 10));
+  const perthClockStart = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    perthClockStart.getUTCFullYear() !== year ||
+    perthClockStart.getUTCMonth() !== month - 1 ||
+    perthClockStart.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  const start = fromPerthClock(perthClockStart);
+
+  return {
+    start,
+    end: addDays(start, 1)
+  };
 }
 
 function getWeekendShortcutOffset(dayOfWeek: number): number {

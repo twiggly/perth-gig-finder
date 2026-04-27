@@ -43,8 +43,18 @@ function renderBrowser(days: Array<DateGroup<GigCardRecord>>) {
   return renderToStaticMarkup(
     <MantineProvider defaultColorScheme="dark" theme={theme}>
       <HomepageDayBrowser
-        days={days}
+        availableDays={days.map((day) => ({
+          dateKey: day.dateKey,
+          heading: day.heading
+        }))}
+        currentQuery=""
         initialActiveDateKey={days[0]?.dateKey ?? "2026-04-29"}
+        initialDay={days[0] ?? {
+          dateKey: "2026-04-29",
+          heading: "Wed, Apr 29th",
+          items: []
+        }}
+        selectedVenueSlugs={[]}
       />
     </MantineProvider>
   );
@@ -64,5 +74,28 @@ describe("HomepageDayBrowser", () => {
     expect(html).toContain('aria-haspopup="dialog"');
     expect(html).toContain("day-browser__heading-button");
     expect(html).toContain("Wed, Apr 29th");
+  });
+
+  it("renders only the seeded active day before lazy-loaded days arrive", () => {
+    const html = renderBrowser([
+      {
+        dateKey: "2026-04-29",
+        heading: "Wed, Apr 29th",
+        items: [createGig()]
+      },
+      {
+        dateKey: "2026-04-30",
+        heading: "Thu, Apr 30th",
+        items: [
+          createGig({
+            id: "gig-2",
+            title: "Tomorrow's Show"
+          })
+        ]
+      }
+    ]);
+
+    expect(html).toContain("ALT//THURSDAYS");
+    expect(html).not.toContain("Tomorrow&#x27;s Show");
   });
 });
