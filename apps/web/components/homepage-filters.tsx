@@ -662,7 +662,7 @@ export function HomepageFilters({
               onChange={handleSearchInputChange}
               onFocus={handleSearchInputFocus}
               onKeyDown={handleSearchKeyDown}
-              placeholder="Search events, artists, venues"
+              placeholder="Search events & artists"
               type="search"
               unstyled
               value={searchInput}

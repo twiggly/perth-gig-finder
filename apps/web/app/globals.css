@@ -1329,6 +1329,13 @@ body[data-filter-dropdown-open="true"] .date-pills {
     margin-bottom: 0.25rem;
   }
 
+  body[data-filter-dropdown-open="true"] .date-pills {
+    margin-bottom: -0.35rem;
+    margin-inline: -0.4rem;
+    padding-bottom: 0.6rem;
+    padding-inline: 0.4rem;
+  }
+
   .day-browser__header {
     gap: 0.6rem;
     width: min(100%, 28rem);
