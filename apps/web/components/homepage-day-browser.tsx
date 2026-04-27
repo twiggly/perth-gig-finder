@@ -766,6 +766,7 @@ export function HomepageDayBrowser({
           position="bottom"
           shadow="xl"
           width="auto"
+          withArrow
         >
           <Popover.Target>
             <UnstyledButton

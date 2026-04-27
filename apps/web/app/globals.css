@@ -556,7 +556,6 @@ code {
 .day-calendar {
   width: min(30rem, calc(100vw - 1rem));
   padding: 1.35rem;
-  border: 0;
   border-radius: 1.35rem;
   background: rgba(16, 12, 22, 0.98);
   color: var(--text);
