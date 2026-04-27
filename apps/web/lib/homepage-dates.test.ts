@@ -180,10 +180,19 @@ describe("getTodayShortcutLabel", () => {
     ).toBe("Today");
   });
 
-  it("uses Nearest day when filters block access to today", () => {
+  it("uses Tomorrow when the nearest available date is tomorrow", () => {
     expect(
       getTodayShortcutLabel(
         ["2026-04-11", "2026-04-12"],
+        new Date("2026-04-10T10:00:00.000Z")
+      )
+    ).toBe("Tomorrow");
+  });
+
+  it("uses Nearest day when the nearest available date is later than tomorrow", () => {
+    expect(
+      getTodayShortcutLabel(
+        ["2026-04-12", "2026-04-13"],
         new Date("2026-04-10T10:00:00.000Z")
       )
     ).toBe("Nearest day");
@@ -205,16 +214,30 @@ describe("getTodayShortcutState", () => {
     });
   });
 
-  it("uses a separate nearest-day fallback when today is unavailable", () => {
+  it("uses a tomorrow fallback when today is unavailable and tomorrow has gigs", () => {
     expect(
       getTodayShortcutState(
         ["2026-04-11", "2026-04-12"],
         new Date("2026-04-10T10:00:00.000Z")
       )
     ).toEqual({
-      label: "Nearest day",
+      label: "Tomorrow",
       nearestDateKey: "2026-04-11",
       targetDateKey: "2026-04-11",
+      todayDateKey: null
+    });
+  });
+
+  it("uses a separate nearest-day fallback when tomorrow is unavailable", () => {
+    expect(
+      getTodayShortcutState(
+        ["2026-04-12", "2026-04-13"],
+        new Date("2026-04-10T10:00:00.000Z")
+      )
+    ).toEqual({
+      label: "Nearest day",
+      nearestDateKey: "2026-04-12",
+      targetDateKey: "2026-04-12",
       todayDateKey: null
     });
   });

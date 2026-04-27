@@ -15,7 +15,7 @@ export interface DayTransition {
 }
 
 export interface TodayShortcutState {
-  label: "Today" | "Nearest day";
+  label: "Today" | "Tomorrow" | "Nearest day";
   nearestDateKey: string | null;
   targetDateKey: string | null;
   todayDateKey: string | null;
@@ -333,13 +333,20 @@ export function getTodayShortcutState(
   now: Date
 ): TodayShortcutState {
   const currentPerthDateKey = getPerthDateKey(now);
+  const tomorrowPerthDateKey = getPerthDateKey(
+    addDays(getPerthStartOfDay(now), 1)
+  );
   const todayDateKey = availableDateKeys.includes(currentPerthDateKey)
     ? currentPerthDateKey
     : null;
   const nearestDateKey = todayDateKey ? null : (availableDateKeys[0] ?? null);
 
   return {
-    label: todayDateKey ? "Today" : "Nearest day",
+    label: todayDateKey
+      ? "Today"
+      : nearestDateKey === tomorrowPerthDateKey
+        ? "Tomorrow"
+        : "Nearest day",
     nearestDateKey,
     targetDateKey: todayDateKey ?? nearestDateKey,
     todayDateKey
@@ -349,7 +356,7 @@ export function getTodayShortcutState(
 export function getTodayShortcutLabel(
   availableDateKeys: string[],
   now: Date
-): "Today" | "Nearest day" {
+): "Today" | "Tomorrow" | "Nearest day" {
   return getTodayShortcutState(availableDateKeys, now).label;
 }
 
