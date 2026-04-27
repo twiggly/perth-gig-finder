@@ -128,6 +128,9 @@ export function HomepageDayBrowser({
   const calendarGestureRef = useRef<PointerGesture | null>(null);
   const calendarSwipeConsumedRef = useRef(false);
   const preloadedImageUrlsRef = useRef<Set<string>>(new Set());
+  const stickySentinelRef = useRef<HTMLSpanElement | null>(null);
+  const stickyFrameRef = useRef<number | null>(null);
+  const isDateHeaderStuckRef = useRef(false);
   const transitionFrameRef = useRef<number | null>(null);
   const transitionTimeoutRef = useRef<number | null>(null);
   const wheelGestureRef = useRef<WheelGesture>({
@@ -145,6 +148,7 @@ export function HomepageDayBrowser({
   const [activeDateKey, setActiveDateKey] = useState(initialActiveDateKey);
   const [calendarMonthKey, setCalendarMonthKey] = useState<string | null>(null);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isDateHeaderStuck, setIsDateHeaderStuck] = useState(false);
   const [openGigId, setOpenGigId] = useState<string | null>(null);
   const [transition, setTransition] = useState<BrowserTransition | null>(null);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(() =>
@@ -232,6 +236,55 @@ export function HomepageDayBrowser({
     "--day-browser-content-easing": CONTENT_TRANSITION_EASING,
     "--day-browser-content-distance": `${CONTENT_TRANSITION_DISTANCE_PX}px`
   } as CSSProperties;
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    function measureDateHeaderStickiness() {
+      stickyFrameRef.current = null;
+
+      const sentinel = stickySentinelRef.current;
+
+      if (!sentinel) {
+        return;
+      }
+
+      const nextIsStuck = sentinel.getBoundingClientRect().top < 0;
+
+      if (isDateHeaderStuckRef.current !== nextIsStuck) {
+        isDateHeaderStuckRef.current = nextIsStuck;
+        setIsDateHeaderStuck(nextIsStuck);
+      }
+    }
+
+    function scheduleDateHeaderStickinessMeasure() {
+      if (stickyFrameRef.current !== null) {
+        return;
+      }
+
+      stickyFrameRef.current = window.requestAnimationFrame(
+        measureDateHeaderStickiness
+      );
+    }
+
+    scheduleDateHeaderStickinessMeasure();
+    window.addEventListener("scroll", scheduleDateHeaderStickinessMeasure, {
+      passive: true
+    });
+    window.addEventListener("resize", scheduleDateHeaderStickinessMeasure);
+
+    return () => {
+      window.removeEventListener("scroll", scheduleDateHeaderStickinessMeasure);
+      window.removeEventListener("resize", scheduleDateHeaderStickinessMeasure);
+
+      if (stickyFrameRef.current !== null) {
+        window.cancelAnimationFrame(stickyFrameRef.current);
+        stickyFrameRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setActiveDateKey(initialActiveDateKey);
@@ -748,7 +801,15 @@ export function HomepageDayBrowser({
       onWheel={handleWheel}
     >
       <h2 className="sr-only">{activeDay.heading}</h2>
-      <Box className="day-browser__header">
+      <span
+        aria-hidden="true"
+        className="day-browser__sticky-sentinel"
+        ref={stickySentinelRef}
+      />
+      <Box
+        className="day-browser__header"
+        data-stuck={isDateHeaderStuck ? "true" : undefined}
+      >
         <ActionIcon
           aria-label="Previous date"
           className="day-browser__arrow"

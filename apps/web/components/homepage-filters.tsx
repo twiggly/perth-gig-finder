@@ -10,7 +10,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
-import { Box, Text, TextInput, UnstyledButton } from "@mantine/core";
+import { Box, ScrollArea, Text, TextInput, UnstyledButton } from "@mantine/core";
 
 import {
   getDateShortcutLabel,
@@ -39,6 +39,7 @@ const DATE_SHORTCUT_OPTIONS: Array<{
 ];
 const LOCAL_PREVIEW_ASSET_REVISION =
   process.env.NEXT_PUBLIC_LOCAL_PREVIEW_ASSET_REVISION ?? "0";
+const AUTO_FOCUS_VENUE_SEARCH_MEDIA_QUERY = "(hover: hover) and (pointer: fine)";
 
 interface HomepageFiltersProps {
   activeDateKey: string | null;
@@ -147,7 +148,6 @@ export function HomepageFilters({
   const searchMenuRef = useRef<HTMLFormElement | null>(null);
   const venueMenuRef = useRef<HTMLDivElement | null>(null);
   const venueSearchInputRef = useRef<HTMLInputElement | null>(null);
-  const shouldAutoFocusVenueInputRef = useRef(false);
   const pathname = usePathname();
   const router = useRouter();
   const [currentActiveDateKey, setCurrentActiveDateKey] = useState(activeDateKey);
@@ -183,6 +183,9 @@ export function HomepageFilters({
   const combinedSearchSuggestions = searchAction
     ? [searchAction, ...searchSuggestions]
     : [];
+  const isVenueSuggestionsPending =
+    isLoadingSuggestions ||
+    (isVenueMenuOpen && venueInput.trim() !== deferredVenueInput.trim());
 
   useEffect(() => {
     setCurrentActiveDateKey(activeDateKey);
@@ -305,6 +308,7 @@ export function HomepageFilters({
     }
     selectedVenueSlugs.forEach((slug) => params.append("exclude", slug));
     setIsLoadingSuggestions(true);
+    setHighlightedSuggestionIndex(-1);
 
     fetch(`/api/venues?${params.toString()}`, {
       signal: abortController.signal
@@ -318,7 +322,9 @@ export function HomepageFilters({
       })
       .then((venues) => {
         setSuggestions(venues);
-        setHighlightedSuggestionIndex(venues.length > 0 ? 0 : -1);
+        setHighlightedSuggestionIndex(
+          trimmedInput && venues.length > 0 ? 0 : -1
+        );
       })
       .catch((error) => {
         if (abortController.signal.aborted) {
@@ -345,12 +351,16 @@ export function HomepageFilters({
       return;
     }
 
-    if (!shouldAutoFocusVenueInputRef.current) {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (!window.matchMedia(AUTO_FOCUS_VENUE_SEARCH_MEDIA_QUERY).matches) {
       return;
     }
 
     venueSearchInputRef.current?.focus();
-    shouldAutoFocusVenueInputRef.current = false;
+    venueSearchInputRef.current?.select();
   }, [isVenueMenuOpen]);
 
   useEffect(() => {
@@ -378,6 +388,22 @@ export function HomepageFilters({
 
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [isSearchMenuOpen, isVenueMenuOpen]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    if (isSearchMenuOpen || isVenueMenuOpen) {
+      document.body.dataset.filterDropdownOpen = "true";
+    } else {
+      delete document.body.dataset.filterDropdownOpen;
+    }
+
+    return () => {
+      delete document.body.dataset.filterDropdownOpen;
     };
   }, [isSearchMenuOpen, isVenueMenuOpen]);
 
@@ -540,6 +566,19 @@ export function HomepageFilters({
     }
 
     closeSearchMenu();
+
+    if (currentQuery.trim()) {
+      navigate({ q: "" });
+    }
+  }
+
+  function handleSearchClear() {
+    setSearchInput("");
+    closeSearchMenu();
+
+    if (currentQuery.trim()) {
+      navigate({ q: "" });
+    }
   }
 
   function handleSearchInputFocus() {
@@ -595,248 +634,237 @@ export function HomepageFilters({
   }
 
   return (
-    <Box
-      component="section"
-      className="filter-panel"
-      data-preview-revision={previewAssetRevision}
-    >
-      <div className="filter-toolbar">
-        <div className="filter-toolbar__brand">Perth Gig Radar</div>
-        <form
-          className="filter-toolbar__search"
-          onSubmit={handleSearchSubmit}
-          ref={searchMenuRef}
-        >
-          <label className="sr-only" htmlFor="gig-search-input">
-            Search gigs, artists, venues, and suburbs
-          </label>
-          <TextInput
-            id="gig-search-input"
-            aria-controls={searchMenuId}
-            aria-expanded={isSearchMenuOpen}
-            aria-haspopup="listbox"
-            classNames={{ input: "filter-input filter-input--compact" }}
-            onChange={handleSearchInputChange}
-            onFocus={handleSearchInputFocus}
-            onKeyDown={handleSearchKeyDown}
-            placeholder="Search gigs, artists, venues, suburbs"
-            type="search"
-            unstyled
-            value={searchInput}
-          />
-          {isSearchMenuOpen && trimmedSearchInput ? (
-            <div className="search-menu__popover" id={searchMenuId}>
-              <div className="search-menu__results">
-                <ul
-                  aria-label="Search suggestions"
-                  className="search-suggestions"
-                  role="listbox"
-                >
-                  {combinedSearchSuggestions.map((suggestion, index) => (
-                    <li
-                      className={`search-suggestion${
-                        suggestion.type === "search"
-                          ? " search-suggestion--primary"
-                          : ""
-                      }${
-                        highlightedSearchIndex === index
-                          ? " search-suggestion--active"
-                          : ""
-                      }`}
-                      key={
-                        suggestion.type === "venue"
-                          ? `${suggestion.type}-${suggestion.slug}`
-                          : `${suggestion.type}-${suggestion.label}`
-                      }
-                    >
-                      <UnstyledButton
-                        aria-selected={highlightedSearchIndex === index}
-                        className="search-suggestion__button"
-                        onClick={() => handleSelectSearchSuggestion(suggestion)}
-                        onMouseEnter={() => setHighlightedSearchIndex(index)}
-                        type="button"
-                      >
-                        <span className="search-suggestion__icon">
-                          <SearchSuggestionIcon icon={suggestion.icon} />
-                        </span>
-                        <span className="search-suggestion__content">
-                          <span className="search-suggestion__label">
-                            {suggestion.label}
-                          </span>
-                          {suggestion.subtext ? (
-                            <span className="search-suggestion__subtext">
-                              {suggestion.subtext}
-                            </span>
-                          ) : null}
-                        </span>
-                      </UnstyledButton>
-                    </li>
-                  ))}
-                </ul>
-                {isLoadingSearchSuggestions ? (
-                  <Text className="search-menu__status" component="p">
-                    Loading suggestions…
-                  </Text>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-        </form>
-        <div className="venue-menu" ref={venueMenuRef}>
-          <UnstyledButton
-            aria-controls={venueDropdownId}
-            aria-expanded={isVenueMenuOpen}
-            aria-haspopup="dialog"
-            className={`venue-menu__trigger${
-              isVenueMenuOpen ? " venue-menu__trigger--open" : ""
-            }`}
-            onKeyDown={(event) => {
-              if (
-                event.key === "Enter" ||
-                event.key === " " ||
-                event.key === "ArrowDown"
-              ) {
-                shouldAutoFocusVenueInputRef.current = true;
-              }
-            }}
-            onPointerDown={() => {
-              shouldAutoFocusVenueInputRef.current = false;
-            }}
-            onClick={() => {
-              closeSearchMenu();
-              setIsVenueMenuOpen((current) => !current);
-            }}
-            type="button"
+    <>
+      <Box
+        component="section"
+        className="filter-panel"
+        data-preview-revision={previewAssetRevision}
+      >
+        <div className="filter-toolbar">
+          <form
+            className="filter-toolbar__search"
+            onSubmit={handleSearchSubmit}
+            ref={searchMenuRef}
           >
-            <span>Venues</span>
-            <svg
-              aria-hidden="true"
-              className="venue-menu__chevron"
-              fill="none"
-              height="18"
-              viewBox="0 0 20 20"
-              width="18"
-            >
-              <path
-                d="M5.5 7.75 10 12.25l4.5-4.5"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="1.75"
-              />
-            </svg>
-          </UnstyledButton>
-          {isVenueMenuOpen ? (
-            <div
-              className="venue-menu__popover"
-              id={venueDropdownId}
-              role="dialog"
-            >
-              <label className="sr-only" htmlFor="venue-filter-input">
-                Search venues
-              </label>
-              <TextInput
-                autoComplete="off"
-                classNames={{ input: "filter-input filter-input--compact" }}
-                id="venue-filter-input"
-                onChange={(event) => setVenueInput(event.target.value)}
-                onKeyDown={handleVenueKeyDown}
-                placeholder="Search venues"
-                ref={venueSearchInputRef}
-                type="search"
-                unstyled
-                value={venueInput}
-              />
-              <div className="venue-menu__results">
-                {isLoadingSuggestions ? (
-                  <Text className="venue-picker__status" component="p">
-                    Loading venues…
-                  </Text>
-                ) : suggestions.length > 0 ? (
+            <label className="sr-only" htmlFor="gig-search-input">
+              Search gigs, artists, venues, and suburbs
+            </label>
+            <TextInput
+              id="gig-search-input"
+              aria-controls={searchMenuId}
+              aria-expanded={isSearchMenuOpen}
+              aria-haspopup="listbox"
+              classNames={{
+                input: `filter-input filter-input--compact${
+                  searchInput ? " filter-input--has-mobile-clear" : ""
+                }`
+              }}
+              onChange={handleSearchInputChange}
+              onFocus={handleSearchInputFocus}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="Search events, artists, venues"
+              type="search"
+              unstyled
+              value={searchInput}
+            />
+            {searchInput ? (
+              <UnstyledButton
+                aria-label="Clear search"
+                className="filter-toolbar__search-clear"
+                onClick={handleSearchClear}
+                type="button"
+              >
+                <span aria-hidden="true">×</span>
+              </UnstyledButton>
+            ) : null}
+            {isSearchMenuOpen && trimmedSearchInput ? (
+              <div className="search-menu__popover" id={searchMenuId}>
+                <div className="search-menu__results">
                   <ul
-                    aria-label="Venue options"
-                    className="venue-suggestions"
+                    aria-label="Search suggestions"
+                    className="search-suggestions"
                     role="listbox"
                   >
-                    {suggestions.map((venue, index) => (
-                      <li key={venue.slug}>
+                    {combinedSearchSuggestions.map((suggestion, index) => (
+                      <li
+                        className={`search-suggestion${
+                          suggestion.type === "search"
+                            ? " search-suggestion--primary"
+                            : ""
+                        }${
+                          highlightedSearchIndex === index
+                            ? " search-suggestion--active"
+                            : ""
+                        }`}
+                        key={
+                          suggestion.type === "venue"
+                            ? `${suggestion.type}-${suggestion.slug}`
+                            : `${suggestion.type}-${suggestion.label}`
+                        }
+                      >
                         <UnstyledButton
-                          aria-selected={highlightedSuggestionIndex === index}
-                          className={`venue-suggestion${
-                            highlightedSuggestionIndex === index
-                              ? " venue-suggestion--active"
-                              : ""
-                          }`}
-                          onClick={() => handleSelectVenue(venue)}
-                          onMouseEnter={() => setHighlightedSuggestionIndex(index)}
+                          aria-selected={highlightedSearchIndex === index}
+                          className="search-suggestion__button"
+                          onClick={() => handleSelectSearchSuggestion(suggestion)}
+                          onMouseEnter={() => setHighlightedSearchIndex(index)}
                           type="button"
                         >
-                          <span>{venue.name}</span>
-                          {venue.suburb ? <span>{venue.suburb}</span> : null}
+                          <span className="search-suggestion__icon">
+                            <SearchSuggestionIcon icon={suggestion.icon} />
+                          </span>
+                          <span className="search-suggestion__content">
+                            <span className="search-suggestion__label">
+                              {suggestion.label}
+                            </span>
+                            {suggestion.subtext ? (
+                              <span className="search-suggestion__subtext">
+                                {suggestion.subtext}
+                              </span>
+                            ) : null}
+                          </span>
                         </UnstyledButton>
                       </li>
                     ))}
                   </ul>
-                ) : (
-                  <Text className="venue-picker__status" component="p">
-                    No matching venues yet.
-                  </Text>
-                )}
+                  {isLoadingSearchSuggestions ? (
+                    <Text className="search-menu__status" component="p">
+                      Loading suggestions…
+                    </Text>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
+          </form>
+          <div className="venue-menu" ref={venueMenuRef}>
+            <UnstyledButton
+              aria-controls={venueDropdownId}
+              aria-expanded={isVenueMenuOpen}
+              aria-haspopup="dialog"
+              className={`venue-menu__trigger${
+                isVenueMenuOpen ? " venue-menu__trigger--open" : ""
+              }`}
+              onClick={() => {
+                closeSearchMenu();
+                setIsVenueMenuOpen((current) => !current);
+              }}
+              type="button"
+            >
+              <span>Venues</span>
+              <svg
+                aria-hidden="true"
+                className="venue-menu__chevron"
+                fill="none"
+                height="18"
+                viewBox="0 0 20 20"
+                width="18"
+              >
+                <path
+                  d="M5.5 7.75 10 12.25l4.5-4.5"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.75"
+                />
+              </svg>
+            </UnstyledButton>
+            {isVenueMenuOpen ? (
+              <div
+                className="venue-menu__popover"
+                id={venueDropdownId}
+                role="dialog"
+              >
+                <label className="sr-only" htmlFor="venue-filter-input">
+                  Search venues
+                </label>
+                <TextInput
+                  autoComplete="off"
+                  classNames={{ input: "filter-input filter-input--compact" }}
+                  id="venue-filter-input"
+                  onChange={(event) => setVenueInput(event.target.value)}
+                  onKeyDown={handleVenueKeyDown}
+                  placeholder="Search venues"
+                  ref={venueSearchInputRef}
+                  type="search"
+                  unstyled
+                  value={venueInput}
+                />
+                <ScrollArea.Autosize
+                  className="venue-menu__scroller"
+                  mah="18rem"
+                  offsetScrollbars="present"
+                  scrollbars="y"
+                  type="auto"
+                >
+                  <div className="venue-menu__results">
+                    {suggestions.length > 0 ? (
+                      <ul
+                        aria-label="Venue options"
+                        className="venue-suggestions"
+                        role="listbox"
+                      >
+                        {suggestions.map((venue, index) => (
+                          <li key={venue.slug}>
+                            <UnstyledButton
+                              aria-selected={highlightedSuggestionIndex === index}
+                              className={`venue-suggestion${
+                                highlightedSuggestionIndex === index
+                                  ? " venue-suggestion--active"
+                                  : ""
+                              }`}
+                              onClick={() => handleSelectVenue(venue)}
+                              onMouseEnter={() =>
+                                setHighlightedSuggestionIndex(index)
+                              }
+                              type="button"
+                            >
+                              <span>{venue.name}</span>
+                              {venue.suburb ? <span>{venue.suburb}</span> : null}
+                            </UnstyledButton>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : isVenueSuggestionsPending ? (
+                      <Text className="venue-picker__status" component="p">
+                        Loading venues…
+                      </Text>
+                    ) : (
+                      <Text className="venue-picker__status" component="p">
+                        No matching venues yet.
+                      </Text>
+                    )}
+                  </div>
+                </ScrollArea.Autosize>
+              </div>
+            ) : null}
+          </div>
         </div>
-        <Box aria-hidden="true" className="filter-toolbar__profile">
-          <svg
-            className="filter-toolbar__profile-icon"
-            fill="none"
-            height="22"
-            viewBox="0 0 24 24"
-            width="22"
-          >
-            <path
-              d="M16.25 8a4.25 4.25 0 1 1-8.5 0 4.25 4.25 0 0 1 8.5 0Z"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.6"
-            />
-            <path
-              d="M5.75 18.25a6.25 6.25 0 0 1 12.5 0"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="1.6"
-            />
-          </svg>
-        </Box>
-      </div>
 
-      {selectedVenues.length > 0 ? (
-        <div className="filter-chips" role="list" aria-label="Selected venues">
-          {selectedVenues.map((venue) => (
-            <UnstyledButton
-              className="filter-chip"
-              key={venue.slug}
-              onClick={() => handleRemoveVenue(venue.slug)}
-              type="button"
-            >
-              <span>{venue.name}</span>
-              <span aria-hidden="true">×</span>
-              <span className="sr-only">Remove {getVenueSummary(venue)}</span>
-            </UnstyledButton>
-          ))}
-          {selectedVenues.length > 1 ? (
-            <UnstyledButton
-              className="filter-chip filter-chip--ghost"
-              onClick={() => navigate({ venues: [] })}
-              type="button"
-            >
-              Clear all venues
-            </UnstyledButton>
-          ) : null}
-        </div>
-      ) : null}
+        {selectedVenues.length > 0 ? (
+          <div className="filter-chips" role="list" aria-label="Selected venues">
+            {selectedVenues.map((venue) => (
+              <UnstyledButton
+                className="filter-chip"
+                key={venue.slug}
+                onClick={() => handleRemoveVenue(venue.slug)}
+                type="button"
+              >
+                <span>{venue.name}</span>
+                <span aria-hidden="true">×</span>
+                <span className="sr-only">Remove {getVenueSummary(venue)}</span>
+              </UnstyledButton>
+            ))}
+            {selectedVenues.length > 1 ? (
+              <UnstyledButton
+                className="filter-chip filter-chip--ghost"
+                onClick={() => navigate({ venues: [] })}
+                type="button"
+              >
+                Clear all venues
+              </UnstyledButton>
+            ) : null}
+          </div>
+        ) : null}
+      </Box>
 
       {todayShortcut.targetDateKey || weekendDateKey ? (
         <div className="date-pills" role="group" aria-label="Jump to date">
@@ -876,6 +904,6 @@ export function HomepageFilters({
           })}
         </div>
       ) : null}
-    </Box>
+    </>
   );
 }

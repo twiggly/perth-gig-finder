@@ -1,5 +1,6 @@
 import { HomepageFilters } from "@/components/homepage-filters";
 import { HomepageDayBrowser } from "@/components/homepage-day-browser";
+import { SiteHeaderActions } from "@/components/site-header-actions";
 import {
   groupItemsByPerthDate,
   resolveHomepageDateKey
@@ -61,12 +62,21 @@ async function ConfiguredHomepage({
 
   return (
     <>
-      <HomepageFilters
-        activeDateKey={activeDateKey}
-        availableDateKeys={availableDays.map((day) => day.dateKey)}
-        currentQuery={filters.q}
-        selectedVenues={selectedVenues}
-      />
+      <div className="top-panel">
+        <header className="site-header">
+          <p className="site-header__eyebrow">Perth Live Music</p>
+          <h1 className="site-header__title">Gig Radar</h1>
+        </header>
+        <div className="top-panel__filters">
+          <HomepageFilters
+            activeDateKey={activeDateKey}
+            availableDateKeys={availableDays.map((day) => day.dateKey)}
+            currentQuery={filters.q}
+            selectedVenues={selectedVenues}
+          />
+        </div>
+        <SiteHeaderActions />
+      </div>
       {gigs.length === 0 || !activeDateKey ? (
         <section className="empty-state">
           <p>
