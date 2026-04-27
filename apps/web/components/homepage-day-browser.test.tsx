@@ -49,11 +49,17 @@ function renderBrowser(days: Array<DateGroup<GigCardRecord>>) {
         }))}
         currentQuery=""
         initialActiveDateKey={days[0]?.dateKey ?? "2026-04-29"}
-        initialDay={days[0] ?? {
-          dateKey: "2026-04-29",
-          heading: "Wed, Apr 29th",
-          items: []
-        }}
+        initialDays={
+          days.length > 0
+            ? days
+            : [
+                {
+                  dateKey: "2026-04-29",
+                  heading: "Wed, Apr 29th",
+                  items: []
+                }
+              ]
+        }
         selectedVenueSlugs={[]}
       />
     </MantineProvider>
@@ -76,7 +82,7 @@ describe("HomepageDayBrowser", () => {
     expect(html).toContain("Wed, Apr 29th");
   });
 
-  it("renders only the seeded active day before lazy-loaded days arrive", () => {
+  it("renders only the active day even when adjacent days are seeded", () => {
     const html = renderBrowser([
       {
         dateKey: "2026-04-29",

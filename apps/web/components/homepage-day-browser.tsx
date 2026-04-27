@@ -18,6 +18,7 @@ import {
 } from "@/lib/homepage-calendar";
 import {
   buildHomepageDayRequestPath,
+  getNextHomepageDayPrefetchDateKeys,
   isHomepageDayPayload,
   mergeHomepageDayCache,
   type HomepageDayPayload
@@ -48,7 +49,7 @@ interface HomepageDayBrowserProps {
   availableDays: DateSummary[];
   currentQuery: string;
   initialActiveDateKey: string;
-  initialDay: HomepageDayPayload;
+  initialDays: HomepageDayPayload[];
   selectedVenueSlugs: string[];
 }
 
@@ -129,7 +130,7 @@ export function HomepageDayBrowser({
   availableDays,
   currentQuery,
   initialActiveDateKey,
-  initialDay,
+  initialDays,
   selectedVenueSlugs
 }: HomepageDayBrowserProps) {
   const previewAssetRevision = LOCAL_PREVIEW_ASSET_REVISION;
@@ -160,9 +161,8 @@ export function HomepageDayBrowser({
     lockedUntil: 0
   });
   const [activeDateKey, setActiveDateKey] = useState(initialActiveDateKey);
-  const [loadedDays, setLoadedDays] = useState<HomepageDayPayload[]>(() => [
-    initialDay
-  ]);
+  const [loadedDays, setLoadedDays] =
+    useState<HomepageDayPayload[]>(initialDays);
   const [loadingDateKey, setLoadingDateKey] = useState<string | null>(null);
   const [dayLoadError, setDayLoadError] = useState<string | null>(null);
   const [calendarMonthKey, setCalendarMonthKey] = useState<string | null>(null);
@@ -188,7 +188,11 @@ export function HomepageDayBrowser({
     () => new Map(loadedDays.map((day) => [day.dateKey, day])),
     [loadedDays]
   );
-  const activeDay = loadedDayMap.get(activeDateKey) ?? initialDay;
+  const loadedDateKeys = useMemo(
+    () => loadedDays.map((day) => day.dateKey),
+    [loadedDays]
+  );
+  const activeDay = loadedDayMap.get(activeDateKey) ?? initialDays[0];
   const previousDateKey = getAdjacentDateKey(
     availableDateKeys,
     activeDateKey,
@@ -323,7 +327,7 @@ export function HomepageDayBrowser({
 
   useEffect(() => {
     setActiveDateKey(initialActiveDateKey);
-    setLoadedDays([initialDay]);
+    setLoadedDays(initialDays);
     setLoadingDateKey(null);
     setDayLoadError(null);
     setCalendarMonthKey(
@@ -334,7 +338,7 @@ export function HomepageDayBrowser({
     setTransition(null);
     pendingDayLoadsRef.current.clear();
     preloadedImageUrlsRef.current.clear();
-  }, [availableDateKeys, initialActiveDateKey, initialDay]);
+  }, [availableDateKeys, initialActiveDateKey, initialDays]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -425,17 +429,23 @@ export function HomepageDayBrowser({
       return;
     }
 
-    for (const dateKey of [previousDateKey, nextDateKey]) {
+    const dateKeysToPrefetch = getNextHomepageDayPrefetchDateKeys({
+      activeDateKey,
+      availableDateKeys,
+      loadedDateKeys
+    });
+
+    for (const dateKey of dateKeysToPrefetch) {
       if (dateKey) {
         prefetchHomepageDay(dateKey);
       }
     }
   }, [
     activeDateKey,
+    availableDateKeys,
     currentQuery,
+    loadedDateKeys,
     loadedDayMap,
-    nextDateKey,
-    previousDateKey,
     selectedVenueSlugKey
   ]);
 

@@ -1,6 +1,7 @@
 import { HomepageFilters } from "@/components/homepage-filters";
 import { HomepageDayBrowser } from "@/components/homepage-day-browser";
 import { SiteHeaderActions } from "@/components/site-header-actions";
+import { getHydratedHomepageDayDateKeys } from "@/lib/homepage-day-loading";
 import { resolveHomepageDateKey } from "@/lib/homepage-dates";
 import { parseHomepageFilters } from "@/lib/homepage-filters";
 import { listAvailableGigDates, listGigsForDate } from "@/lib/gigs";
@@ -50,9 +51,21 @@ async function ConfiguredHomepage({
     filters.legacyWhen,
     now
   );
-  const activeDay = activeDateKey
-    ? await listGigsForDate(filters, activeDateKey)
-    : null;
+  const initialDateKeys = activeDateKey
+    ? getHydratedHomepageDayDateKeys({
+        activeDateKey,
+        availableDateKeys: availableDays.map((day) => day.dateKey),
+        now
+      })
+    : [];
+  const maybeInitialDays = await Promise.all(
+    initialDateKeys.map((dateKey) => listGigsForDate(filters, dateKey))
+  );
+  const initialDays = maybeInitialDays.filter(
+    (day): day is NonNullable<(typeof maybeInitialDays)[number]> => Boolean(day)
+  );
+  const activeDay =
+    initialDays.find((day) => day.dateKey === activeDateKey) ?? null;
   const dayBrowserKey = [filters.q, filters.venueSlugs.join("|")].join("::");
 
   return (
@@ -93,7 +106,7 @@ async function ConfiguredHomepage({
           availableDays={availableDays}
           currentQuery={filters.q}
           initialActiveDateKey={activeDateKey}
-          initialDay={activeDay}
+          initialDays={initialDays}
           key={dayBrowserKey}
           selectedVenueSlugs={filters.venueSlugs}
         />
