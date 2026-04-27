@@ -4,6 +4,7 @@ import {
   useDeferredValue,
   useEffect,
   useId,
+  useOptimistic,
   useRef,
   useState,
   useTransition
@@ -48,8 +49,40 @@ interface HomepageFiltersProps {
   selectedVenues: VenueOption[];
 }
 
+type VenueOptimisticAction =
+  | {
+      type: "add";
+      venue: VenueOption;
+    }
+  | {
+      type: "remove";
+      slug: string;
+    }
+  | {
+      type: "clear";
+    };
+
 function getVenueSummary(venue: VenueOption): string {
   return venue.suburb ? `${venue.name} · ${venue.suburb}` : venue.name;
+}
+
+function applyVenueOptimisticAction(
+  venues: VenueOption[],
+  action: VenueOptimisticAction
+): VenueOption[] {
+  if (action.type === "clear") {
+    return [];
+  }
+
+  if (action.type === "remove") {
+    return venues.filter((venue) => venue.slug !== action.slug);
+  }
+
+  if (venues.some((venue) => venue.slug === action.venue.slug)) {
+    return venues;
+  }
+
+  return [...venues, action.venue];
 }
 
 function SearchSuggestionIcon({
@@ -153,6 +186,10 @@ export function HomepageFilters({
   const [currentActiveDateKey, setCurrentActiveDateKey] = useState(activeDateKey);
   const [searchInput, setSearchInput] = useState(currentQuery);
   const deferredSearchInput = useDeferredValue(searchInput);
+  const [optimisticSelectedVenues, addOptimisticVenueAction] = useOptimistic(
+    selectedVenues,
+    applyVenueOptimisticAction
+  );
   const [venueInput, setVenueInput] = useState("");
   const deferredVenueInput = useDeferredValue(venueInput);
   const [isSearchMenuOpen, setIsSearchMenuOpen] = useState(false);
@@ -170,7 +207,7 @@ export function HomepageFilters({
   const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
   const [isPending, startTransition] = useTransition();
   const now = new Date();
-  const selectedVenueSlugs = selectedVenues.map((venue) => venue.slug);
+  const selectedVenueSlugs = optimisticSelectedVenues.map((venue) => venue.slug);
   const selectedVenueSlugKey = selectedVenueSlugs.join("|");
   const todayShortcut = getTodayShortcutState(availableDateKeys, now);
   const weekendDateKey = getDateShortcutTarget(availableDateKeys, "weekend", now);
@@ -477,7 +514,8 @@ export function HomepageFilters({
 
   function navigate(
     nextValues: HomepageFilterNavigationInput,
-    historyMode: "push" | "replace" = "replace"
+    historyMode: "push" | "replace" = "replace",
+    prepareNavigation?: () => void
   ) {
     const isDateOnlyNavigation =
       nextValues.date !== undefined &&
@@ -511,6 +549,8 @@ export function HomepageFilters({
     );
 
     startTransition(() => {
+      prepareNavigation?.();
+
       if (historyMode === "push") {
         router.push(href);
       } else {
@@ -560,10 +600,23 @@ export function HomepageFilters({
     closeVenueMenu();
 
     if (suggestion.type === "venue") {
+      const venue = {
+        slug: suggestion.slug,
+        name: suggestion.label,
+        suburb: suggestion.subtext
+      };
+      const nextVenueSlugs = selectedVenueSlugs.includes(suggestion.slug)
+        ? selectedVenueSlugs
+        : [...selectedVenueSlugs, suggestion.slug];
+
       setSearchInput(currentQuery);
-      navigate({
-        venues: [...selectedVenueSlugs, suggestion.slug]
-      });
+      navigate(
+        {
+          venues: nextVenueSlugs
+        },
+        "replace",
+        () => addOptimisticVenueAction({ type: "add", venue })
+      );
       return;
     }
 
@@ -575,15 +628,37 @@ export function HomepageFilters({
   function handleSelectVenue(venue: VenueOption) {
     closeSearchMenu();
     closeVenueMenu();
-    navigate({
-      venues: [...selectedVenueSlugs, venue.slug]
-    });
+    const nextVenueSlugs = selectedVenueSlugs.includes(venue.slug)
+      ? selectedVenueSlugs
+      : [...selectedVenueSlugs, venue.slug];
+
+    navigate(
+      {
+        venues: nextVenueSlugs
+      },
+      "replace",
+      () => addOptimisticVenueAction({ type: "add", venue })
+    );
   }
 
   function handleRemoveVenue(slug: string) {
-    navigate({
-      venues: selectedVenueSlugs.filter((venueSlug) => venueSlug !== slug)
-    });
+    const nextVenueSlugs = selectedVenueSlugs.filter(
+      (venueSlug) => venueSlug !== slug
+    );
+
+    navigate(
+      {
+        venues: nextVenueSlugs
+      },
+      "replace",
+      () => addOptimisticVenueAction({ type: "remove", slug })
+    );
+  }
+
+  function handleClearVenues() {
+    navigate({ venues: [] }, "replace", () =>
+      addOptimisticVenueAction({ type: "clear" })
+    );
   }
 
   function handleVenueKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -908,9 +983,9 @@ export function HomepageFilters({
           </div>
         </div>
 
-        {selectedVenues.length > 0 ? (
+        {optimisticSelectedVenues.length > 0 ? (
           <div className="filter-chips" role="list" aria-label="Selected venues">
-            {selectedVenues.map((venue) => (
+            {optimisticSelectedVenues.map((venue) => (
               <UnstyledButton
                 className="filter-chip"
                 key={venue.slug}
@@ -922,10 +997,10 @@ export function HomepageFilters({
                 <span className="sr-only">Remove {getVenueSummary(venue)}</span>
               </UnstyledButton>
             ))}
-            {selectedVenues.length > 1 ? (
+            {optimisticSelectedVenues.length > 1 ? (
               <UnstyledButton
                 className="filter-chip filter-chip--ghost"
-                onClick={() => navigate({ venues: [] })}
+                onClick={handleClearVenues}
                 type="button"
               >
                 Clear all venues
