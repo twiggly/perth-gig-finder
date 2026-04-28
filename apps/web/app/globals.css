@@ -40,6 +40,7 @@
   --row-focus: rgba(255, 255, 255, 0.34);
   --preview-revision: 1;
   --shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+  --poster-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
   --font-display: "Space Grotesk Variable", "Avenir Next", "Segoe UI", sans-serif;
   --font-body: "Source Serif 4", Georgia, serif;
   color-scheme: dark;
@@ -79,6 +80,7 @@
   --row-hover: rgba(33, 25, 21, 0.035);
   --row-focus: rgba(33, 25, 21, 0.28);
   --shadow: 0 30px 80px rgba(74, 44, 24, 0.16);
+  --poster-shadow: 0 16px 32px rgba(74, 44, 24, 0.18);
   color-scheme: light;
 }
 
@@ -1112,9 +1114,8 @@ body[data-filter-dropdown-open="true"] .date-pills {
   display: block;
   min-width: 0;
   align-self: start;
-  overflow: hidden;
   border-radius: 1.05rem;
-  clip-path: inset(0 round 1.05rem);
+  box-shadow: var(--poster-shadow);
   isolation: isolate;
 }
 
