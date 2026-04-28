@@ -144,7 +144,11 @@ export function GigCard({ gig, isOpen, onClose, onToggle }: GigCardProps) {
   );
 
   return (
-    <article className={articleClassName} ref={articleRef}>
+    <article
+      className={articleClassName}
+      data-action-count={actions.length}
+      ref={articleRef}
+    >
       {isActionable ? (
         <UnstyledButton
           aria-expanded={isOpen}
