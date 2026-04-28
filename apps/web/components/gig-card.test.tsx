@@ -79,4 +79,38 @@ describe("GigCard", () => {
 
     expect(html).not.toContain("gig-card__artists");
   });
+
+  it("exposes the action count for one-action cards", () => {
+    const html = renderToStaticMarkup(
+      <MantineProvider defaultColorScheme="dark" theme={theme}>
+        <GigCard
+          gig={createGig({ venue_website_url: null })}
+          isOpen
+          onClose={() => {}}
+          onToggle={() => {}}
+        />
+      </MantineProvider>
+    );
+
+    expect(html).toContain('data-action-count="1"');
+    expect(html).toContain("Buy tickets");
+    expect(html).not.toContain("Venue website");
+  });
+
+  it("exposes the action count for two-action cards", () => {
+    const html = renderToStaticMarkup(
+      <MantineProvider defaultColorScheme="dark" theme={theme}>
+        <GigCard
+          gig={createGig()}
+          isOpen
+          onClose={() => {}}
+          onToggle={() => {}}
+        />
+      </MantineProvider>
+    );
+
+    expect(html).toContain('data-action-count="2"');
+    expect(html).toContain("Buy tickets");
+    expect(html).toContain("Venue website");
+  });
 });
