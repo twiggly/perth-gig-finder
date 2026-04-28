@@ -40,7 +40,7 @@
   --row-focus: rgba(255, 255, 255, 0.34);
   --preview-revision: 1;
   --shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
-  --poster-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
+  --poster-blur-opacity: 0.58;
   --font-display: "Space Grotesk Variable", "Avenir Next", "Segoe UI", sans-serif;
   --font-body: "Source Serif 4", Georgia, serif;
   color-scheme: dark;
@@ -80,7 +80,7 @@
   --row-hover: rgba(33, 25, 21, 0.035);
   --row-focus: rgba(33, 25, 21, 0.28);
   --shadow: 0 30px 80px rgba(74, 44, 24, 0.16);
-  --poster-shadow: 0 16px 32px rgba(74, 44, 24, 0.18);
+  --poster-blur-opacity: 0.24;
   color-scheme: light;
 }
 
@@ -1115,11 +1115,24 @@ body[data-filter-dropdown-open="true"] .date-pills {
   min-width: 0;
   align-self: start;
   border-radius: 1.05rem;
-  box-shadow: var(--poster-shadow);
   isolation: isolate;
 }
 
+.gig-card__media::before {
+  position: absolute;
+  inset: -0.12rem -0.28rem -0.5rem;
+  z-index: -1;
+  border-radius: inherit;
+  background: rgb(0 0 0 / var(--poster-blur-opacity));
+  content: "";
+  filter: blur(18px);
+  pointer-events: none;
+  transform: translateY(0.24rem) scale(1.02);
+}
+
 .gig-card__media > span {
+  position: relative;
+  z-index: 1;
   display: block !important;
   overflow: hidden;
   border-radius: inherit;
