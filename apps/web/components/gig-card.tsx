@@ -107,40 +107,39 @@ export function GigCard({ gig, isOpen, onClose, onToggle }: GigCardProps) {
     };
   }, [isOpen, onClose]);
 
-  const content = (
-    <>
-      {hasRenderableImage && imageUrl ? (
-        <Box className="gig-card__media">
-          <Image
-            alt={`${gig.title} poster`}
-            className="gig-card__media-image"
-            height={imageHeight}
-            quality={GIG_CARD_IMAGE_QUALITY}
-            sizes={GIG_CARD_IMAGE_SIZES}
-            src={imageUrl}
-            style={{ height: "auto", width: "100%" }}
-            width={imageWidth}
-          />
-        </Box>
+  const media = hasRenderableImage && imageUrl ? (
+    <Box className="gig-card__media">
+      <Image
+        alt={`${gig.title} poster`}
+        className="gig-card__media-image"
+        height={imageHeight}
+        quality={GIG_CARD_IMAGE_QUALITY}
+        sizes={GIG_CARD_IMAGE_SIZES}
+        src={imageUrl}
+        style={{ height: "auto", width: "100%" }}
+        width={imageWidth}
+      />
+    </Box>
+  ) : null;
+
+  const details = (
+    <Box className="gig-card__body">
+      <Text className="gig-card__time" component="p">
+        {formatGigDate(gig.starts_at)}
+      </Text>
+      <Title className="gig-card__title" order={2}>
+        {gig.title}
+      </Title>
+      {artistLine ? (
+        <Text className="gig-card__artists" component="p">
+          {artistLine}
+        </Text>
       ) : null}
-      <Box className="gig-card__body">
-        <Text className="gig-card__time" component="p">
-          {formatGigDate(gig.starts_at)}
-        </Text>
-        <Title className="gig-card__title" order={2}>
-          {gig.title}
-        </Title>
-        {artistLine ? (
-          <Text className="gig-card__artists" component="p">
-            {artistLine}
-          </Text>
-        ) : null}
-        <Text className="gig-card__venue" component="p">
-          <VenueMapIcon />
-          {formatVenueLine(gig)}
-        </Text>
-      </Box>
-    </>
+      <Text className="gig-card__venue" component="p">
+        <VenueMapIcon />
+        {formatVenueLine(gig)}
+      </Text>
+    </Box>
   );
 
   return (
@@ -149,42 +148,44 @@ export function GigCard({ gig, isOpen, onClose, onToggle }: GigCardProps) {
       data-action-count={actions.length}
       ref={articleRef}
     >
-      {isActionable ? (
-        <UnstyledButton
-          aria-expanded={isOpen}
-          aria-haspopup="dialog"
-          aria-label={`Open links for ${gig.title}`}
-          className={surfaceClassName}
-          onClick={onToggle}
-          type="button"
-        >
-          {content}
-        </UnstyledButton>
-      ) : (
-        <Box className={surfaceClassName}>{content}</Box>
-      )}
-      {isOpen ? (
-        <div
-          aria-label={`${gig.title} links`}
-          className="gig-card__popover"
-          role="dialog"
-        >
-          <div className="gig-card__actions">
-            {actions.map((action) => (
-              <Anchor
-                className="gig-card__action"
-                href={action.href}
-                key={action.key}
-                onClick={onClose}
-                rel="noreferrer"
-                target="_blank"
-              >
-                {action.label}
-              </Anchor>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      <Box className={surfaceClassName}>
+        {isActionable ? (
+          <UnstyledButton
+            aria-expanded={isOpen}
+            aria-haspopup="dialog"
+            aria-label={`Open links for ${gig.title}`}
+            className="gig-card__toggle-overlay"
+            onClick={onToggle}
+            type="button"
+          />
+        ) : null}
+        {media}
+        <Box className="gig-card__content">
+          {details}
+          {isOpen ? (
+            <div
+              aria-label={`${gig.title} links`}
+              className="gig-card__popover"
+              role="dialog"
+            >
+              <div className="gig-card__actions">
+                {actions.map((action) => (
+                  <Anchor
+                    className="gig-card__action"
+                    href={action.href}
+                    key={action.key}
+                    onClick={onClose}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {action.label}
+                  </Anchor>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </Box>
+      </Box>
     </article>
   );
 }

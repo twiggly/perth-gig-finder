@@ -80,6 +80,46 @@ describe("GigCard", () => {
     expect(html).not.toContain("gig-card__artists");
   });
 
+  it("renders actionable cards with a separate row toggle control", () => {
+    const html = renderToStaticMarkup(
+      <MantineProvider defaultColorScheme="dark" theme={theme}>
+        <GigCard
+          gig={createGig()}
+          isOpen={false}
+          onClose={() => {}}
+          onToggle={() => {}}
+        />
+      </MantineProvider>
+    );
+
+    expect(html).toContain("gig-card__toggle-overlay");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('aria-label="Open links for ALT//THURSDAYS"');
+  });
+
+  it("renders open action links inside the gig text column", () => {
+    const html = renderToStaticMarkup(
+      <MantineProvider defaultColorScheme="dark" theme={theme}>
+        <GigCard
+          gig={createGig()}
+          isOpen
+          onClose={() => {}}
+          onToggle={() => {}}
+        />
+      </MantineProvider>
+    );
+
+    const contentIndex = html.indexOf("gig-card__content");
+    const venueIndex = html.indexOf("The Bird, Northbridge");
+    const popoverIndex = html.indexOf("gig-card__popover");
+    const firstActionIndex = html.indexOf("Buy tickets");
+
+    expect(contentIndex).toBeGreaterThanOrEqual(0);
+    expect(venueIndex).toBeGreaterThan(contentIndex);
+    expect(popoverIndex).toBeGreaterThan(venueIndex);
+    expect(firstActionIndex).toBeGreaterThan(popoverIndex);
+  });
+
   it("exposes the action count for one-action cards", () => {
     const html = renderToStaticMarkup(
       <MantineProvider defaultColorScheme="dark" theme={theme}>
