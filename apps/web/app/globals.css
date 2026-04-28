@@ -1025,6 +1025,7 @@ body[data-filter-dropdown-open="true"] .date-pills {
 }
 
 .gig-card {
+  --gig-card-action-edge-gap: 1.05rem;
   --gig-card-highlight-radius: 1rem;
   --gig-card-media-width: clamp(6.25rem, 16vw, 10.5rem);
   --gig-card-gap: 1rem;
@@ -1049,12 +1050,13 @@ body[data-filter-dropdown-open="true"] .date-pills {
 }
 
 .gig-card__surface {
+  position: relative;
   display: grid;
   grid-template-columns: var(--gig-card-media-width) minmax(0, 1fr);
   gap: var(--gig-card-gap);
   align-items: start;
   width: 100%;
-  padding: 1.05rem 0;
+  padding: var(--gig-card-action-edge-gap) 0;
   appearance: none;
   border: 0;
   border-radius: var(--gig-card-highlight-radius);
@@ -1086,15 +1088,27 @@ body[data-filter-dropdown-open="true"] .date-pills {
   z-index: 12;
 }
 
-.gig-card--open .gig-card__surface {
-  padding-bottom: calc(var(--gig-card-padding) + 8.05rem);
+.gig-card__toggle-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--gig-card-highlight-radius);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
 }
 
-.gig-card--open[data-action-count="1"] .gig-card__surface {
-  padding-bottom: calc(var(--gig-card-padding) + 5.05rem);
+.gig-card__toggle-overlay:focus-visible {
+  outline: 1px solid var(--row-focus);
+  outline-offset: -1px;
 }
 
 .gig-card__media {
+  position: relative;
+  z-index: 1;
   display: block;
   min-width: 0;
   align-self: start;
@@ -1102,7 +1116,6 @@ body[data-filter-dropdown-open="true"] .date-pills {
   border-radius: 1.05rem;
   clip-path: inset(0 round 1.05rem);
   isolation: isolate;
-  position: relative;
 }
 
 .gig-card__media > span {
@@ -1120,6 +1133,13 @@ body[data-filter-dropdown-open="true"] .date-pills {
   clip-path: inset(0 round 1.05rem);
 }
 
+.gig-card__content {
+  position: relative;
+  display: grid;
+  align-content: start;
+  min-width: 0;
+}
+
 .gig-card__body {
   display: grid;
   gap: 0.6rem;
@@ -1128,7 +1148,7 @@ body[data-filter-dropdown-open="true"] .date-pills {
   padding: 0.3rem 0.45rem 0.3rem 0;
 }
 
-.gig-card__surface--no-media .gig-card__body {
+.gig-card__surface--no-media .gig-card__content {
   grid-column: 2;
 }
 
@@ -1190,11 +1210,10 @@ body[data-filter-dropdown-open="true"] .date-pills {
 }
 
 .gig-card__popover {
-  position: absolute;
-  right: calc(var(--gig-card-padding) + 0.65rem);
-  bottom: calc(var(--gig-card-padding) + 0.65rem);
-  left: calc(var(--gig-card-padding) + var(--gig-card-media-width) + var(--gig-card-gap));
+  position: relative;
   z-index: 20;
+  margin-right: var(--gig-card-action-edge-gap);
+  margin-top: 0.65rem;
   padding: 0.45rem;
   border: 0;
   border-radius: 1rem;
