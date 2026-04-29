@@ -88,8 +88,7 @@ export function SiteHeaderEyebrow() {
           Boorloo
         </span>
       </span>
-      <span aria-hidden="true">Live</span>
-      <span aria-hidden="true">Music</span>
+      <span aria-hidden="true">Live Music</span>
       <span aria-hidden="true" className="site-header__eyebrow-measurements">
         <span
           className="site-header__eyebrow-measurement"

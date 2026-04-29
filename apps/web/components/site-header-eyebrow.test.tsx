@@ -12,9 +12,7 @@ describe("SiteHeaderEyebrow", () => {
     expect(html).toContain("site-header__eyebrow-location");
     expect(html).toContain("site-header__eyebrow-word--perth");
     expect(html).toContain("site-header__eyebrow-word--boorloo");
-    expect(html).toContain(">Live<");
-    expect(html).toContain(">Music<");
-    expect(html).not.toContain(">Live Music<");
+    expect(html).toContain("Live Music");
     expect(html).toContain("site-header__eyebrow-measurements");
     expect(html).toContain("site-header__eyebrow-measurement");
     expect(
