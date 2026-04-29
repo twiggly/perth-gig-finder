@@ -146,6 +146,8 @@ code {
 }
 
 .site-header {
+  --site-header-eyebrow-boorloo-width: 10.2ch;
+  --site-header-eyebrow-perth-width: 5.9ch;
   grid-area: header;
   display: grid;
   grid-template-areas:
@@ -158,6 +160,11 @@ code {
 
 .site-header__eyebrow {
   grid-area: eyebrow;
+  position: relative;
+  display: inline-flex;
+  gap: 0.6ch;
+  align-items: baseline;
+  justify-self: start;
   margin: 0 0 0 clamp(0.35rem, 1.4vw, 0.9rem);
   color: var(--muted);
 }
@@ -168,6 +175,123 @@ code {
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+}
+
+.site-header__eyebrow-location {
+  position: relative;
+  display: inline-grid;
+  width: var(--site-header-eyebrow-perth-width);
+  overflow: hidden;
+  animation: eyebrow-location-width 40s cubic-bezier(0.65, 0, 0.35, 1)
+    infinite;
+  vertical-align: baseline;
+  will-change: width;
+}
+
+.site-header__eyebrow-word {
+  grid-area: 1 / 1;
+  transform: translateY(0);
+  animation-duration: 40s;
+  animation-iteration-count: infinite;
+  animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+  will-change: opacity, transform;
+}
+
+.site-header__eyebrow-word--perth {
+  animation-name: eyebrow-perth;
+}
+
+.site-header__eyebrow-word--boorloo {
+  animation-name: eyebrow-boorloo;
+}
+
+.site-header__eyebrow-measurements {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.site-header__eyebrow-measurement {
+  display: block;
+  width: max-content;
+}
+
+@keyframes eyebrow-location-width {
+  0%,
+  43% {
+    width: var(--site-header-eyebrow-perth-width);
+  }
+
+  50%,
+  93% {
+    width: var(--site-header-eyebrow-boorloo-width);
+  }
+
+  100% {
+    width: var(--site-header-eyebrow-perth-width);
+  }
+}
+
+@keyframes eyebrow-perth {
+  0%,
+  43% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  50%,
+  93% {
+    opacity: 0;
+    transform: translateY(-0.55em);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes eyebrow-boorloo {
+  0%,
+  43% {
+    opacity: 0;
+    transform: translateY(0.55em);
+  }
+
+  50%,
+  93% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(0.55em);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-header__eyebrow-location {
+    width: var(--site-header-eyebrow-perth-width);
+    animation: none;
+  }
+
+  .site-header__eyebrow-word {
+    animation: none;
+  }
+
+  .site-header__eyebrow-word--perth {
+    opacity: 1;
+    transform: none;
+  }
+
+  .site-header__eyebrow-word--boorloo {
+    opacity: 0;
+    transform: none;
+  }
 }
 
 .site-header__title {

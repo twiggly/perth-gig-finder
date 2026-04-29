@@ -1,6 +1,7 @@
 import { HomepageFilters } from "@/components/homepage-filters";
 import { HomepageDayBrowser } from "@/components/homepage-day-browser";
 import { SiteHeaderActions } from "@/components/site-header-actions";
+import { SiteHeaderEyebrow } from "@/components/site-header-eyebrow";
 import { getHydratedHomepageDayDateKeys } from "@/lib/homepage-day-loading";
 import { resolveHomepageDateKey } from "@/lib/homepage-dates";
 import { parseHomepageFilters } from "@/lib/homepage-filters";
@@ -72,7 +73,7 @@ async function ConfiguredHomepage({
     <>
       <div className="top-panel">
         <header className="site-header">
-          <p className="site-header__eyebrow">Perth Live Music</p>
+          <SiteHeaderEyebrow />
           <h1 className="site-header__title">Gig Radar</h1>
         </header>
         <div className="top-panel__filters">
