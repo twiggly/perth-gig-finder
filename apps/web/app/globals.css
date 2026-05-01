@@ -620,6 +620,12 @@ code {
   width: 100%;
 }
 
+@media (max-width: 640px), (hover: none) and (pointer: coarse), (any-pointer: coarse) {
+  .venue-menu__results {
+    padding-inline-end: var(--scrollarea-scrollbar-size, 12px);
+  }
+}
+
 .venue-menu__results {
   display: grid;
   gap: 0.35rem;

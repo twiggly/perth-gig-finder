@@ -12,6 +12,7 @@ import {
 import { flushSync } from "react-dom";
 import { usePathname, useRouter } from "next/navigation";
 import { Box, ScrollArea, Text, TextInput, UnstyledButton } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
 
 import {
   getDateShortcutLabel,
@@ -42,6 +43,8 @@ const DATE_SHORTCUT_OPTIONS: Array<{
 const LOCAL_PREVIEW_ASSET_REVISION =
   process.env.NEXT_PUBLIC_LOCAL_PREVIEW_ASSET_REVISION ?? "0";
 const AUTO_FOCUS_VENUE_SEARCH_MEDIA_QUERY = "(hover: hover) and (pointer: fine)";
+const PHONE_SCROLLBAR_MEDIA_QUERY =
+  "(max-width: 640px), (hover: none) and (pointer: coarse), (any-pointer: coarse)";
 
 interface HomepageFiltersProps {
   activeDateKey: string | null;
@@ -207,6 +210,11 @@ export function HomepageFilters({
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
   const [isPending, startTransition] = useTransition();
+  const isPhoneVenueScrollbarDevice = useMediaQuery(
+    PHONE_SCROLLBAR_MEDIA_QUERY,
+    false,
+    { getInitialValueInEffect: false }
+  );
   const now = new Date();
   const selectedVenueSlugs = optimisticSelectedVenues.map((venue) => venue.slug);
   const selectedVenueSlugKey = selectedVenueSlugs.join("|");
@@ -955,9 +963,12 @@ export function HomepageFilters({
                 <ScrollArea.Autosize
                   className="venue-menu__scroller"
                   mah="18rem"
-                  offsetScrollbars="present"
+                  offsetScrollbars={
+                    isPhoneVenueScrollbarDevice ? false : "present"
+                  }
+                  scrollbarSize={isPhoneVenueScrollbarDevice ? 12 : undefined}
                   scrollbars="y"
-                  type="auto"
+                  type={isPhoneVenueScrollbarDevice ? "always" : "auto"}
                 >
                   <div className="venue-menu__results">
                     {suggestions.length > 0 ? (
