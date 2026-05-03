@@ -2,26 +2,29 @@
 
 import {
   UnstyledButton,
-  useComputedColorScheme,
   useMantineColorScheme
 } from "@mantine/core";
 
+import { normalizeAppColorScheme } from "@/lib/color-scheme";
+
 export function SiteHeaderActions() {
-  const { setColorScheme } = useMantineColorScheme({ keepTransitions: true });
-  const computedColorScheme = useComputedColorScheme("dark");
-  const nextColorScheme = computedColorScheme === "dark" ? "light" : "dark";
+  const { colorScheme, setColorScheme } = useMantineColorScheme({
+    keepTransitions: true
+  });
+  const explicitColorScheme = normalizeAppColorScheme(colorScheme);
+  const nextColorScheme = explicitColorScheme === "dark" ? "light" : "dark";
 
   return (
     <div className="site-header__actions">
       <UnstyledButton
         aria-label={`Switch to ${nextColorScheme} mode`}
-        aria-pressed={computedColorScheme === "light"}
+        aria-pressed={explicitColorScheme === "light"}
         className="site-header__theme-toggle"
         onClick={() => setColorScheme(nextColorScheme)}
         title={`Switch to ${nextColorScheme} mode`}
         type="button"
       >
-        {computedColorScheme === "dark" ? (
+        {explicitColorScheme === "dark" ? (
           <svg
             aria-hidden="true"
             className="site-header__theme-icon"
