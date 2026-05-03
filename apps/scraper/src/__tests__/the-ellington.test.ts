@@ -63,6 +63,23 @@ const DETAIL_HTML = `
   </html>
 `;
 
+function createDetailHtmlWithImageMarkup(markup: string): string {
+  return `
+    <html>
+      <head>${markup}</head>
+      <body>
+        <div class="jet-listing-dynamic-field__content">
+          Event Start Date & TIme: May 3, 2026 17:00
+        </div>
+        <span class="tc_event_date_title_front">
+          3 May 2026 5:00 pm - 8:00 pm
+        </span>
+        ${markup}
+      </body>
+    </html>
+  `;
+}
+
 describe("the ellington source adapter", () => {
   it("cleans title line-break markers without rewriting normal hyphens", () => {
     expect(
@@ -121,6 +138,92 @@ describe("the ellington source adapter", () => {
       eventStartText: "May 3, 2026 17:00",
       eventDateRangeText: "3 May 2026 5:00 pm - 8:00 pm"
     });
+  });
+
+  it("prefers REST embedded media over detail-page image fallbacks", () => {
+    const normalized = normalizeEllingtonEvent(
+      createEllingtonEvent(),
+      createDetailHtmlWithImageMarkup(`
+        <meta property="og:image" content="https://www.ellingtonjazz.com.au/wp-content/uploads/2026/03/detail-page.jpg" />
+      `)
+    );
+
+    expect(normalized.imageUrl).toBe(
+      "https://www.ellingtonjazz.com.au/wp-content/uploads/2026/03/sue.jpg"
+    );
+  });
+
+  it("uses detail-page meta image when REST media is unavailable", () => {
+    const normalized = normalizeEllingtonEvent(
+      createEllingtonEvent({
+        featured_media: 156658,
+        _embedded: {
+          "wp:featuredmedia": [{}]
+        }
+      }),
+      createDetailHtmlWithImageMarkup(`
+        <meta property="og:image:secure_url" content="https://www.ellingtonjazz.com.au/wp-content/uploads/2025/11/Amy-FW.jpg" />
+      `)
+    );
+
+    expect(normalized.imageUrl).toBe(
+      "https://www.ellingtonjazz.com.au/wp-content/uploads/2025/11/Amy-FW.jpg"
+    );
+    expect(normalized.rawPayload).toMatchObject({
+      imageUrl: "https://www.ellingtonjazz.com.au/wp-content/uploads/2025/11/Amy-FW.jpg"
+    });
+  });
+
+  it("uses the Elementor featured image when meta images are absent", () => {
+    const normalized = normalizeEllingtonEvent(
+      createEllingtonEvent({
+        _embedded: undefined
+      }),
+      createDetailHtmlWithImageMarkup(`
+        <div class="elementor-widget-theme-post-featured-image">
+          <img
+            src="https://www.ellingtonjazz.com.au/wp-content/uploads/2025/08/WAJP-768x512.jpg"
+            srcset="https://www.ellingtonjazz.com.au/wp-content/uploads/2025/08/WAJP-768x512.jpg 768w, https://www.ellingtonjazz.com.au/wp-content/uploads/2025/08/WAJP.jpg 2048w"
+            alt=""
+          />
+        </div>
+      `)
+    );
+
+    expect(normalized.imageUrl).toBe(
+      "https://www.ellingtonjazz.com.au/wp-content/uploads/2025/08/WAJP-768x512.jpg"
+    );
+  });
+
+  it("ignores tracking pixels, external images, logos, and data placeholders", () => {
+    const normalized = normalizeEllingtonEvent(
+      createEllingtonEvent({
+        _embedded: undefined
+      }),
+      createDetailHtmlWithImageMarkup(`
+        <meta property="og:image" content="https://images.example.com/not-ellington.jpg" />
+        <link rel="preload" as="image" href="https://www.ellingtonjazz.com.au/wp-content/uploads/2020/09/logo.png" />
+        <img src="https://sca-7108-adswizz.attribution.adswizz.com/fire?pixelId=test" alt="" />
+        <div class="elementor-widget-theme-post-featured-image">
+          <img
+            src="data:image/svg+xml;base64,PHN2Zy8+"
+            data-src="https://www.ellingtonjazz.com.au/wp-content/uploads/2020/09/logo.png"
+            data-srcset="https://www.ellingtonjazz.com.au/wp-content/uploads/2023/08/aboriginal-flag-e1690857737339.jpg 400w"
+            alt=""
+          />
+        </div>
+        <div class="elementor-widget-theme-post-featured-image">
+          <img
+            src="https://www.ellingtonjazz.com.au/wp-content/uploads/2026/02/3rd-space-jams.jpg"
+            alt=""
+          />
+        </div>
+      `)
+    );
+
+    expect(normalized.imageUrl).toBe(
+      "https://www.ellingtonjazz.com.au/wp-content/uploads/2026/02/3rd-space-jams.jpg"
+    );
   });
 
   it("keeps sold-out events active while respecting explicit cancellation keywords", () => {
@@ -206,6 +309,122 @@ describe("the ellington source adapter", () => {
     );
     expect(fetchMock.mock.calls[2]?.[0]).toBe(firstEvent.link);
     expect(fetchMock.mock.calls[3]?.[0]).toBe(secondEvent.link);
+  });
+
+  it("limits event detail page fetches to four concurrent requests", async () => {
+    const events = Array.from({ length: 5 }, (_, index) =>
+      createEllingtonEvent({
+        id: index + 1,
+        link: `https://www.ellingtonjazz.com.au/tc-events/show-${index + 1}/`
+      })
+    );
+    const detailUrls: string[] = [];
+    let activeDetailRequests = 0;
+    let maxActiveDetailRequests = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+
+      if (url.includes("/wp-json/wp/v2/tc_events")) {
+        return new Response(JSON.stringify(events), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "x-wp-totalpages": "1"
+          }
+        });
+      }
+
+      detailUrls.push(url);
+      activeDetailRequests += 1;
+      maxActiveDetailRequests = Math.max(
+        maxActiveDetailRequests,
+        activeDetailRequests
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      activeDetailRequests -= 1;
+
+      return new Response(DETAIL_HTML, {
+        status: 200,
+        headers: { "content-type": "text/html" }
+      });
+    });
+
+    const result = await theEllingtonSource.fetchListings(fetchMock);
+
+    expect(result.gigs.map((gig) => gig.externalId)).toEqual([
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+    ]);
+    expect(result.failedCount).toBe(0);
+    expect(maxActiveDetailRequests).toBe(4);
+    expect(detailUrls).toEqual(events.map((event) => event.link));
+  });
+
+  it("counts missing links, failed detail pages, and parse failures", async () => {
+    const validEvent = createEllingtonEvent({
+      id: 1,
+      link: "https://www.ellingtonjazz.com.au/tc-events/valid-show/"
+    });
+    const missingLinkEvent = createEllingtonEvent({
+      id: 2,
+      link: undefined
+    });
+    const failedDetailEvent = createEllingtonEvent({
+      id: 3,
+      link: "https://www.ellingtonjazz.com.au/tc-events/failed-show/"
+    });
+    const malformedDetailEvent = createEllingtonEvent({
+      id: 4,
+      link: "https://www.ellingtonjazz.com.au/tc-events/malformed-show/"
+    });
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+
+      if (url.includes("/wp-json/wp/v2/tc_events")) {
+        return new Response(
+          JSON.stringify([
+            validEvent,
+            missingLinkEvent,
+            failedDetailEvent,
+            malformedDetailEvent
+          ]),
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+              "x-wp-totalpages": "1"
+            }
+          }
+        );
+      }
+
+      if (url === failedDetailEvent.link) {
+        return new Response("Server error", { status: 500 });
+      }
+
+      if (url === malformedDetailEvent.link) {
+        return new Response("<html><body>No date here.</body></html>", {
+          status: 200,
+          headers: { "content-type": "text/html" }
+        });
+      }
+
+      return new Response(DETAIL_HTML, {
+        status: 200,
+        headers: { "content-type": "text/html" }
+      });
+    });
+
+    const result = await theEllingtonSource.fetchListings(fetchMock);
+
+    expect(result.gigs).toHaveLength(1);
+    expect(result.gigs[0]?.externalId).toBe("1");
+    expect(result.failedCount).toBe(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
   it("is registered as an official public source", () => {

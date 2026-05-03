@@ -16,6 +16,7 @@ const SOURCE_ORIGIN = "https://www.ellingtonjazz.com.au";
 const SOURCE_URL = `${SOURCE_ORIGIN}/all-shows/`;
 const EVENTS_API_URL = `${SOURCE_ORIGIN}/wp-json/wp/v2/tc_events`;
 const REQUEST_TIMEOUT_MS = 20_000;
+const DETAIL_FETCH_BATCH_SIZE = 4;
 const PERTH_OFFSET_SUFFIX = "+08:00";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -96,6 +97,16 @@ export interface EllingtonEventTimes {
   eventDateRangeText: string | null;
 }
 
+interface EllingtonDetailFetchTarget {
+  event: EllingtonRestEvent;
+  sourceUrl: string;
+}
+
+interface EllingtonDetailFetchResult {
+  bundle: EllingtonEventBundle | null;
+  failedCount: number;
+}
+
 function normalizeUrl(value: string | null | undefined): string | null {
   const normalized = normalizeWhitespace(value ?? "");
 
@@ -115,6 +126,31 @@ function normalizeUrl(value: string | null | undefined): string | null {
     return url.toString();
   } catch {
     return normalized;
+  }
+}
+
+function normalizeEllingtonImageUrl(value: string | null | undefined): string | null {
+  const imageUrl = normalizeUrl(value);
+
+  if (!imageUrl) {
+    return null;
+  }
+
+  try {
+    const url = new URL(imageUrl);
+
+    if (
+      url.hostname !== new URL(SOURCE_ORIGIN).hostname ||
+      !url.pathname.startsWith("/wp-content/uploads/") ||
+      !/\.(?:gif|jpe?g|png|webp)$/i.test(url.pathname) ||
+      /(?:accessib|flag|logo|qtab|sustainable)/i.test(url.pathname)
+    ) {
+      return null;
+    }
+
+    return url.toString();
+  } catch {
+    return null;
   }
 }
 
@@ -331,7 +367,63 @@ function extractCategories(event: EllingtonRestEvent): string[] {
   return [...categories.values()];
 }
 
-function extractImageUrl(event: EllingtonRestEvent): string | null {
+function extractFirstSrcsetImageUrl(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  for (const part of value.split(",")) {
+    const candidate = part.trim().split(/\s+/)[0];
+    const imageUrl = normalizeEllingtonImageUrl(candidate);
+
+    if (imageUrl) {
+      return imageUrl;
+    }
+  }
+
+  return null;
+}
+
+function extractDetailPageImageUrl(html: string): string | null {
+  const $ = cheerio.load(html);
+  const metaImageSelectors = [
+    { selector: 'meta[property="og:image:secure_url"]', attr: "content" },
+    { selector: 'meta[property="og:image"]', attr: "content" },
+    { selector: 'meta[name="twitter:image"]', attr: "content" },
+    { selector: 'link[rel="preload"][as="image"]', attr: "href" }
+  ];
+
+  for (const { selector, attr } of metaImageSelectors) {
+    const imageUrl = normalizeEllingtonImageUrl($(selector).first().attr(attr));
+
+    if (imageUrl) {
+      return imageUrl;
+    }
+  }
+
+  for (const element of $(".elementor-widget-theme-post-featured-image img").toArray()) {
+    const image = $(element);
+    const candidates = [
+      normalizeEllingtonImageUrl(image.attr("src")),
+      normalizeEllingtonImageUrl(image.attr("data-src")),
+      extractFirstSrcsetImageUrl(image.attr("srcset")),
+      extractFirstSrcsetImageUrl(image.attr("data-srcset"))
+    ];
+
+    for (const imageUrl of candidates) {
+      if (imageUrl) {
+        return imageUrl;
+      }
+    }
+  }
+
+  return null;
+}
+
+function extractImageUrl(
+  event: EllingtonRestEvent,
+  detailHtml: string
+): string | null {
   const media = event._embedded?.["wp:featuredmedia"]?.[0];
   const sizes = media?.media_details?.sizes ?? {};
   const candidates = [
@@ -343,14 +435,14 @@ function extractImageUrl(event: EllingtonRestEvent): string | null {
   ];
 
   for (const candidate of candidates) {
-    const imageUrl = normalizeUrl(candidate);
+    const imageUrl = normalizeEllingtonImageUrl(candidate);
 
     if (imageUrl) {
       return imageUrl;
     }
   }
 
-  return null;
+  return extractDetailPageImageUrl(detailHtml);
 }
 
 function normalizeEllingtonStatus(title: string, description: string | null): GigStatus {
@@ -386,7 +478,7 @@ export function normalizeEllingtonEvent(
 
   const times = extractEllingtonEventTimes(detailHtml);
   const description = toPlainText(event.content?.rendered);
-  const imageUrl = extractImageUrl(event);
+  const imageUrl = extractImageUrl(event, detailHtml);
   const categories = extractCategories(event);
   const artistExtraction = unknownArtistExtraction();
   const rawPayload: JsonObject = {
@@ -486,6 +578,35 @@ async function fetchEllingtonEvents(fetchImpl: typeof fetch): Promise<EllingtonR
   return events;
 }
 
+async function fetchEllingtonEventDetail(input: {
+  event: EllingtonRestEvent;
+  sourceUrl: string;
+  fetchImpl: typeof fetch;
+}): Promise<EllingtonDetailFetchResult> {
+  try {
+    const response = await input.fetchImpl(input.sourceUrl, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    });
+
+    if (!response.ok) {
+      throw new Error(`The Ellington detail page returned status ${response.status}`);
+    }
+
+    return {
+      bundle: {
+        event: input.event,
+        detailHtml: await response.text()
+      },
+      failedCount: 0
+    };
+  } catch {
+    return {
+      bundle: null,
+      failedCount: 1
+    };
+  }
+}
+
 export const theEllingtonSource: SourceAdapter = {
   slug: "the-ellington",
   name: "The Ellington",
@@ -495,6 +616,7 @@ export const theEllingtonSource: SourceAdapter = {
   async fetchListings(fetchImpl = fetch) {
     const events = await fetchEllingtonEvents(fetchImpl);
     const bundles: EllingtonEventBundle[] = [];
+    const detailTargets: EllingtonDetailFetchTarget[] = [];
     let failedCount = 0;
 
     for (const event of events) {
@@ -505,21 +627,32 @@ export const theEllingtonSource: SourceAdapter = {
         continue;
       }
 
-      try {
-        const response = await fetchImpl(sourceUrl, {
-          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-        });
+      detailTargets.push({ event, sourceUrl });
+    }
 
-        if (!response.ok) {
-          throw new Error(`The Ellington detail page returned status ${response.status}`);
+    for (
+      let detailIndex = 0;
+      detailIndex < detailTargets.length;
+      detailIndex += DETAIL_FETCH_BATCH_SIZE
+    ) {
+      const batchResults = await Promise.all(
+        detailTargets
+          .slice(detailIndex, detailIndex + DETAIL_FETCH_BATCH_SIZE)
+          .map((target) =>
+            fetchEllingtonEventDetail({
+              event: target.event,
+              sourceUrl: target.sourceUrl,
+              fetchImpl
+            })
+          )
+      );
+
+      for (const result of batchResults) {
+        failedCount += result.failedCount;
+
+        if (result.bundle) {
+          bundles.push(result.bundle);
         }
-
-        bundles.push({
-          event,
-          detailHtml: await response.text()
-        });
-      } catch {
-        failedCount += 1;
       }
     }
 

@@ -2,13 +2,26 @@ import { describe, expect, it } from "vitest";
 
 import { getGigActions } from "./gig-actions";
 
+type GigActionInput = Parameters<typeof getGigActions>[0];
+
+function createGigActionInput(overrides: Partial<GigActionInput>): GigActionInput {
+  return {
+    ticket_url: null,
+    venue_slug: "test-venue",
+    venue_website_url: null,
+    ...overrides
+  };
+}
+
 describe("getGigActions", () => {
   it("returns both actions when both links are available", () => {
     expect(
-      getGigActions({
-        ticket_url: "https://tickets.oztix.com.au/outlet/event/show",
-        venue_website_url: "https://venue.example.com"
-      })
+      getGigActions(
+        createGigActionInput({
+          ticket_url: "https://tickets.oztix.com.au/outlet/event/show",
+          venue_website_url: "https://venue.example.com"
+        })
+      )
     ).toEqual([
       {
         href: "https://tickets.oztix.com.au/outlet/event/show",
@@ -25,10 +38,12 @@ describe("getGigActions", () => {
 
   it("returns only the buy action when the ticket link exists", () => {
     expect(
-      getGigActions({
-        ticket_url: "https://www.moshtix.com.au/v2/event/show/123",
-        venue_website_url: null
-      })
+      getGigActions(
+        createGigActionInput({
+          ticket_url: "https://www.moshtix.com.au/v2/event/show/123",
+          venue_website_url: null
+        })
+      )
     ).toEqual([
       {
         href: "https://www.moshtix.com.au/v2/event/show/123",
@@ -51,10 +66,11 @@ describe("getGigActions", () => {
     ]
   ])("labels ticket seller for %s", (ticketUrl, label) => {
     expect(
-      getGigActions({
-        ticket_url: ticketUrl,
-        venue_website_url: null
-      })
+      getGigActions(
+        createGigActionInput({
+          ticket_url: ticketUrl
+        })
+      )
     ).toEqual([
       {
         href: ticketUrl,
@@ -64,14 +80,19 @@ describe("getGigActions", () => {
     ]);
   });
 
-  it.each(["https://tickets.example.com/show", "not a url"])(
+  it.each([
+    "https://tickets.example.com/show",
+    "https://www.ellingtonjazz.com.au/tc-events/show",
+    "not a url"
+  ])(
     "falls back to a generic buy label for %s",
     (ticketUrl) => {
       expect(
-        getGigActions({
-          ticket_url: ticketUrl,
-          venue_website_url: null
-        })
+        getGigActions(
+          createGigActionInput({
+            ticket_url: ticketUrl
+          })
+        )
       ).toEqual([
         {
           href: ticketUrl,
@@ -82,12 +103,33 @@ describe("getGigActions", () => {
     }
   );
 
+  it("labels Ellington ticket links by venue", () => {
+    const ticketUrl = "https://www.ellingtonjazz.com.au/tc-events/show";
+
+    expect(
+      getGigActions(
+        createGigActionInput({
+          ticket_url: ticketUrl,
+          venue_slug: "the-ellington-jazz-club"
+        })
+      )
+    ).toEqual([
+      {
+        href: ticketUrl,
+        key: "tickets",
+        label: "Buy tickets @ the ellington"
+      }
+    ]);
+  });
+
   it("returns only the venue action when only the venue website exists", () => {
     expect(
-      getGigActions({
-        ticket_url: null,
-        venue_website_url: "https://venue.example.com"
-      })
+      getGigActions(
+        createGigActionInput({
+          ticket_url: null,
+          venue_website_url: "https://venue.example.com"
+        })
+      )
     ).toEqual([
       {
         href: "https://venue.example.com",
@@ -99,10 +141,12 @@ describe("getGigActions", () => {
 
   it("returns no actions when neither link exists", () => {
     expect(
-      getGigActions({
-        ticket_url: null,
-        venue_website_url: null
-      })
+      getGigActions(
+        createGigActionInput({
+          ticket_url: null,
+          venue_website_url: null
+        })
+      )
     ).toEqual([]);
   });
 });

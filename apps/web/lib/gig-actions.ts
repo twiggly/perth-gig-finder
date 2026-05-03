@@ -49,13 +49,17 @@ function getTicketSellerLabel(ticketUrl: string): string | null {
   }
 }
 
-function getBuyTicketsLabel(ticketUrl: string): string {
+function getBuyTicketsLabel(ticketUrl: string, venueSlug: string): string {
+  if (venueSlug === "the-ellington-jazz-club") {
+    return "Buy tickets @ the ellington";
+  }
+
   const sellerLabel = getTicketSellerLabel(ticketUrl);
   return sellerLabel ? `Buy tickets @ ${sellerLabel}` : "Buy tickets";
 }
 
 export function getGigActions(
-  gig: Pick<GigCardRecord, "ticket_url" | "venue_website_url">
+  gig: Pick<GigCardRecord, "ticket_url" | "venue_slug" | "venue_website_url">
 ): GigAction[] {
   const actions: GigAction[] = [];
 
@@ -63,7 +67,7 @@ export function getGigActions(
     actions.push({
       href: gig.ticket_url,
       key: "tickets",
-      label: getBuyTicketsLabel(gig.ticket_url)
+      label: getBuyTicketsLabel(gig.ticket_url, gig.venue_slug)
     });
   }
 
