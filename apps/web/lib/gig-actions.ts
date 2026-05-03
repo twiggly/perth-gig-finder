@@ -10,6 +10,19 @@ function matchesHost(hostname: string, domain: string): boolean {
   return hostname === domain || hostname.endsWith(`.${domain}`);
 }
 
+function normalizeHostname(hostname: string): string {
+  const normalized = hostname.toLowerCase();
+  return normalized.startsWith("www.") ? normalized.slice(4) : normalized;
+}
+
+function getHostname(value: string): string | null {
+  try {
+    return normalizeHostname(new URL(value).hostname);
+  } catch {
+    return null;
+  }
+}
+
 function getTicketSellerLabel(ticketUrl: string): string | null {
   let hostname: string;
 
@@ -51,15 +64,41 @@ function getTicketSellerLabel(ticketUrl: string): string | null {
 
 function getBuyTicketsLabel(ticketUrl: string, venueSlug: string): string {
   if (venueSlug === "the-ellington-jazz-club") {
-    return "Buy tickets @ the ellington";
+    return "Buy tickets @ The Ellington";
   }
 
   const sellerLabel = getTicketSellerLabel(ticketUrl);
   return sellerLabel ? `Buy tickets @ ${sellerLabel}` : "Buy tickets";
 }
 
+function getVenueListingUrl(
+  sourceUrl: string,
+  venueWebsiteUrl: string
+): string {
+  const sourceHostname = getHostname(sourceUrl);
+  const venueHostname = getHostname(venueWebsiteUrl);
+
+  return sourceHostname && venueHostname && sourceHostname === venueHostname
+    ? sourceUrl
+    : venueWebsiteUrl;
+}
+
+function getVenueListingLabelName(venueSlug: string, venueName: string): string {
+  switch (venueSlug) {
+    case "the-ellington-jazz-club":
+      return "The Ellington";
+    case "four5nine-bar-rosemount":
+      return "Four5Nine Bar";
+    default:
+      return venueName;
+  }
+}
+
 export function getGigActions(
-  gig: Pick<GigCardRecord, "ticket_url" | "venue_slug" | "venue_website_url">
+  gig: Pick<
+    GigCardRecord,
+    "source_url" | "ticket_url" | "venue_name" | "venue_slug" | "venue_website_url"
+  >
 ): GigAction[] {
   const actions: GigAction[] = [];
 
@@ -73,9 +112,9 @@ export function getGigActions(
 
   if (gig.venue_website_url) {
     actions.push({
-      href: gig.venue_website_url,
+      href: getVenueListingUrl(gig.source_url, gig.venue_website_url),
       key: "venue",
-      label: "Venue website"
+      label: `View listing @ ${getVenueListingLabelName(gig.venue_slug, gig.venue_name)}`
     });
   }
 
