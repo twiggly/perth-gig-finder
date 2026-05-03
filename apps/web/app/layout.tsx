@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
-import { ColorSchemeScript, MantineProvider, mantineHtmlProps } from "@mantine/core";
+import { mantineHtmlProps } from "@mantine/core";
 
 import "@mantine/core/styles.layer.css";
 import "./globals.css";
-import { theme } from "./theme";
+import { getAppColorSchemeScript } from "@/lib/color-scheme";
+
+import { AppProviders } from "./providers";
 
 export const metadata: Metadata = {
   title: "Perth Gig Finder",
@@ -19,12 +21,12 @@ export default function RootLayout({
   return (
     <html lang="en" {...mantineHtmlProps}>
       <head>
-        <ColorSchemeScript defaultColorScheme="dark" />
+        <script
+          dangerouslySetInnerHTML={{ __html: getAppColorSchemeScript() }}
+        />
       </head>
       <body>
-        <MantineProvider defaultColorScheme="dark" theme={theme}>
-          {children}
-        </MantineProvider>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );
