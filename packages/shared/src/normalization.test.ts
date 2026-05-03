@@ -6,8 +6,10 @@ import {
   buildGigSlug,
   decodeHtmlEntities,
   normalizeCanonicalTitleForMatch,
+  normalizeVenueAddress,
   normalizeTitleForMatch,
   normalizeVenueName,
+  normalizeVenueSuburb,
   normalizeVenueWebsiteUrl,
   normalizeWhitespace,
   slugify,
@@ -87,9 +89,36 @@ describe("normalization helpers", () => {
     expect(normalizeVenueName("Clancy's Fish Pub | Freemantle")).toBe("Clancy's Fish Pub");
     expect(normalizeVenueName("Clancy's Fish Pub | Fremantle")).toBe("Clancy's Fish Pub");
     expect(normalizeVenueName("Four5Nine Bar")).toBe("Four5Nine Bar @ Rosemount");
+    expect(normalizeVenueName("Seasonal Brewing Co")).toBe("The Seasonal Brewing Co");
+    expect(normalizeVenueName("The Seasonal Brewing Co.")).toBe("The Seasonal Brewing Co");
+    expect(normalizeVenueName("The Court Hotel")).toBe("The Court");
+    expect(normalizeVenueName("Old Habits")).toBe("Old Habits Neighbourhood Bar");
+    expect(normalizeVenueName("Music on Murray st")).toBe("Music on Murray St");
+    expect(normalizeVenueName("North Freo Bowlo // Hilton Park Bowling Club")).toBe(
+      "North Freo Bowlo"
+    );
+    expect(
+      normalizeVenueName("Stan Perron WA Treasures | Hackett Hall, WA Museum Boola Bardip")
+    ).toBe("Hackett Hall, WA Museum Boola Bardip");
+  });
+
+  it("normalizes known venue suburbs and addresses", () => {
+    expect(normalizeVenueSuburb("The Bird", "Northbridge, Perth")).toBe("Northbridge");
+    expect(normalizeVenueSuburb("The Rechabite", "Perth")).toBe("Northbridge");
+    expect(normalizeVenueSuburb("North Freo Bowlo", "Perth")).toBe("North Fremantle");
+    expect(normalizeVenueAddress("The Duke of George", "135 DUKE ST, EAST FREEMANTLE WA 6158")).toBe(
+      "135 Duke St, East Fremantle WA 6158"
+    );
+    expect(normalizeVenueAddress("The Court", "50 Beaufort St")).toBe(
+      "50 Beaufort Street, Perth WA 6000"
+    );
   });
 
   it("fills known venue website overrides without inventing generic source URLs", () => {
+    expect(normalizeVenueWebsiteUrl("The Seasonal Brewing Co", null)).toBe(
+      "https://www.seasonalbrewing.beer/"
+    );
+    expect(normalizeVenueWebsiteUrl("The Court", null)).toBe("https://thecourt.com.au/");
     expect(normalizeVenueWebsiteUrl("Rosemount Hotel", null)).toBe(
       "https://www.rosemounthotel.com.au/"
     );

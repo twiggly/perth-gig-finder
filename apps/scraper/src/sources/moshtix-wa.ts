@@ -2,7 +2,9 @@ import * as cheerio from "cheerio";
 
 import {
   buildGigChecksum,
+  normalizeVenueAddress,
   normalizeVenueName,
+  normalizeVenueSuburb,
   normalizeVenueWebsiteUrl,
   normalizeWhitespace,
   slugifyVenueName,
@@ -23,6 +25,7 @@ const LIVE_MUSIC_CATEGORY_ID = "2,";
 const LIVE_MUSIC_CATEGORY_NUMERIC_ID = 2;
 const REQUEST_TIMEOUT_MS = 10_000;
 const DETAIL_FETCH_BATCH_SIZE = 12;
+const LOCALITY_NAME_OVERRIDES = new Map([["east freemantle", "East Fremantle"]]);
 const PERTH_METRO_LOCALITIES = new Set([
   "perth",
   "east perth",
@@ -620,9 +623,23 @@ function buildPostalAddress(address: MoshtixStructuredAddress | undefined): stri
   return fullAddress || null;
 }
 
+function normalizeLocalityName(value: string | null | undefined): string | null {
+  const normalized = normalizeWhitespace(value ?? "");
+  if (!normalized) {
+    return null;
+  }
+
+  const identity = normalized.toLowerCase();
+  return (
+    LOCALITY_NAME_OVERRIDES.get(identity) ??
+    identity.replace(/\b[a-z]/g, (character) => character.toUpperCase())
+  );
+}
+
 function splitVenueNameAndSuburb(
   venueName: string,
-  suburb: string | null
+  suburb: string | null,
+  sourceSuburb = suburb
 ): { venueName: string; suburb: string | null } {
   if (!suburb) {
     return {
@@ -631,8 +648,19 @@ function splitVenueNameAndSuburb(
     };
   }
 
-  const suffixPattern = new RegExp(`,\\s*${suburb.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
-  const strippedName = normalizeWhitespace(venueName.replace(suffixPattern, ""));
+  let strippedName = venueName;
+  const suffixCandidates = [
+    ...new Set([sourceSuburb, suburb].filter((value): value is string => Boolean(value)))
+  ];
+  for (const suffixCandidate of suffixCandidates) {
+    const suffixPattern = new RegExp(
+      `,\\s*${suffixCandidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+      "i"
+    );
+    strippedName = strippedName.replace(suffixPattern, "");
+  }
+
+  strippedName = normalizeWhitespace(strippedName);
 
   return {
     venueName: strippedName || venueName,
@@ -644,22 +672,26 @@ function normalizeVenue(input: {
   structuredEvent: MoshtixStructuredEvent | null;
   eventData: MoshtixEventData | null;
 }): NormalizedVenue {
-  const locality =
+  const sourceLocality =
     normalizeWhitespace(input.structuredEvent?.location?.address?.addressLocality ?? "") || null;
+  const locality = normalizeLocalityName(sourceLocality);
   const rawVenueName =
     normalizeWhitespace(
       input.structuredEvent?.location?.name ??
         input.eventData?.venue?.name ??
         "Moshtix Venue"
     ) || "Moshtix Venue";
-  const { venueName, suburb } = splitVenueNameAndSuburb(rawVenueName, locality);
+  const { venueName, suburb } = splitVenueNameAndSuburb(rawVenueName, locality, sourceLocality);
   const normalizedVenueName = normalizeVenueName(venueName);
 
   return {
     name: normalizedVenueName,
     slug: slugifyVenueName(normalizedVenueName),
-    suburb,
-    address: buildPostalAddress(input.structuredEvent?.location?.address),
+    suburb: normalizeVenueSuburb(normalizedVenueName, suburb),
+    address: normalizeVenueAddress(
+      normalizedVenueName,
+      buildPostalAddress(input.structuredEvent?.location?.address)
+    ),
     websiteUrl: normalizeVenueWebsiteUrl(
       normalizedVenueName,
       normalizeUrl(input.structuredEvent?.location?.sameAs ?? null)
