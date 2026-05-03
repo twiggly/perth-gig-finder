@@ -417,6 +417,8 @@ code {
 }
 
 .filter-toolbar__search {
+  --search-menu-popover-min-width: 21rem;
+
   position: relative;
   grid-area: search;
   width: 100%;
@@ -465,7 +467,7 @@ code {
 }
 
 .venue-menu {
-  --venue-menu-popover-width: 28rem;
+  --venue-menu-popover-width: 21rem;
 
   grid-area: venues;
   position: relative;
@@ -526,6 +528,8 @@ code {
 .search-menu__popover {
   display: grid;
   gap: 0.75rem;
+  min-width: min(var(--search-menu-popover-min-width), calc(100vw - 1rem));
+  max-width: calc(100vw - 1rem);
   padding: 0.55rem;
   border: 1px solid var(--panel-border);
   border-radius: 1.15rem;

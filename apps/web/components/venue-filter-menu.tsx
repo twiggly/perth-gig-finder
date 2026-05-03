@@ -104,6 +104,7 @@ export function VenueFilterMenu({
         onOptionSubmit={handleOptionSubmit}
         position="bottom-end"
         store={combobox}
+        width="min(var(--venue-menu-popover-width), calc(100vw - 1rem))"
         withinPortal={false}
         zIndex={25}
       >

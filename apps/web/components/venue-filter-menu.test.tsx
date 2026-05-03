@@ -75,6 +75,9 @@ describe("VenueFilterMenu", () => {
     expect(html).toContain("venue-menu__trigger--open");
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain("venue-menu__popover");
+    expect(html).toContain(
+      "width:min(var(--venue-menu-popover-width), calc(100vw - 1rem))"
+    );
     expect(html).toContain('id="venue-menu-test"');
     expect(html).toContain('role="listbox"');
     expect(html).toContain('id="venue-filter-input"');
