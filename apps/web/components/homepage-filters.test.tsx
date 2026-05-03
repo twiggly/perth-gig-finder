@@ -48,7 +48,7 @@ describe("HomepageFilters", () => {
     expect(html).toContain('aria-haspopup="listbox"');
   });
 
-  it("renders selected venue chips and clear-all affordance", () => {
+  it("renders selected venue chips without a clear-all affordance", () => {
     const html = renderFilters({
       selectedVenues: [
         {
@@ -68,7 +68,7 @@ describe("HomepageFilters", () => {
     expect(html).toContain("The Bird");
     expect(html).toContain("Remove The Bird · Northbridge");
     expect(html).toContain("Mojos Bar");
-    expect(html).toContain("Clear all venues");
+    expect(html).not.toContain("Clear all venues");
   });
 
   it("renders the current query and clear search affordance", () => {

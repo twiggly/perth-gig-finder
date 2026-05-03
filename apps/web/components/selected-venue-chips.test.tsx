@@ -12,7 +12,6 @@ function renderChips(venues: VenueOption[]) {
   return renderToStaticMarkup(
     <MantineProvider defaultColorScheme="dark" theme={theme}>
       <SelectedVenueChips
-        onClearVenues={() => {}}
         onRemoveVenue={() => {}}
         venues={venues}
       />
@@ -36,7 +35,7 @@ describe("SelectedVenueChips", () => {
     expect(html).not.toContain("Clear all venues");
   });
 
-  it("renders clear all only for multiple venues", () => {
+  it("renders multiple selected venue chips without a clear-all chip", () => {
     const html = renderChips([
       {
         name: "The Bird",
@@ -52,13 +51,12 @@ describe("SelectedVenueChips", () => {
 
     expect(html).toContain("The Bird");
     expect(html).toContain("Mojos Bar");
-    expect(html).toContain("Clear all venues");
+    expect(html).not.toContain("Clear all venues");
   });
 
   it("renders no markup for an empty venue list", () => {
     const html = renderToStaticMarkup(
       <SelectedVenueChips
-        onClearVenues={() => {}}
         onRemoveVenue={() => {}}
         venues={[]}
       />

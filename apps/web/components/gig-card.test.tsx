@@ -50,7 +50,7 @@ describe("GigCard", () => {
     const titleIndex = html.indexOf("gig-card__title");
     const timeIndex = html.indexOf("gig-card__time");
     const artistsIndex = html.indexOf("Melānija | Esper | softwarebodyIV");
-    const venueIndex = html.indexOf("The Bird, Northbridge");
+    const venueIndex = html.indexOf("gig-card__venue");
 
     expect(html).toContain("ALT//THURSDAYS");
     expect(html).toContain("gig-card__artists");
@@ -60,6 +60,27 @@ describe("GigCard", () => {
     expect(timeIndex).toBeLessThan(titleIndex);
     expect(artistsIndex).toBeGreaterThan(titleIndex);
     expect(venueIndex).toBeGreaterThan(artistsIndex);
+  });
+
+  it("renders the venue name and multi-word suburb in separate spans", () => {
+    const html = renderToStaticMarkup(
+      <MantineProvider defaultColorScheme="dark" theme={theme}>
+        <GigCard
+          gig={createGig({
+            venue_name: "Port Beach Brewery",
+            venue_suburb: "North Fremantle"
+          })}
+          isOpen={false}
+          onClose={() => {}}
+          onToggle={() => {}}
+        />
+      </MantineProvider>
+    );
+
+    expect(html).toContain('class="gig-card__venue-name"');
+    expect(html).toContain('class="gig-card__venue-suburb"');
+    expect(html).toContain("Port Beach Brewery");
+    expect(html).toContain("North Fremantle");
   });
 
   it("omits the artist line when it only repeats the title", () => {
@@ -110,7 +131,7 @@ describe("GigCard", () => {
     );
 
     const contentIndex = html.indexOf("gig-card__content");
-    const venueIndex = html.indexOf("The Bird, Northbridge");
+    const venueIndex = html.indexOf("gig-card__venue");
     const popoverIndex = html.indexOf("gig-card__popover");
     const firstActionIndex = html.indexOf("Buy tickets");
 

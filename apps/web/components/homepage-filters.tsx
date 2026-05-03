@@ -40,7 +40,6 @@ export function HomepageFilters({
   const searchMenuId = useId();
   const venueDropdownId = useId();
   const {
-    clearVenues,
     optimisticSelectedVenues,
     removeVenue,
     selectedVenueSlugs,
@@ -131,10 +130,6 @@ export function HomepageFilters({
     removeVenue(slug);
   }
 
-  function handleClearVenues() {
-    clearVenues();
-  }
-
   return (
     <>
       <Box
@@ -174,7 +169,6 @@ export function HomepageFilters({
         </div>
 
         <SelectedVenueChips
-          onClearVenues={handleClearVenues}
           onRemoveVenue={handleRemoveVenue}
           venues={optimisticSelectedVenues}
         />

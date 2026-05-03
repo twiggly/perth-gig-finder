@@ -4,7 +4,6 @@ import { UnstyledButton } from "@mantine/core";
 import type { VenueOption } from "@/lib/venues";
 
 interface SelectedVenueChipsProps {
-  onClearVenues: () => void;
   onRemoveVenue: (slug: string) => void;
   venues: VenueOption[];
 }
@@ -14,7 +13,6 @@ function getVenueSummary(venue: VenueOption): string {
 }
 
 export function SelectedVenueChips({
-  onClearVenues,
   onRemoveVenue,
   venues
 }: SelectedVenueChipsProps) {
@@ -36,15 +34,6 @@ export function SelectedVenueChips({
           <span className="sr-only">Remove {getVenueSummary(venue)}</span>
         </UnstyledButton>
       ))}
-      {venues.length > 1 ? (
-        <UnstyledButton
-          className="filter-chip filter-chip--ghost"
-          onClick={onClearVenues}
-          type="button"
-        >
-          Clear all venues
-        </UnstyledButton>
-      ) : null}
     </div>
   );
 }
