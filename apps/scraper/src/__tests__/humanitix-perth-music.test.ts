@@ -449,6 +449,12 @@ describe("humanitix perth music source adapter", () => {
     });
 
     expect(gigs).toHaveLength(1);
+    expect(gigs[0]?.venue).toMatchObject({
+      name: "The Seasonal Brewing Co",
+      slug: "the-seasonal-brewing-co",
+      suburb: "Maylands",
+      websiteUrl: "https://www.seasonalbrewing.beer/"
+    });
     expect(gigs[0]?.artists).toEqual(["Stepmother", "Loose Lips"]);
     expect(gigs[0]?.artistExtractionKind).toBe("parsed_text");
   });

@@ -7,6 +7,17 @@ export interface VenueOption {
   suburb: string | null;
 }
 
+interface VenueSlugRecord {
+  venue_slug: string | null;
+}
+
+export function filterVenuesWithActiveFutureGigs(
+  venues: VenueOption[],
+  activeFutureVenueSlugs: ReadonlySet<string>
+): VenueOption[] {
+  return venues.filter((venue) => activeFutureVenueSlugs.has(venue.slug));
+}
+
 function compareVenueSuggestions(
   left: VenueOption,
   right: VenueOption,
@@ -67,17 +78,33 @@ export async function listVenueSuggestions(
 ): Promise<VenueOption[]> {
   const normalizedQuery = normalizeSearchText(query);
   const client = createSupabaseServerClient();
-  const { data, error } = await client
-    .from("venues")
-    .select("slug, name, suburb")
-    .order("name", { ascending: true });
+  const [venueResult, activeVenueResult] = await Promise.all([
+    client.from("venues").select("slug, name, suburb").order("name", { ascending: true }),
+    client
+      .from("gig_cards")
+      .select("venue_slug")
+      .eq("status", "active")
+      .gte("starts_at", new Date().toISOString())
+  ]);
 
-  if (error) {
-    throw new Error(error.message);
+  if (venueResult.error) {
+    throw new Error(venueResult.error.message);
+  }
+
+  if (activeVenueResult.error) {
+    throw new Error(activeVenueResult.error.message);
   }
 
   const excluded = new Set(excludedSlugs);
-  const venues = ((data ?? []) as VenueOption[]).filter((venue) => {
+  const activeFutureVenueSlugs = new Set(
+    ((activeVenueResult.data ?? []) as VenueSlugRecord[])
+      .map((record) => record.venue_slug)
+      .filter((slug): slug is string => Boolean(slug))
+  );
+  const venues = filterVenuesWithActiveFutureGigs(
+    (venueResult.data ?? []) as VenueOption[],
+    activeFutureVenueSlugs
+  ).filter((venue) => {
     if (excluded.has(venue.slug)) {
       return false;
     }

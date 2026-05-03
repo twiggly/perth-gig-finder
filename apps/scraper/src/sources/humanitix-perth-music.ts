@@ -2,7 +2,9 @@ import * as cheerio from "cheerio";
 
 import {
   buildGigChecksum,
+  normalizeVenueAddress,
   normalizeVenueName,
+  normalizeVenueSuburb,
   normalizeVenueWebsiteUrl,
   normalizeWhitespace,
   slugifyVenueName,
@@ -785,8 +787,8 @@ function normalizeVenue(
   return {
     name: venueName,
     slug: slugifyVenueName(venueName),
-    suburb: normalizedAddress.suburb,
-    address: normalizedAddress.address,
+    suburb: normalizeVenueSuburb(venueName, normalizedAddress.suburb),
+    address: normalizeVenueAddress(venueName, normalizedAddress.address),
     websiteUrl: normalizeVenueWebsiteUrl(venueName, normalizeUrl(location?.url) ?? null)
   };
 }

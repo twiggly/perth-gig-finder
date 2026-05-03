@@ -1010,6 +1010,36 @@ describe("moshtix wa source adapter", () => {
     expect(gig.venue.suburb).toBe("East Fremantle");
   });
 
+  it("normalizes uppercase venue localities to title case", () => {
+    const gig = normalizeMoshtixEventPage({
+      listing: {
+        externalId: "193086",
+        title: "Soul Night at the Duke",
+        eventUrl: "https://www.moshtix.com.au/v2/event/soul-night-at-the-duke/193086",
+        startsAt: "2026-05-08T12:00:00.000Z",
+        listingImageUrl: null,
+        teaser: "East Fremantle soul revue",
+        rawPayload: {}
+      },
+      html: buildEventPage({
+        eventId: "193086",
+        title: "Soul Night at the Duke",
+        eventUrl: "https://www.moshtix.com.au/v2/event/soul-night-at-the-duke/193086",
+        startDate: "2026-05-08T20:00:00",
+        endDate: "2026-05-08T23:00:00",
+        venueName: "The Duke of George, EAST FREEMANTLE",
+        streetAddress: "135 Duke St",
+        locality: "EAST FREEMANTLE",
+        region: "WA",
+        postalCode: "6158",
+        descriptionHtml: "<p>Soul revue in East Fremantle.</p>"
+      })
+    });
+
+    expect(gig.venue.name).toBe("The Duke of George");
+    expect(gig.venue.suburb).toBe("East Fremantle");
+  });
+
   it("excludes touring placeholder venue records even when they mention WA", () => {
     expect(() =>
       normalizeMoshtixEventPage({

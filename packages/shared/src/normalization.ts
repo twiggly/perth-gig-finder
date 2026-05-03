@@ -30,11 +30,35 @@ const CANONICAL_TITLE_STOP_WORDS = new Set([
 const VENUE_NAME_OVERRIDES = new Map<string, string>([
   ["clancys-fish-pub-freemantle", "Clancy's Fish Pub"],
   ["clancys-fish-pub-fremantle", "Clancy's Fish Pub"],
-  ["four5nine-bar", "Four5Nine Bar @ Rosemount"]
+  ["four5nine-bar", "Four5Nine Bar @ Rosemount"],
+  ["hackett-hall-wa-museum-boola-bardip", "Hackett Hall, WA Museum Boola Bardip"],
+  [
+    "stan-perron-wa-treasures-hackett-hall-wa-museum-boola-bardip",
+    "Hackett Hall, WA Museum Boola Bardip"
+  ],
+  ["music-on-murray-st", "Music on Murray St"],
+  ["north-freo-bowlo-hilton-park-bowling-club", "North Freo Bowlo"],
+  ["old-habits", "Old Habits Neighbourhood Bar"],
+  ["seasonal-brewing-co", "The Seasonal Brewing Co"],
+  ["the-court-hotel", "The Court"],
+  ["the-seasonal-brewing-co", "The Seasonal Brewing Co"]
 ]);
 const VENUE_WEBSITE_OVERRIDES = new Map<string, string>([
+  ["the-court", "https://thecourt.com.au/"],
+  ["the-seasonal-brewing-co", "https://www.seasonalbrewing.beer/"],
   ["four5nine-bar-rosemount", "https://www.rosemounthotel.com.au/"],
   ["rosemount-hotel", "https://www.rosemounthotel.com.au/"]
+]);
+const VENUE_SUBURB_OVERRIDES = new Map<string, string>([
+  ["north-freo-bowlo", "North Fremantle"],
+  ["the-bird", "Northbridge"],
+  ["the-duke-of-george", "East Fremantle"],
+  ["the-rechabite", "Northbridge"]
+]);
+const VENUE_ADDRESS_OVERRIDES = new Map<string, string>([
+  ["north-freo-bowlo", "8 Thompson Road, North Fremantle WA 6159"],
+  ["the-court", "50 Beaufort Street, Perth WA 6000"],
+  ["the-duke-of-george", "135 Duke St, East Fremantle WA 6158"]
 ]);
 const HTML_ENTITIES = new Map<string, string>([
   ["amp", "&"],
@@ -164,6 +188,26 @@ export function normalizeVenueName(value: string): string {
 
 export function slugifyVenueName(value: string): string {
   return slugify(normalizeVenueName(value).replace(APOSTROPHES, ""));
+}
+
+export function normalizeVenueSuburb(
+  venueName: string,
+  suburb: string | null | undefined
+): string | null {
+  return (
+    VENUE_SUBURB_OVERRIDES.get(slugifyVenueName(venueName)) ??
+    (normalizeWhitespace(suburb ?? "") || null)
+  );
+}
+
+export function normalizeVenueAddress(
+  venueName: string,
+  address: string | null | undefined
+): string | null {
+  return (
+    VENUE_ADDRESS_OVERRIDES.get(slugifyVenueName(venueName)) ??
+    (normalizeWhitespace(address ?? "") || null)
+  );
 }
 
 export function normalizeVenueWebsiteUrl(

@@ -1,6 +1,8 @@
 import {
   buildGigChecksum,
+  normalizeVenueAddress,
   normalizeVenueName,
+  normalizeVenueSuburb,
   normalizeVenueWebsiteUrl,
   normalizeWhitespace,
   slugifyVenueName,
@@ -358,8 +360,8 @@ function buildVenue(venue: TicketmasterCityEventVenue | null | undefined): Norma
   return {
     name: venueName,
     slug: slugifyVenueName(venueName),
-    suburb,
-    address: buildVenueAddress(venue),
+    suburb: normalizeVenueSuburb(venueName, suburb),
+    address: normalizeVenueAddress(venueName, buildVenueAddress(venue)),
     websiteUrl: normalizeVenueWebsiteUrl(venueName, normalizeUrl(venue?.url))
   };
 }

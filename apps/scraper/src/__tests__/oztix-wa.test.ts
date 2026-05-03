@@ -216,6 +216,50 @@ describe("oztix wa source adapter", () => {
     });
   });
 
+  it("canonicalizes audited Oztix venue labels before storing gigs", () => {
+    const courtGig = normalizeOztixHit({
+      EventGuid: "the-court",
+      EventName: "Rave & Brunch",
+      DateStart: "2026-06-21T12:00:00",
+      EventUrl: "https://tickets.oztix.com.au/outlet/event/the-court",
+      Categories: ["Music"],
+      _geoloc: { lat: -31.9523, lng: 115.8613 },
+      Venue: {
+        Name: "The Court Hotel",
+        Locality: "Perth",
+        Address: "50 Beaufort St"
+      },
+      Bands: ["Rave & Brunch"]
+    });
+    const bowloGig = normalizeOztixHit({
+      EventGuid: "north-freo-bowlo",
+      EventName: "Hidden Treasures 2026",
+      DateStart: "2026-06-11T18:00:00",
+      EventUrl: "https://tickets.oztix.com.au/outlet/event/north-freo-bowlo",
+      Categories: ["Music"],
+      _geoloc: { lat: -32.0332, lng: 115.7517 },
+      Venue: {
+        Name: "North Freo Bowlo // Hilton Park Bowling Club",
+        Locality: "Perth",
+        Address: "Check Venue Address"
+      },
+      Bands: ["Hidden Treasures"]
+    });
+
+    expect(courtGig.venue).toMatchObject({
+      name: "The Court",
+      slug: "the-court",
+      address: "50 Beaufort Street, Perth WA 6000",
+      websiteUrl: "https://thecourt.com.au/"
+    });
+    expect(bowloGig.venue).toMatchObject({
+      name: "North Freo Bowlo",
+      slug: "north-freo-bowlo",
+      suburb: "North Fremantle",
+      address: "8 Thompson Road, North Fremantle WA 6159"
+    });
+  });
+
   it("parses special guest lineups from Oztix guest text", () => {
     expect(
       parseOztixSpecialGuests(
