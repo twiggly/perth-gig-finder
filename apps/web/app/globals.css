@@ -332,7 +332,8 @@ code {
   color: var(--subtle-text);
 }
 
-.site-header__theme-toggle {
+.site-header__theme-toggle,
+.site-header__profile {
   cursor: pointer;
   transition:
     background-color 160ms ease,
@@ -341,20 +342,93 @@ code {
 }
 
 .site-header__theme-toggle:hover,
-.site-header__theme-toggle:focus-visible {
+.site-header__theme-toggle:focus-visible,
+.site-header__profile:hover,
+.site-header__profile:focus-visible {
   border-color: var(--control-focus-border);
   background: var(--control-bg-hover);
   color: var(--text);
   outline: none;
 }
 
-.site-header__profile {
-  pointer-events: none;
-}
-
 .site-header__theme-icon,
 .site-header__profile-icon {
   display: block;
+}
+
+.account-modal {
+  border: 1px solid var(--panel-border);
+  border-radius: 1.45rem;
+  background: var(--popover-bg);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+
+.account-modal__header {
+  align-items: flex-start;
+  padding: 1.4rem 1.4rem 0.25rem;
+  background: transparent;
+}
+
+.account-modal__title {
+  color: var(--text);
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+
+.account-modal__close {
+  color: var(--subtle-text);
+}
+
+.account-modal__close:hover,
+.account-modal__close:focus-visible {
+  background: var(--soft-fill);
+  color: var(--text);
+}
+
+.account-modal__body {
+  padding: 0.85rem 1.4rem 1.4rem;
+}
+
+.account-modal__copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.account-modal__action {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 6rem;
+  margin-top: 1.25rem;
+  padding: 0.72rem 1.1rem;
+  border: 1px solid var(--soft-border);
+  border-radius: 999px;
+  background: var(--soft-fill);
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  text-transform: uppercase;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.account-modal__action:hover,
+.account-modal__action:focus-visible {
+  border-color: var(--control-focus-border);
+  background: var(--control-bg-hover);
+  outline: none;
 }
 
 .filter-panel {
