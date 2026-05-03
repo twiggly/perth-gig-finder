@@ -1341,6 +1341,14 @@ body[data-filter-dropdown-open="true"] .date-pills {
   color: #120d0b;
 }
 
+:root[data-mantine-color-scheme="light"] .gig-card__time {
+  background: rgba(0, 0, 0, 0.78);
+}
+
+:root[data-mantine-color-scheme="light"] .gig-card p.gig-card__time {
+  color: var(--bg);
+}
+
 .gig-card__popover {
   position: relative;
   z-index: 20;
