@@ -156,6 +156,6 @@ describe("HomepageDayContent", () => {
     expect(html).toContain("gig-card--open");
     expect(html).toContain("gig-card__popover");
     expect(html).toContain("Buy tickets");
-    expect(html).toContain("View listing @ The Bird");
+    expect(html).toContain("Listing @ The Bird");
   });
 });

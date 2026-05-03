@@ -114,7 +114,7 @@ export function getGigActions(
     actions.push({
       href: getVenueListingUrl(gig.source_url, gig.venue_website_url),
       key: "venue",
-      label: `View listing @ ${getVenueListingLabelName(gig.venue_slug, gig.venue_name)}`
+      label: `Listing @ ${getVenueListingLabelName(gig.venue_slug, gig.venue_name)}`
     });
   }
 

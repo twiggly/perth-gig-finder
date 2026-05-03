@@ -134,7 +134,7 @@ describe("GigCard", () => {
 
     expect(html).toContain('data-action-count="1"');
     expect(html).toContain("Buy tickets");
-    expect(html).not.toContain("View listing @");
+    expect(html).not.toContain("Listing @");
   });
 
   it("exposes the action count for two-action cards", () => {
@@ -151,6 +151,6 @@ describe("GigCard", () => {
 
     expect(html).toContain('data-action-count="2"');
     expect(html).toContain("Buy tickets");
-    expect(html).toContain("View listing @ The Bird");
+    expect(html).toContain("Listing @ The Bird");
   });
 });
