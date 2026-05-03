@@ -8,6 +8,12 @@ This file is for coding agents working in this repository. Keep it short, practi
 - `apps/scraper`: source adapters, normalization, dedupe, and image mirroring.
 - `packages/shared`: shared normalization and type helpers.
 
+## Web UI
+
+- For Mantine UI work in `apps/web`, use `mantine-combobox` for `Combobox`, searchable dropdowns, custom select/menu behavior, and scrollbar/dropdown positioning quirks.
+- Use `mantine-form` for any future `@mantine/form` work.
+- Use `mantine-custom-components` for Mantine theming, Styles API, factory components, or custom Mantine-integrated components.
+
 ## Default Workflow
 
 - Use the local web app for day-to-day feature work.
