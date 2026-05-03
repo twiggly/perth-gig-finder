@@ -84,6 +84,8 @@ describe("VenueFilterMenu", () => {
     expect(html).toContain('placeholder="Search venues"');
     expect(html).toContain('value="mojos"');
     expect(html).toContain("venue-menu__scroller");
+    expect(html).toContain('data-offset-scrollbars="y"');
+    expect(html).toContain('data-scrollbars="y"');
     expect(html).toContain('aria-label="Venue options"');
     expect(html).toContain("data-combobox-option");
     expect(html).toContain("The Bird");
@@ -115,6 +117,7 @@ describe("VenueFilterMenu", () => {
     });
 
     expect(html).toContain("venue-menu__scroller");
+    expect(html).not.toContain('data-offset-scrollbars="y"');
     expect(html).toContain("The Bird");
     expect(html).toContain("Mojos Bar");
   });

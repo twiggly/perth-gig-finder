@@ -66,10 +66,11 @@ export function VenueFilterMenu({
       onClose();
     }
   });
+  const hasVenueSearchInput = venueInput.trim().length > 0;
   const suggestionSlugKey = suggestions.map((venue) => venue.slug).join("|");
 
   useEffect(() => {
-    if (!isOpen || suggestions.length === 0) {
+    if (!isOpen || suggestions.length === 0 || !hasVenueSearchInput) {
       combobox.resetSelectedOption();
       return;
     }
@@ -81,11 +82,24 @@ export function VenueFilterMenu({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [combobox, isOpen, suggestionSlugKey, suggestions.length]);
+  }, [
+    combobox,
+    hasVenueSearchInput,
+    isOpen,
+    suggestionSlugKey,
+    suggestions.length
+  ]);
 
   function handleInputChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const nextVenueInput = event.currentTarget.value;
+
     onInputChange(event);
-    combobox.updateSelectedOptionIndex();
+
+    if (nextVenueInput.trim().length > 0) {
+      combobox.updateSelectedOptionIndex();
+    } else {
+      combobox.resetSelectedOption();
+    }
   }
 
   function handleOptionSubmit(slug: string) {
@@ -146,11 +160,11 @@ export function VenueFilterMenu({
             <ScrollArea.Autosize
               className="venue-menu__scroller"
               mah="18rem"
-              offsetScrollbars={isPhoneScrollbarDevice ? false : "present"}
+              offsetScrollbars={isPhoneScrollbarDevice ? false : "y"}
               overscrollBehavior="contain"
               scrollbarSize={isPhoneScrollbarDevice ? 12 : undefined}
               scrollbars="y"
-              type={isPhoneScrollbarDevice ? "always" : "auto"}
+              type="always"
             >
               <div className="venue-menu__results">
                 {suggestions.length > 0 ? (
