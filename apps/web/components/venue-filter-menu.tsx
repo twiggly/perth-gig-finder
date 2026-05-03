@@ -100,7 +100,6 @@ export function VenueFilterMenu({
     <div className="venue-menu" ref={menuRef}>
       <Combobox
         dropdownPadding={0}
-        floatingStrategy="fixed"
         offset={10}
         onOptionSubmit={handleOptionSubmit}
         position="bottom-end"
