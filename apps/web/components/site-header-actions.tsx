@@ -1,13 +1,62 @@
 "use client";
 
 import {
+  Modal,
   UnstyledButton,
   useMantineColorScheme
 } from "@mantine/core";
+import React, { useState } from "react";
 
 import { normalizeAppColorScheme } from "@/lib/color-scheme";
 
+interface AccountComingSoonModalProps {
+  onClose: () => void;
+  opened: boolean;
+  withinPortal?: boolean;
+}
+
+export function AccountComingSoonModal({
+  onClose,
+  opened,
+  withinPortal
+}: AccountComingSoonModalProps) {
+  return (
+    <Modal
+      centered
+      classNames={{
+        body: "account-modal__body",
+        close: "account-modal__close",
+        content: "account-modal",
+        header: "account-modal__header",
+        title: "account-modal__title"
+      }}
+      onClose={onClose}
+      opened={opened}
+      overlayProps={{
+        backgroundOpacity: 0.58,
+        blur: 3
+      }}
+      removeScrollProps={{ removeScrollBar: false }}
+      title="Accounts are coming soon"
+      withinPortal={withinPortal}
+    >
+      <p className="account-modal__copy">
+        Once available, accounts will let you save your favourite bands and
+        venues, and receive notifications about gigs you care about.
+      </p>
+      <UnstyledButton
+        className="account-modal__action"
+        onClick={onClose}
+        type="button"
+      >
+        Got it
+      </UnstyledButton>
+    </Modal>
+  );
+}
+
 export function SiteHeaderActions() {
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const { colorScheme, setColorScheme } = useMantineColorScheme({
     keepTransitions: true
   });
@@ -60,8 +109,15 @@ export function SiteHeaderActions() {
           </svg>
         )}
       </UnstyledButton>
-      <div aria-hidden="true" className="site-header__profile">
+      <UnstyledButton
+        aria-label="Open account information"
+        className="site-header__profile"
+        onClick={() => setIsAccountModalOpen(true)}
+        title="Account"
+        type="button"
+      >
         <svg
+          aria-hidden="true"
           className="site-header__profile-icon"
           fill="none"
           height="22"
@@ -83,7 +139,11 @@ export function SiteHeaderActions() {
             strokeWidth="1.6"
           />
         </svg>
-      </div>
+      </UnstyledButton>
+      <AccountComingSoonModal
+        onClose={() => setIsAccountModalOpen(false)}
+        opened={isAccountModalOpen}
+      />
     </div>
   );
 }
