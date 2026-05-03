@@ -13,6 +13,11 @@ import {
 } from "../sources/the-bird";
 import { sources } from "../sources";
 
+function freezeTheBirdFixtureClock(): void {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-04-23T16:00:00.000Z"));
+}
+
 describe("the bird source adapter", () => {
   it("extracts exact times from doors text before later times", () => {
     expect(parseTheBirdStartTime("Doors 8pm | Music until 11:45pm")).toEqual({
@@ -94,30 +99,43 @@ describe("the bird source adapter", () => {
   });
 
   it("normalizes a weekly Thursday row with the featured lineup", () => {
-    const normalized = normalizeTheBirdWhatsOnRow({
-      Date: "30.04.26",
-      Day: "Thursday",
-      Time: "6:30pm",
-      Price: 15,
-      Vibe: "Alt ",
-      Title: "ALT//THURSDAYS",
-      Featuring: "Melānija, Esper, softwarebodyIV, tarsier, big trouble little china",
-      Description:
-        "butterflyviolence presents. ECLIPSE - a night of emotional digital soundscapes and echoing electronics.",
-      "Ticket Link": ""
-    });
+    freezeTheBirdFixtureClock();
 
-    expect(normalized).toMatchObject({
-      sourceSlug: "the-bird",
-      externalId: "2026-04-30-alt-thursdays",
-      sourceUrl: "https://www.williamstreetbird.com/whatson#2026-04-30-alt-thursdays",
-      ticketUrl: null,
-      title: "ALT//THURSDAYS",
-      startsAt: "2026-04-30T10:30:00.000Z",
-      startsAtPrecision: "exact",
-      artists: ["Melānija", "Esper", "softwarebodyIV", "tarsier", "big trouble little china"],
-      artistExtractionKind: "explicit_lineup"
-    });
+    try {
+      const normalized = normalizeTheBirdWhatsOnRow({
+        Date: "30.04.26",
+        Day: "Thursday",
+        Time: "6:30pm",
+        Price: 15,
+        Vibe: "Alt ",
+        Title: "ALT//THURSDAYS",
+        Featuring: "Melānija, Esper, softwarebodyIV, tarsier, big trouble little china",
+        Description:
+          "butterflyviolence presents. ECLIPSE - a night of emotional digital soundscapes and echoing electronics.",
+        "Ticket Link": ""
+      });
+
+      expect(normalized).toMatchObject({
+        sourceSlug: "the-bird",
+        externalId: "2026-04-30-alt-thursdays",
+        sourceUrl:
+          "https://www.williamstreetbird.com/whatson#2026-04-30-alt-thursdays",
+        ticketUrl: null,
+        title: "ALT//THURSDAYS",
+        startsAt: "2026-04-30T10:30:00.000Z",
+        startsAtPrecision: "exact",
+        artists: [
+          "Melānija",
+          "Esper",
+          "softwarebodyIV",
+          "tarsier",
+          "big trouble little china"
+        ],
+        artistExtractionKind: "explicit_lineup"
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("canonicalizes Humanitix ticket links to the linked event page", () => {
@@ -199,36 +217,42 @@ describe("the bird source adapter", () => {
   });
 
   it("rejects obvious non-music rows from the weekly feed", () => {
-    const parsed = parseTheBirdWhatsOnRows([
-      {
-        Date: "21.04.26",
-        Day: "Tuesday",
-        Time: "6:30pm",
-        Price: "FREE",
-        Vibe: "live improv DND",
-        Title: "Murder in the Moonlight",
-        Featuring: "presented by Questdraft",
-        Description:
-          "An improvised, DnD inspired show set in a Noir, 40s landscape.",
-        "Ticket Link": ""
-      },
-      {
-        Date: "30.04.26",
-        Day: "Thursday",
-        Time: "6:30pm",
-        Price: 15,
-        Vibe: "Alt ",
-        Title: "ALT//THURSDAYS",
-        Featuring: "Melānija, Esper, softwarebodyIV, tarsier, big trouble little china",
-        Description:
-          "butterflyviolence presents. ECLIPSE - a night of emotional digital soundscapes and echoing electronics.",
-        "Ticket Link": ""
-      }
-    ]);
+    freezeTheBirdFixtureClock();
 
-    expect(parsed.failedCount).toBe(0);
-    expect(parsed.gigs).toHaveLength(1);
-    expect(parsed.gigs[0]?.title).toBe("ALT//THURSDAYS");
+    try {
+      const parsed = parseTheBirdWhatsOnRows([
+        {
+          Date: "21.04.26",
+          Day: "Tuesday",
+          Time: "6:30pm",
+          Price: "FREE",
+          Vibe: "live improv DND",
+          Title: "Murder in the Moonlight",
+          Featuring: "presented by Questdraft",
+          Description:
+            "An improvised, DnD inspired show set in a Noir, 40s landscape.",
+          "Ticket Link": ""
+        },
+        {
+          Date: "30.04.26",
+          Day: "Thursday",
+          Time: "6:30pm",
+          Price: 15,
+          Vibe: "Alt ",
+          Title: "ALT//THURSDAYS",
+          Featuring: "Melānija, Esper, softwarebodyIV, tarsier, big trouble little china",
+          Description:
+            "butterflyviolence presents. ECLIPSE - a night of emotional digital soundscapes and echoing electronics.",
+          "Ticket Link": ""
+        }
+      ]);
+
+      expect(parsed.failedCount).toBe(0);
+      expect(parsed.gigs).toHaveLength(1);
+      expect(parsed.gigs[0]?.title).toBe("ALT//THURSDAYS");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("fetches the official JSON feed without browser automation", async () => {
@@ -321,6 +345,8 @@ describe("the bird source adapter", () => {
   });
 
   it("merges weekly rows into matching coming-up rows before returning gigs", async () => {
+    freezeTheBirdFixtureClock();
+
     const comingUpRows: TheBirdFeedRow[] = [
       {
         Date: "01/05/2026",
@@ -379,24 +405,38 @@ describe("the bird source adapter", () => {
       throw new Error(`Unexpected fetch URL: ${url}`);
     });
 
-    const result = await theBirdSource.fetchListings(fetchMock);
-    const dani = result.gigs.find((gig) => gig.title === "Dani Dray 'Tell Me' Single Launch");
-    const thursdays = result.gigs.find((gig) => gig.title === "ALT//THURSDAYS");
+    try {
+      const result = await theBirdSource.fetchListings(fetchMock);
+      const dani = result.gigs.find(
+        (gig) => gig.title === "Dani Dray 'Tell Me' Single Launch"
+      );
+      const thursdays = result.gigs.find((gig) => gig.title === "ALT//THURSDAYS");
 
-    expect(result.failedCount).toBe(0);
-    expect(result.gigs).toHaveLength(2);
-    expect(dani).toMatchObject({
-      ticketUrl:
-        "https://tickets.oztix.com.au/outlet/event/bc602244-415d-45de-86ac-a0a4b99940c0",
-      artists: ["The Vicar", "Clare Perrott", "SOLARA"]
-    });
-    expect(thursdays).toMatchObject({
-      startsAt: "2026-04-30T10:30:00.000Z",
-      artists: ["Melānija", "Esper", "softwarebodyIV", "tarsier", "big trouble little china"]
-    });
+      expect(result.failedCount).toBe(0);
+      expect(result.gigs).toHaveLength(2);
+      expect(dani).toMatchObject({
+        ticketUrl:
+          "https://tickets.oztix.com.au/outlet/event/bc602244-415d-45de-86ac-a0a4b99940c0",
+        artists: ["The Vicar", "Clare Perrott", "SOLARA"]
+      });
+      expect(thursdays).toMatchObject({
+        startsAt: "2026-04-30T10:30:00.000Z",
+        artists: [
+          "Melānija",
+          "Esper",
+          "softwarebodyIV",
+          "tarsier",
+          "big trouble little china"
+        ]
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("merges weekly rows when the coming-up title only adds The Bird venue text", async () => {
+    freezeTheBirdFixtureClock();
+
     const comingUpRows: TheBirdFeedRow[] = [
       {
         Date: "26/04/2026",
@@ -441,16 +481,26 @@ describe("the bird source adapter", () => {
       throw new Error(`Unexpected fetch URL: ${url}`);
     });
 
-    const result = await theBirdSource.fetchListings(fetchMock);
+    try {
+      const result = await theBirdSource.fetchListings(fetchMock);
 
-    expect(result.failedCount).toBe(0);
-    expect(result.gigs).toHaveLength(1);
-    expect(result.gigs[0]).toMatchObject({
-      title: "WESTEND EXPORT @ THE BIRD",
-      startsAt: "2026-04-26T12:00:00.000Z",
-      artists: ["WEX PARTY UNIT", "Coyboy", "Lala", "Sneeze", "Respondent & Joii"],
-      artistExtractionKind: "explicit_lineup"
-    });
+      expect(result.failedCount).toBe(0);
+      expect(result.gigs).toHaveLength(1);
+      expect(result.gigs[0]).toMatchObject({
+        title: "WESTEND EXPORT @ THE BIRD",
+        startsAt: "2026-04-26T12:00:00.000Z",
+        artists: [
+          "WEX PARTY UNIT",
+          "Coyboy",
+          "Lala",
+          "Sneeze",
+          "Respondent & Joii"
+        ],
+        artistExtractionKind: "explicit_lineup"
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("is registered in the shared source list", () => {

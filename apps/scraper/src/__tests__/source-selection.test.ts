@@ -44,6 +44,7 @@ describe("resolveSourcesToRun", () => {
       "humanitix-perth-music",
       "milk-bar",
       "rosemount-hotel",
+      "the-ellington",
       "the-bird",
       "oztix-wa",
       "ticketek-wa"
