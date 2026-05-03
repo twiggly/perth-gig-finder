@@ -6,7 +6,9 @@ type GigActionInput = Parameters<typeof getGigActions>[0];
 
 function createGigActionInput(overrides: Partial<GigActionInput>): GigActionInput {
   return {
+    source_url: "https://source.example.com/gig",
     ticket_url: null,
+    venue_name: "Test Venue",
     venue_slug: "test-venue",
     venue_website_url: null,
     ...overrides
@@ -31,7 +33,7 @@ describe("getGigActions", () => {
       {
         href: "https://venue.example.com",
         key: "venue",
-        label: "Venue website"
+        label: "View listing @ Test Venue"
       }
     ]);
   });
@@ -117,24 +119,86 @@ describe("getGigActions", () => {
       {
         href: ticketUrl,
         key: "tickets",
-        label: "Buy tickets @ the ellington"
+        label: "Buy tickets @ The Ellington"
       }
     ]);
   });
 
-  it("returns only the venue action when only the venue website exists", () => {
+  it("uses a same-domain venue listing URL for the venue action", () => {
     expect(
       getGigActions(
         createGigActionInput({
           ticket_url: null,
-          venue_website_url: "https://venue.example.com"
+          source_url: "https://www.venue.example.com/events/gig",
+          venue_name: "The Bird",
+          venue_website_url: "https://venue.example.com/"
         })
       )
     ).toEqual([
       {
-        href: "https://venue.example.com",
+        href: "https://www.venue.example.com/events/gig",
         key: "venue",
-        label: "Venue website"
+        label: "View listing @ The Bird"
+      }
+    ]);
+  });
+
+  it.each([
+    ["the-ellington-jazz-club", "The Ellington Jazz Club", "View listing @ The Ellington"],
+    ["four5nine-bar-rosemount", "Four5Nine Bar @ Rosemount", "View listing @ Four5Nine Bar"]
+  ])("shortens the venue listing label for %s", (venueSlug, venueName, label) => {
+    expect(
+      getGigActions(
+        createGigActionInput({
+          ticket_url: null,
+          venue_name: venueName,
+          venue_slug: venueSlug,
+          venue_website_url: "https://venue.example.com/"
+        })
+      )
+    ).toEqual([
+      {
+        href: "https://venue.example.com/",
+        key: "venue",
+        label
+      }
+    ]);
+  });
+
+  it("falls back to the venue homepage for different-domain source URLs", () => {
+    expect(
+      getGigActions(
+        createGigActionInput({
+          ticket_url: null,
+          source_url: "https://tickets.example.com/events/gig",
+          venue_name: "The Bird",
+          venue_website_url: "https://www.williamstreetbird.com/"
+        })
+      )
+    ).toEqual([
+      {
+        href: "https://www.williamstreetbird.com/",
+        key: "venue",
+        label: "View listing @ The Bird"
+      }
+    ]);
+  });
+
+  it("falls back to the venue homepage for invalid source URLs", () => {
+    expect(
+      getGigActions(
+        createGigActionInput({
+          ticket_url: null,
+          source_url: "not a url",
+          venue_name: "The Bird",
+          venue_website_url: "https://www.williamstreetbird.com/"
+        })
+      )
+    ).toEqual([
+      {
+        href: "https://www.williamstreetbird.com/",
+        key: "venue",
+        label: "View listing @ The Bird"
       }
     ]);
   });
