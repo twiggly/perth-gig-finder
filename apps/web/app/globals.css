@@ -1324,6 +1324,14 @@ body[data-filter-dropdown-open="true"] .date-pills {
   color: var(--accent);
 }
 
+.gig-card__venue-text {
+  min-width: 0;
+}
+
+.gig-card__venue-suburb {
+  white-space: nowrap;
+}
+
 .gig-card__time {
   width: max-content;
   padding: 0.24rem 0.52rem;

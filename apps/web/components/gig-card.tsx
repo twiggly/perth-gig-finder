@@ -24,10 +24,6 @@ function formatGigDate(value: string): string {
   }).format(new Date(value));
 }
 
-function formatVenueLine(gig: GigCardRecord): string {
-  return gig.venue_suburb ? `${gig.venue_name}, ${gig.venue_suburb}` : gig.venue_name;
-}
-
 function VenueMapIcon() {
   return (
     <svg
@@ -43,6 +39,29 @@ function VenueMapIcon() {
         fillRule="evenodd"
       />
     </svg>
+  );
+}
+
+function VenueLine({
+  name,
+  suburb
+}: {
+  name: string;
+  suburb: string | null;
+}) {
+  return (
+    <span className="gig-card__venue-text">
+      <span className="gig-card__venue-name">
+        {name}
+        {suburb ? "," : null}
+      </span>
+      {suburb ? (
+        <>
+          {" "}
+          <span className="gig-card__venue-suburb">{suburb}</span>
+        </>
+      ) : null}
+    </span>
   );
 }
 
@@ -137,7 +156,7 @@ export function GigCard({ gig, isOpen, onClose, onToggle }: GigCardProps) {
       ) : null}
       <Text className="gig-card__venue" component="p">
         <VenueMapIcon />
-        {formatVenueLine(gig)}
+        <VenueLine name={gig.venue_name} suburb={gig.venue_suburb} />
       </Text>
     </Box>
   );
