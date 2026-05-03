@@ -1563,7 +1563,7 @@ body[data-filter-dropdown-open="true"] .date-pills {
   }
 
   .day-browser__heading-title {
-    font-size: clamp(1.35rem, 6vw, 1.85rem);
+    font-size: clamp(1.8rem, calc(1.62rem + 0.6vw), 1.95rem);
   }
 
   .day-browser__arrow {
