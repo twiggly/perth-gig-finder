@@ -64,11 +64,11 @@ function getTicketSellerLabel(ticketUrl: string): string | null {
 
 function getBuyTicketsLabel(ticketUrl: string, venueSlug: string): string {
   if (venueSlug === "the-ellington-jazz-club") {
-    return "Buy tickets @ The Ellington";
+    return "Tickets @ The Ellington";
   }
 
   const sellerLabel = getTicketSellerLabel(ticketUrl);
-  return sellerLabel ? `Buy tickets @ ${sellerLabel}` : "Buy tickets";
+  return sellerLabel ? `Tickets @ ${sellerLabel}` : "Buy tickets";
 }
 
 function getVenueListingUrl(
