@@ -33,7 +33,7 @@ describe("getGigActions", () => {
       {
         href: "https://venue.example.com",
         key: "venue",
-        label: "View listing @ Test Venue"
+        label: "Listing @ Test Venue"
       }
     ]);
   });
@@ -138,14 +138,14 @@ describe("getGigActions", () => {
       {
         href: "https://www.venue.example.com/events/gig",
         key: "venue",
-        label: "View listing @ The Bird"
+        label: "Listing @ The Bird"
       }
     ]);
   });
 
   it.each([
-    ["the-ellington-jazz-club", "The Ellington Jazz Club", "View listing @ The Ellington"],
-    ["four5nine-bar-rosemount", "Four5Nine Bar @ Rosemount", "View listing @ Four5Nine Bar"]
+    ["the-ellington-jazz-club", "The Ellington Jazz Club", "Listing @ The Ellington"],
+    ["four5nine-bar-rosemount", "Four5Nine Bar @ Rosemount", "Listing @ Four5Nine Bar"]
   ])("shortens the venue listing label for %s", (venueSlug, venueName, label) => {
     expect(
       getGigActions(
@@ -179,7 +179,7 @@ describe("getGigActions", () => {
       {
         href: "https://www.williamstreetbird.com/",
         key: "venue",
-        label: "View listing @ The Bird"
+        label: "Listing @ The Bird"
       }
     ]);
   });
@@ -198,7 +198,7 @@ describe("getGigActions", () => {
       {
         href: "https://www.williamstreetbird.com/",
         key: "venue",
-        label: "View listing @ The Bird"
+        label: "Listing @ The Bird"
       }
     ]);
   });
