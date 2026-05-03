@@ -173,6 +173,7 @@ export function SearchFilterForm({
     <form className="filter-toolbar__search" onSubmit={onSubmit} ref={formRef}>
       <Combobox
         dropdownPadding={0}
+        hideDetached={false}
         offset={10}
         onOptionSubmit={handleOptionSubmit}
         position="bottom-start"

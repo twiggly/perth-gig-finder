@@ -100,6 +100,7 @@ export function VenueFilterMenu({
     <div className="venue-menu" ref={menuRef}>
       <Combobox
         dropdownPadding={0}
+        hideDetached={false}
         offset={10}
         onOptionSubmit={handleOptionSubmit}
         position="bottom-end"
@@ -146,6 +147,7 @@ export function VenueFilterMenu({
               className="venue-menu__scroller"
               mah="18rem"
               offsetScrollbars={isPhoneScrollbarDevice ? false : "present"}
+              overscrollBehavior="contain"
               scrollbarSize={isPhoneScrollbarDevice ? 12 : undefined}
               scrollbars="y"
               type={isPhoneScrollbarDevice ? "always" : "auto"}
