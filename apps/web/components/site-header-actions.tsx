@@ -41,8 +41,8 @@ export function AccountComingSoonModal({
       withinPortal={withinPortal}
     >
       <p className="account-modal__copy">
-        Once available, accounts will let you save your favourite bands and
-        venues, and receive notifications about gigs you care about.
+        Once accounts are available, you&apos;ll be able to save your favourite
+        bands and venues and recieve notifications for gigs you care about.
       </p>
       <UnstyledButton
         className="account-modal__action"

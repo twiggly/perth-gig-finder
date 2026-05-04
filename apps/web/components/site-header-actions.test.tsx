@@ -36,7 +36,7 @@ describe("SiteHeaderActions", () => {
 
     expect(html).toContain("Accounts are coming soon");
     expect(html).toContain(
-      "Once available, accounts will let you save your favourite bands and venues, and receive notifications about gigs you care about."
+      "Once accounts are available, you&#x27;ll be able to save your favourite bands and venues and recieve notifications for gigs you care about."
     );
     expect(html).toContain("Got it");
     expect(html).toContain("account-modal__action");
