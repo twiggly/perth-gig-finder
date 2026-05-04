@@ -7,10 +7,10 @@ export function SiteHeaderBrand() {
       <Image
         alt=""
         className="site-header__logo-mark"
-        height={200}
+        height={196}
         src="/logo.svg"
         unoptimized
-        width={200}
+        width={196}
       />
       <h1 className="site-header__title">
         <span className="site-header__title-text">Gig Radar</span>

@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   icons: {
     apple: [
       {
-        sizes: "200x200",
+        sizes: "196x196",
         type: "image/png",
         url: "/logo.png"
       }
@@ -38,9 +38,9 @@ export const metadata: Metadata = {
     images: [
       {
         alt: "Gig Radar logo",
-        height: 200,
+        height: 196,
         url: "/logo.png",
-        width: 200
+        width: 196
       }
     ],
     siteName: siteTitle,
