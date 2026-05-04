@@ -4,56 +4,61 @@ import { mantineHtmlProps } from "@mantine/core";
 import "@mantine/core/styles.layer.css";
 import "./globals.css";
 import { getAppColorSchemeScript } from "@/lib/color-scheme";
+import {
+  buildSiteStructuredDataJson,
+  SITE_DESCRIPTION,
+  SITE_FAVICON_PATH,
+  SITE_LOGO_HEIGHT,
+  SITE_LOGO_PATH,
+  SITE_LOGO_WIDTH,
+  SITE_TITLE,
+  SITE_URL
+} from "@/lib/seo";
 
 import { AppProviders } from "./providers";
-
-const siteUrl = new URL("https://gigradar.com.au");
-const siteTitle = "Gig Radar";
-const siteDescription =
-  "A local-first gig guide for Perth, built from normalized venue listings.";
 
 export const metadata: Metadata = {
   alternates: {
     canonical: "/"
   },
-  description: siteDescription,
+  description: SITE_DESCRIPTION,
   icons: {
     apple: [
       {
-        sizes: "196x196",
+        sizes: `${SITE_LOGO_WIDTH}x${SITE_LOGO_HEIGHT}`,
         type: "image/png",
-        url: "/logo.png"
+        url: SITE_LOGO_PATH
       }
     ],
     icon: [
       {
         type: "image/svg+xml",
-        url: "/favicon.svg"
+        url: SITE_FAVICON_PATH
       }
     ]
   },
-  metadataBase: siteUrl,
+  metadataBase: new URL(SITE_URL),
   openGraph: {
-    description: siteDescription,
+    description: SITE_DESCRIPTION,
     images: [
       {
         alt: "Gig Radar logo",
-        height: 196,
-        url: "/logo.png",
-        width: 196
+        height: SITE_LOGO_HEIGHT,
+        url: SITE_LOGO_PATH,
+        width: SITE_LOGO_WIDTH
       }
     ],
-    siteName: siteTitle,
-    title: siteTitle,
+    siteName: SITE_TITLE,
+    title: SITE_TITLE,
     type: "website",
     url: "/"
   },
-  title: siteTitle,
+  title: SITE_TITLE,
   twitter: {
     card: "summary",
-    description: siteDescription,
-    images: ["/logo.png"],
-    title: siteTitle
+    description: SITE_DESCRIPTION,
+    images: [SITE_LOGO_PATH],
+    title: SITE_TITLE
   }
 };
 
@@ -67,6 +72,10 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{ __html: getAppColorSchemeScript() }}
+        />
+        <script
+          dangerouslySetInnerHTML={{ __html: buildSiteStructuredDataJson() }}
+          type="application/ld+json"
         />
       </head>
       <body>
