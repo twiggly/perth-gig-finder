@@ -1,6 +1,7 @@
 import { HomepageFilters } from "@/components/homepage-filters";
 import { HomepageDayBrowser } from "@/components/homepage-day-browser";
 import { SiteHeaderActions } from "@/components/site-header-actions";
+import { SiteHeaderBrand } from "@/components/site-header-brand";
 import { SiteHeaderEyebrow } from "@/components/site-header-eyebrow";
 import { getHydratedHomepageDayDateKeys } from "@/lib/homepage-day-loading";
 import { resolveHomepageDateKey } from "@/lib/homepage-dates";
@@ -74,7 +75,7 @@ async function ConfiguredHomepage({
       <div className="top-panel">
         <header className="site-header">
           <SiteHeaderEyebrow />
-          <h1 className="site-header__title">Gig Radar</h1>
+          <SiteHeaderBrand />
         </header>
         <div className="top-panel__filters">
           <HomepageFilters
