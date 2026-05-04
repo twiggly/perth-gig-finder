@@ -153,10 +153,11 @@ code {
   grid-area: header;
   display: grid;
   grid-template-areas:
-    "eyebrow"
-    "title";
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.35rem;
+    "eyebrow eyebrow"
+    "logo title";
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.35rem clamp(0.65rem, 1.8vw, 1.1rem);
+  align-items: center;
   min-width: 0;
 }
 
@@ -167,7 +168,7 @@ code {
   gap: 0.6ch;
   align-items: baseline;
   justify-self: start;
-  margin: 0 0 0 clamp(0.35rem, 1.4vw, 0.9rem);
+  margin: 0;
   color: var(--muted);
 }
 
@@ -298,12 +299,26 @@ code {
 
 .site-header__title {
   grid-area: title;
-  margin: 0 0 0 clamp(0.35rem, 1.4vw, 0.9rem);
+  justify-self: start;
+  align-self: center;
+  margin: 0;
   font-family: var(--font-display), sans-serif;
   font-size: clamp(2.45rem, 6vw, 5rem);
   font-weight: 700;
   line-height: 0.92;
   letter-spacing: -0.065em;
+}
+
+.site-header__logo-mark {
+  grid-area: logo;
+  display: block;
+  align-self: center;
+  width: 2.95rem;
+  height: auto;
+}
+
+.site-header__title-text {
+  display: inline-block;
 }
 
 .site-header__actions {
@@ -1566,6 +1581,10 @@ body[data-filter-dropdown-open="true"] .date-pills {
   .site-header__profile {
     width: 2.85rem;
     height: 2.85rem;
+  }
+
+  .site-header__logo-mark {
+    width: 2.85rem;
   }
 
   .filter-chips,
