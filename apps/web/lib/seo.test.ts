@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildGigDetailUrl,
   buildRobotsConfig,
   buildSitemap,
   buildSiteStructuredData,
@@ -23,14 +24,23 @@ describe("SEO helpers", () => {
     });
   });
 
-  it("builds the first-slice sitemap with only the canonical homepage", () => {
-    expect(buildSitemap()).toEqual([
+  it("builds the sitemap with the canonical homepage and future gig URLs", () => {
+    const sitemap = buildSitemap([{ slug: "alt-thursdays" }]);
+
+    expect(sitemap).toEqual([
       {
         changeFrequency: "daily",
         priority: 1,
         url: `${SITE_URL}/`
+      },
+      {
+        changeFrequency: "daily",
+        priority: 0.8,
+        url: buildGigDetailUrl("alt-thursdays")
       }
     ]);
+    expect(sitemap.map((entry) => entry.url).join(" ")).not.toContain("?date=");
+    expect(sitemap.map((entry) => entry.url).join(" ")).not.toContain("?q=");
   });
 
   it("builds WebSite and Organization structured data", () => {

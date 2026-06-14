@@ -18,6 +18,7 @@ function createGig(
     slug: "gig-1",
     title: "ALT//THURSDAYS",
     starts_at: "2026-04-29T10:30:00.000Z",
+    ends_at: null,
     artist_names: ["Melanija"],
     image_path: null,
     source_image_url: null,
@@ -30,6 +31,7 @@ function createGig(
     venue_slug: "the-bird",
     venue_name: "The Bird",
     venue_suburb: "Northbridge",
+    venue_address: "181 William Street, Northbridge WA 6003",
     venue_website_url: "https://www.williamstreetbird.com/",
     status: "active",
     ...overrides

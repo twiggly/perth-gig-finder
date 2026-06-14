@@ -18,6 +18,7 @@ function createGig(
     slug: `gig-${id}`,
     title: `Gig ${id}`,
     starts_at: "2026-04-13T12:00:00.000Z",
+    ends_at: null,
     artist_names: [],
     image_path: null,
     source_image_url: `https://images.example.com/${id}.jpg`,
@@ -30,6 +31,7 @@ function createGig(
     venue_slug: "venue",
     venue_name: "Venue",
     venue_suburb: null,
+    venue_address: null,
     venue_website_url: null,
     status: "active",
     ...overrides

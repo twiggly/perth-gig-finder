@@ -1,5 +1,7 @@
 import type { MetadataRoute } from "next";
 
+import type { GigSitemapRecord } from "./gigs";
+
 export const SITE_URL = "https://gigradar.com.au";
 export const SITE_TITLE = "Gig Radar";
 export const SITE_DESCRIPTION =
@@ -12,6 +14,14 @@ export const SITE_LOGO_URL = `${SITE_URL}${SITE_LOGO_PATH}`;
 export const SITE_SITEMAP_URL = `${SITE_URL}/sitemap.xml`;
 export const SITE_SEARCH_URL_TEMPLATE = `${SITE_URL}/?q={search_term_string}`;
 
+export function buildGigDetailPath(slug: string): string {
+  return `/gigs/${encodeURIComponent(slug)}`;
+}
+
+export function buildGigDetailUrl(slug: string): string {
+  return `${SITE_URL}${buildGigDetailPath(slug)}`;
+}
+
 export function buildRobotsConfig(): MetadataRoute.Robots {
   return {
     rules: {
@@ -23,13 +33,20 @@ export function buildRobotsConfig(): MetadataRoute.Robots {
   };
 }
 
-export function buildSitemap(): MetadataRoute.Sitemap {
+export function buildSitemap(
+  gigs: GigSitemapRecord[] = []
+): MetadataRoute.Sitemap {
   return [
     {
       changeFrequency: "daily",
       priority: 1,
       url: `${SITE_URL}/`
-    }
+    },
+    ...gigs.map((gig) => ({
+      changeFrequency: "daily" as const,
+      priority: 0.8,
+      url: buildGigDetailUrl(gig.slug)
+    }))
   ];
 }
 
