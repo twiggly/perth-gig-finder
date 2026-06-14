@@ -16,6 +16,7 @@ function createGig(
     slug: "gig-1",
     title: "ALT//THURSDAYS",
     starts_at: "2026-04-23T10:30:00.000Z",
+    ends_at: null,
     artist_names: ["Melānija", "Esper", "softwarebodyIV"],
     image_path: null,
     source_image_url: null,
@@ -28,6 +29,7 @@ function createGig(
     venue_slug: "the-bird",
     venue_name: "The Bird",
     venue_suburb: "Northbridge",
+    venue_address: "181 William Street, Northbridge WA 6003",
     venue_website_url: "https://www.williamstreetbird.com/",
     status: "active",
     ...overrides
@@ -53,6 +55,8 @@ describe("GigCard", () => {
     const venueIndex = html.indexOf("gig-card__venue");
 
     expect(html).toContain("ALT//THURSDAYS");
+    expect(html).toContain('href="/gigs/gig-1"');
+    expect(html).toContain("gig-card__detail-link");
     expect(html).toContain("gig-card__artists");
     expect(html).toContain("gig-card__venue-icon");
     expect(timeIndex).toBeGreaterThanOrEqual(0);

@@ -1,8 +1,6 @@
 import { HomepageFilters } from "@/components/homepage-filters";
 import { HomepageDayBrowser } from "@/components/homepage-day-browser";
-import { SiteHeaderActions } from "@/components/site-header-actions";
-import { SiteHeaderBrand } from "@/components/site-header-brand";
-import { SiteHeaderEyebrow } from "@/components/site-header-eyebrow";
+import { SiteHeader } from "@/components/site-header";
 import { getHydratedHomepageDayDateKeys } from "@/lib/homepage-day-loading";
 import { resolveHomepageDateKey } from "@/lib/homepage-dates";
 import { parseHomepageFilters } from "@/lib/homepage-filters";
@@ -73,10 +71,7 @@ async function ConfiguredHomepage({
   return (
     <>
       <div className="top-panel">
-        <header className="site-header">
-          <SiteHeaderEyebrow />
-          <SiteHeaderBrand />
-        </header>
+        <SiteHeader actions />
         <div className="top-panel__filters">
           <HomepageFilters
             activeDateKey={activeDateKey}
@@ -85,7 +80,6 @@ async function ConfiguredHomepage({
             selectedVenues={selectedVenues}
           />
         </div>
-        <SiteHeaderActions />
       </div>
       {availableDays.length === 0 ||
       !activeDateKey ||

@@ -16,6 +16,7 @@ export interface GigCardRecord {
   slug: string;
   title: string;
   starts_at: string;
+  ends_at: string | null;
   artist_names: string[];
   image_path: string | null;
   source_image_url: string | null;
@@ -28,8 +29,13 @@ export interface GigCardRecord {
   venue_slug: string;
   venue_name: string;
   venue_suburb: string | null;
+  venue_address: string | null;
   venue_website_url: string | null;
   status: GigStatus;
+}
+
+export interface GigSitemapRecord {
+  slug: string;
 }
 
 export interface HomepageDateAvailabilityRecord {
@@ -54,6 +60,9 @@ interface GigImageRecord {
 interface GigImageGroup {
   items: GigCardRecord[];
 }
+
+const GIG_CARD_SELECT =
+  "id, slug, title, starts_at, ends_at, artist_names, image_path, source_image_url, image_width, image_height, image_version, ticket_url, source_url, source_name, venue_slug, venue_name, venue_suburb, venue_address, venue_website_url, status";
 
 function normalizeGigCard(
   gig: GigCardRecord & { artist_names: string[] | null }
@@ -103,9 +112,7 @@ export async function listUpcomingGigs(
   const lowerBound = getHomepageLowerBound(new Date());
   let query = client
     .from("gig_cards")
-    .select(
-      "id, slug, title, starts_at, artist_names, image_path, source_image_url, image_width, image_height, image_version, ticket_url, source_url, source_name, venue_slug, venue_name, venue_suburb, venue_website_url, status"
-    )
+    .select(GIG_CARD_SELECT)
     .eq("status", "active")
     .gte("starts_at", lowerBound.toISOString())
     .order("starts_at", { ascending: true });
@@ -187,9 +194,7 @@ export async function listGigsForDate(
   const client = createSupabaseServerClient();
   let query = client
     .from("gig_cards")
-    .select(
-      "id, slug, title, starts_at, artist_names, image_path, source_image_url, image_width, image_height, image_version, ticket_url, source_url, source_name, venue_slug, venue_name, venue_suburb, venue_website_url, status"
-    )
+    .select(GIG_CARD_SELECT)
     .eq("status", "active")
     .gte("starts_at", startsAtLowerBound.toISOString())
     .lt("starts_at", bounds.end.toISOString())
@@ -216,6 +221,53 @@ export async function listGigsForDate(
     heading: formatDateHeading(dateKey),
     items: gigs
   };
+}
+
+export async function getGigBySlug(slug: string): Promise<GigCardRecord | null> {
+  const trimmedSlug = slug.trim();
+
+  if (!trimmedSlug) {
+    return null;
+  }
+
+  const client = createSupabaseServerClient();
+  const lowerBound = getHomepageLowerBound(new Date());
+  const { data, error } = await client
+    .from("gig_cards")
+    .select(GIG_CARD_SELECT)
+    .eq("slug", trimmedSlug)
+    .eq("status", "active")
+    .gte("starts_at", lowerBound.toISOString())
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data
+    ? normalizeGigCard(
+        data as GigCardRecord & { artist_names: string[] | null }
+      )
+    : null;
+}
+
+export async function listGigSitemapEntries(): Promise<GigSitemapRecord[]> {
+  const client = createSupabaseServerClient();
+  const lowerBound = getHomepageLowerBound(new Date());
+  const { data, error } = await client
+    .from("gig_cards")
+    .select("slug")
+    .eq("status", "active")
+    .gte("starts_at", lowerBound.toISOString())
+    .order("starts_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return ((data ?? []) as GigSitemapRecord[]).filter((gig) =>
+    Boolean(gig.slug)
+  );
 }
 
 function encodeStoragePath(path: string): string {

@@ -2,15 +2,18 @@
 
 import React, { useEffect, useRef } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { Anchor, Box, Text, Title, UnstyledButton } from "@mantine/core";
 
 import { getGigActions } from "@/lib/gig-actions";
 import { formatGigCardArtists } from "@/lib/gig-card-artists";
+import { recordCurrentGigDetailReturnState } from "@/lib/gig-detail-return";
 import {
   getRenderableGigImageUrl,
   hasRenderableGigImage,
   type GigCardRecord
 } from "@/lib/gigs";
+import { buildGigDetailPath } from "@/lib/seo";
 
 const GIG_CARD_IMAGE_SIZES =
   "(max-width: 480px) 88px, (max-width: 720px) 115px, 168px";
@@ -96,6 +99,18 @@ export function GigCard({ gig, isOpen, onClose, onToggle }: GigCardProps) {
     .filter(Boolean)
     .join(" ");
 
+  function handleDetailLinkClick(event: React.MouseEvent<HTMLAnchorElement>) {
+    recordCurrentGigDetailReturnState(gig.slug, gig.starts_at, {
+      altKey: event.altKey,
+      button: event.button,
+      ctrlKey: event.ctrlKey,
+      defaultPrevented: event.defaultPrevented,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+      target: event.currentTarget.target
+    });
+  }
+
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -147,7 +162,13 @@ export function GigCard({ gig, isOpen, onClose, onToggle }: GigCardProps) {
         {formatGigDate(gig.starts_at)}
       </Text>
       <Title className="gig-card__title" order={2}>
-        {gig.title}
+        <Link
+          className="gig-card__detail-link"
+          href={buildGigDetailPath(gig.slug)}
+          onClick={handleDetailLinkClick}
+        >
+          {gig.title}
+        </Link>
       </Title>
       {artistLine ? (
         <Text className="gig-card__artists" component="p">
