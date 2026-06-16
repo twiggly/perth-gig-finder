@@ -41,6 +41,8 @@ interface UseHomepageDayNavigationOptions {
   initialActiveDateKey: string;
   initialDays: HomepageDayPayload[];
   isLoadingDay: boolean;
+  onDateChangeCancel?: () => void;
+  onDateChangeStart?: (nextDateKey: string) => void;
   resetAdjacentImagePreloads: () => void;
   resetDayLoadError: () => void;
   resetDayWheelGesture: () => void;
@@ -61,6 +63,7 @@ const HEADING_TRANSITION_DISTANCE_PX = 36;
 const CONTENT_TRANSITION_DURATION_MS = HEADING_TRANSITION_DURATION_MS;
 const CONTENT_TRANSITION_EASING = HEADING_TRANSITION_EASING;
 const CONTENT_TRANSITION_DISTANCE_PX = HEADING_TRANSITION_DISTANCE_PX;
+const TRANSITION_COMMIT_BUFFER_MS = 20;
 
 export function buildHomepageDayTransitionPanes(
   activeDateKey: string,
@@ -114,6 +117,8 @@ export function useHomepageDayNavigation({
   initialActiveDateKey,
   initialDays,
   isLoadingDay,
+  onDateChangeCancel,
+  onDateChangeStart,
   resetAdjacentImagePreloads,
   resetDayLoadError,
   resetDayWheelGesture,
@@ -270,9 +275,13 @@ export function useHomepageDayNavigation({
       return;
     }
 
+    const transitionCommitDelay =
+      Math.max(HEADING_TRANSITION_DURATION_MS, CONTENT_TRANSITION_DURATION_MS) +
+      TRANSITION_COMMIT_BUFFER_MS;
+
     transitionTimeoutRef.current = window.setTimeout(() => {
       finishTransition(transition.toDateKey);
-    }, Math.max(HEADING_TRANSITION_DURATION_MS, CONTENT_TRANSITION_DURATION_MS) + 60);
+    }, transitionCommitDelay);
 
     return () => {
       if (transitionTimeoutRef.current !== null) {
@@ -314,6 +323,10 @@ export function useHomepageDayNavigation({
       return false;
     }
 
+    if (nextDateKey !== activeDateKey) {
+      onDateChangeStart?.(nextDateKey);
+    }
+
     closeOpenGig();
     closeCalendar();
     resetDayLoadError();
@@ -326,6 +339,8 @@ export function useHomepageDayNavigation({
     const hasDay = await ensureHomepageDayForNavigation(nextDateKey);
 
     if (!hasDay) {
+      onDateChangeCancel?.();
+
       if (options.revertUrlOnFailure || options.urlAlreadyUpdated) {
         replaceHomepageDateInUrl(pathname, activeDateKey);
       }

@@ -44,10 +44,17 @@ export function useHomepageDayStickyHeader() {
     window.addEventListener("scroll", scheduleDateHeaderStickinessMeasure, {
       passive: true
     });
+    document.addEventListener("scroll", scheduleDateHeaderStickinessMeasure, {
+      passive: true
+    });
     window.addEventListener("resize", scheduleDateHeaderStickinessMeasure);
 
     return () => {
       window.removeEventListener("scroll", scheduleDateHeaderStickinessMeasure);
+      document.removeEventListener(
+        "scroll",
+        scheduleDateHeaderStickinessMeasure
+      );
       window.removeEventListener("resize", scheduleDateHeaderStickinessMeasure);
 
       if (stickyFrameRef.current !== null) {

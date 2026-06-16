@@ -60,6 +60,7 @@ This file is for coding agents working in this repository. Keep it short, practi
 - Hosted refresh audits run in non-strict mode: hard audit errors fail, warning-level findings remain visible.
 - Hosted audit history rows live in private `public.audit_runs` records and require `SUPABASE_SERVICE_ROLE_KEY`; do not grant public access to that table.
 - Use `pnpm audit:gigs -- --supabase --reconcile-sources` when comparing scraper/source counts with public homepage counts; it reports active public cards separately from source ownership handoffs and postponed/cancelled source rows.
+- After merging Supabase migrations that affect web queries or public views, check hosted migration state with `supabase migration list --linked` and apply pending hosted migrations before declaring production healthy.
 - The hosted GitHub runner currently excludes `ticketmaster-au`, because Ticketmaster blocks it with `403` responses there.
 - A few poster mirror failures should not fail the whole hosted refresh workflow.
 
@@ -107,4 +108,5 @@ This file is for coding agents working in this repository. Keep it short, practi
 
 - If local web commands fail, check Node version first, then Docker/Colima, then Supabase.
 - If hosted refresh fails in image backfill, inspect source image URLs before changing mirror limits.
+- If production returns `500` after a deploy but local works, check for hosted Supabase schema drift before changing app code.
 - If Vercel preview behavior differs from local, verify environment variables and deployment context before changing app code.
