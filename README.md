@@ -14,6 +14,7 @@ Users should be able to:
 
 - browse upcoming gigs in Perth
 - search and filter by artist, venue, suburb, date, and genre
+- open shareable gig detail pages
 - click through to the original source listing
 - trust that listings are recent, deduplicated, and clearly sourced
 
@@ -103,7 +104,7 @@ Good first pages:
 
 - `/`
 - `/gigs`
-- `/gigs/[slug]`
+- `/gigs/[slug]` (live for active future gigs)
 - `/venues/[slug]`
 
 ## MVP Status
@@ -118,12 +119,14 @@ Good first pages:
   - `Ticketek WA` filtered down to Perth-metro live music results
   - `Ticketmaster AU` filtered down to direct Perth music listings
 - The homepage supports search, venue chips, day-by-day navigation, mirrored gig images, and mobile/trackpad-friendly browsing.
+- Active future gigs have crawlable `/gigs/[slug]` detail pages with canonical metadata, Event JSON-LD, and links from homepage cards.
+- SEO discovery endpoints are live through `/robots.txt` and `/sitemap.xml`.
 - Mirrored source images are stored in Supabase Storage and preferred over third-party hotlinks.
-- Production is live on Vercel, and Git-connected preview deployments are enabled for this repository.
+- Production is live at `https://gigradar.com.au` on Vercel, and Git-connected preview deployments are enabled for this repository.
 
 ## Current Limitations
 
-- The public site is still homepage-first; venue pages and gig detail pages are not built yet.
+- The public site is still homepage-first; venue pages are not built yet.
 - Scraping is still manual in local development, but hosted Supabase refreshes now run on a schedule through GitHub Actions.
 - The preview server still uses a local wrapper because mobile Safari was caching stale preview assets aggressively, but it now builds in an isolated temp workspace instead of sharing Next build output with the main checkout.
 
@@ -132,6 +135,7 @@ Good first pages:
 - Production is deployed on Vercel.
 - Git-connected preview deployments are created from repository pushes.
 - Hosted preview and production deployments use the hosted Supabase project configured in Vercel.
+- Apply hosted Supabase migrations before or alongside deploying web code that depends on new public view columns.
 - Hosted data refresh runs through [/.github/workflows/refresh-hosted-gigs.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-hosted-gigs.yml).
 - Hosted artist provenance repairs run through [/.github/workflows/repair-hosted-artists.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/repair-hosted-artists.yml).
 - `ticketmaster-au` runs separately through [/.github/workflows/refresh-ticketmaster-self-hosted.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-ticketmaster-self-hosted.yml) on a self-hosted runner labeled `perth-gig-finder` and `ticketmaster`, because GitHub-hosted runners are currently blocked with `403` responses.

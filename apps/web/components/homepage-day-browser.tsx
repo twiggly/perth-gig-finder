@@ -7,6 +7,7 @@ import React, {
   useState
 } from "react";
 import { ActionIcon, Box, Popover, Text, UnstyledButton } from "@mantine/core";
+import { flushSync } from "react-dom";
 
 import {
   buildHomepageCalendarMonth,
@@ -27,6 +28,7 @@ import { HomepageDayContent } from "./homepage-day-content";
 import { useHomepageDayCache } from "./use-homepage-day-cache";
 import { useHomepageDayGestures } from "./use-homepage-day-gestures";
 import { useHomepageDayNavigation } from "./use-homepage-day-navigation";
+import { useHomepageDayScrollRestoration } from "./use-homepage-day-scroll-restoration";
 import { useHomepageDayStickyHeader } from "./use-homepage-day-sticky-header";
 
 interface HomepageDayBrowserProps {
@@ -48,6 +50,12 @@ export function HomepageDayBrowser({
   selectedVenueSlugs
 }: HomepageDayBrowserProps) {
   const previewAssetRevision = LOCAL_PREVIEW_ASSET_REVISION;
+  const scrollTargetContentRef = useRef<HTMLDivElement | null>(null);
+  const captureDateChangeLayoutRef = useRef<(targetDateKey?: string) => void>(
+    () => {}
+  );
+  const clearDateChangeLayoutRef = useRef<() => void>(() => {});
+  const dateHeaderRef = useRef<HTMLDivElement | null>(null);
   const resetAdjacentImagePreloadsRef = useRef<() => void>(() => {});
   const resetDayWheelGestureRef = useRef<() => void>(() => {});
   const [calendarMonthKey, setCalendarMonthKey] = useState<string | null>(null);
@@ -98,6 +106,9 @@ export function HomepageDayBrowser({
     initialActiveDateKey,
     initialDays,
     isLoadingDay,
+    onDateChangeCancel: () => clearDateChangeLayoutRef.current(),
+    onDateChangeStart: (nextDateKey) =>
+      captureDateChangeLayoutSynchronously(nextDateKey),
     resetAdjacentImagePreloads: () => resetAdjacentImagePreloadsRef.current(),
     resetDayLoadError,
     resetDayWheelGesture: () => resetDayWheelGestureRef.current(),
@@ -128,7 +139,7 @@ export function HomepageDayBrowser({
   } = useHomepageDayGestures({
     isNavigationLocked,
     onNavigateCalendarMonth: handleCalendarMonthNavigate,
-    onNavigateDate: navigateAdjacentDate
+    onNavigateDate: handleNavigateDate
   });
   resetDayWheelGestureRef.current = resetDayWheelGesture;
   const { isDateHeaderStuck, stickySentinelRef } =
@@ -140,6 +151,41 @@ export function HomepageDayBrowser({
     previousDateKey
   });
   resetAdjacentImagePreloadsRef.current = resetAdjacentImagePreloads;
+  const {
+    captureDateChangeLayout,
+    clearDateChangeLayout,
+    scrollAlignmentDateKey,
+    scrollAlignmentOffset,
+    scrollCarryoverDateKey,
+    scrollCarryoverReserve,
+    scrollReserveHeight,
+    scrollReserveTargetDateKey
+  } = useHomepageDayScrollRestoration({
+    activeDateKey,
+    isContentAnimating,
+    isDateTransitioning: transition !== null,
+    isDateHeaderStuck,
+    scrollTargetContentRef,
+    stickyHeaderRef: dateHeaderRef,
+    stickySentinelRef
+  });
+  captureDateChangeLayoutRef.current = captureDateChangeLayout;
+  clearDateChangeLayoutRef.current = clearDateChangeLayout;
+  const dayContentViewportStyle = useMemo(
+    () =>
+      ({
+        ...contentViewportStyle,
+        "--day-browser-scroll-align-y": `${scrollAlignmentOffset}px`,
+        "--day-browser-scroll-carryover-reserve": `${scrollCarryoverReserve}px`,
+        "--day-browser-scroll-reserve": `${scrollReserveHeight}px`
+      }) as React.CSSProperties,
+    [
+      contentViewportStyle,
+      scrollAlignmentOffset,
+      scrollCarryoverReserve,
+      scrollReserveHeight
+    ]
+  );
 
   useEffect(() => {
     if (typeof window === "undefined" || !activeDateKey) {
@@ -175,11 +221,12 @@ export function HomepageDayBrowser({
       return;
     }
 
-    setIsCalendarOpen(false);
-
     if (dateKey === activeDateKey) {
+      setIsCalendarOpen(false);
       return;
     }
+
+    setIsCalendarOpen(false);
 
     void requestDateChange(dateKey, {
       announce: true,
@@ -206,6 +253,22 @@ export function HomepageDayBrowser({
     return true;
   }
 
+  function handleNavigateDate(direction: SwipeDirection): boolean {
+    const didNavigate = navigateAdjacentDate(direction);
+
+    if (!didNavigate) {
+      clearDateChangeLayout();
+    }
+
+    return didNavigate;
+  }
+
+  function captureDateChangeLayoutSynchronously(targetDateKey?: string) {
+    flushSync(() => {
+      captureDateChangeLayoutRef.current(targetDateKey);
+    });
+  }
+
   if (!activeDay) {
     return null;
   }
@@ -227,12 +290,13 @@ export function HomepageDayBrowser({
       <Box
         className="day-browser__header"
         data-stuck={isDateHeaderStuck ? "true" : undefined}
+        ref={dateHeaderRef}
       >
         <ActionIcon
           aria-label="Previous date"
           className="day-browser__arrow"
           disabled={!previousDateKey || isNavigationLocked}
-          onClick={() => navigateAdjacentDate("previous")}
+          onClick={() => handleNavigateDate("previous")}
           type="button"
           variant="subtle"
         >
@@ -302,7 +366,7 @@ export function HomepageDayBrowser({
           aria-label="Next date"
           className="day-browser__arrow"
           disabled={!nextDateKey || isNavigationLocked}
-          onClick={() => navigateAdjacentDate("next")}
+          onClick={() => handleNavigateDate("next")}
           type="button"
           variant="subtle"
         >
@@ -321,7 +385,8 @@ export function HomepageDayBrowser({
       ) : null}
 
       <HomepageDayContent
-        contentViewportStyle={contentViewportStyle}
+        activeDateKey={activeDateKey}
+        contentViewportStyle={dayContentViewportStyle}
         isContentAnimating={isContentAnimating}
         loadedDayMap={loadedDayMap}
         onCloseGig={(gigId) =>
@@ -332,6 +397,10 @@ export function HomepageDayBrowser({
         }
         openGigId={openGigId}
         renderedContentPanes={renderedContentPanes}
+        scrollAlignmentDateKey={scrollAlignmentDateKey}
+        scrollCarryoverDateKey={scrollCarryoverDateKey}
+        scrollReserveTargetDateKey={scrollReserveTargetDateKey}
+        scrollTargetContentRef={scrollTargetContentRef}
         transitionDirection={transition?.direction}
       />
     </section>

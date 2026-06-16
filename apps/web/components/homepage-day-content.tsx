@@ -9,6 +9,7 @@ import type { SwipeDirection } from "@/lib/homepage-dates";
 import type { DayBrowserPaneState } from "./use-homepage-day-navigation";
 
 interface HomepageDayContentProps {
+  activeDateKey: string;
   contentViewportStyle: CSSProperties;
   isContentAnimating: boolean;
   loadedDayMap: Map<string, HomepageDayPayload>;
@@ -16,10 +17,15 @@ interface HomepageDayContentProps {
   onToggleGig: (gigId: string) => void;
   openGigId: string | null;
   renderedContentPanes: DayBrowserPaneState[];
+  scrollAlignmentDateKey: string | null;
+  scrollCarryoverDateKey: string | null;
+  scrollReserveTargetDateKey: string | null;
+  scrollTargetContentRef: React.Ref<HTMLDivElement>;
   transitionDirection?: SwipeDirection;
 }
 
 export function HomepageDayContent({
+  activeDateKey,
   contentViewportStyle,
   isContentAnimating,
   loadedDayMap,
@@ -27,6 +33,10 @@ export function HomepageDayContent({
   onToggleGig,
   openGigId,
   renderedContentPanes,
+  scrollAlignmentDateKey,
+  scrollCarryoverDateKey,
+  scrollReserveTargetDateKey,
+  scrollTargetContentRef,
   transitionDirection
 }: HomepageDayContentProps) {
   return (
@@ -42,6 +52,15 @@ export function HomepageDayContent({
         {renderedContentPanes.map((pane) => {
           const { dateKey, motionRole, phase } = pane;
           const day = loadedDayMap.get(dateKey);
+          const isActivePane =
+            motionRole === "active" && dateKey === activeDateKey;
+          const isScrollReserveTarget =
+            dateKey === scrollReserveTargetDateKey &&
+            (motionRole === "active" || motionRole === "to");
+          const isScrollReserveCarryover =
+            dateKey === scrollCarryoverDateKey && !isScrollReserveTarget;
+          const isScrollAlignTarget =
+            dateKey === scrollAlignmentDateKey && motionRole === "to";
 
           if (!day) {
             return null;
@@ -53,18 +72,42 @@ export function HomepageDayContent({
               className="day-browser__content-pane"
               data-motion-role={motionRole}
               data-phase={phase ?? undefined}
+              data-scroll-reserve-carryover={
+                isScrollReserveCarryover ? "true" : undefined
+              }
+              data-scroll-reserve-target={
+                isScrollReserveTarget ? "true" : undefined
+              }
               key={dateKey}
             >
-              <Box className="gig-grid" data-date={dateKey}>
-                {day.items.map((gig) => (
-                  <GigCard
-                    gig={gig}
-                    isOpen={openGigId === gig.id}
-                    key={gig.id}
-                    onClose={() => onCloseGig(gig.id)}
-                    onToggle={() => onToggleGig(gig.id)}
-                  />
-                ))}
+              <Box
+                className="day-browser__content-align"
+                data-scroll-align-target={
+                  isScrollAlignTarget ? "true" : undefined
+                }
+              >
+                <Box
+                  className="gig-grid"
+                  data-active-date={isActivePane ? "true" : undefined}
+                  data-date={dateKey}
+                  ref={
+                    isScrollReserveTarget ? scrollTargetContentRef : undefined
+                  }
+                >
+                  {day.items.map((gig) => (
+                    <GigCard
+                      gig={gig}
+                      isOpen={openGigId === gig.id}
+                      key={gig.id}
+                      onClose={() => onCloseGig(gig.id)}
+                      onToggle={() => onToggleGig(gig.id)}
+                    />
+                  ))}
+                </Box>
+                <span
+                  aria-hidden="true"
+                  className="day-browser__scroll-reserve"
+                />
               </Box>
             </Box>
           );
