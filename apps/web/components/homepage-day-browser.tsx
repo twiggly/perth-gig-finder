@@ -2,6 +2,7 @@
 
 import React, {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState
@@ -59,6 +60,11 @@ export function HomepageDayBrowser({
   const resetAdjacentImagePreloadsRef = useRef<() => void>(() => {});
   const resetDayWheelGestureRef = useRef<() => void>(() => {});
   const [calendarMonthKey, setCalendarMonthKey] = useState<string | null>(null);
+  const [dateHeaderMetrics, setDateHeaderMetrics] = useState<{
+    height: number;
+    left: number;
+    width: number;
+  } | null>(null);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [openGigId, setOpenGigId] = useState<string | null>(null);
   const [todayDateKey] = useState(() => getPerthDateKey(new Date()));
@@ -189,6 +195,65 @@ export function HomepageDayBrowser({
   );
   const isDateHeaderVisuallyStuck =
     isDateHeaderStuck || isStickyTransitionVisualLockActive;
+  const dateHeaderShellStyle = useMemo(
+    () =>
+      dateHeaderMetrics
+        ? ({
+            "--day-browser-header-height": `${dateHeaderMetrics.height}px`,
+            "--day-browser-header-left": `${dateHeaderMetrics.left}px`,
+            "--day-browser-header-transform": "translateX(0)",
+            "--day-browser-header-width": `${dateHeaderMetrics.width}px`
+          } as React.CSSProperties)
+        : undefined,
+    [dateHeaderMetrics]
+  );
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const header = dateHeaderRef.current;
+
+    if (!header) {
+      return undefined;
+    }
+
+    const observedHeader = header;
+
+    function updateHeaderMetrics() {
+      const rect = observedHeader.getBoundingClientRect();
+      const nextMetrics = {
+        height: Math.ceil(rect.height),
+        left: Math.round(rect.left * 100) / 100,
+        width: Math.round(rect.width * 100) / 100
+      };
+
+      setDateHeaderMetrics((currentMetrics) =>
+        currentMetrics &&
+        currentMetrics.height === nextMetrics.height &&
+        currentMetrics.left === nextMetrics.left &&
+        currentMetrics.width === nextMetrics.width
+          ? currentMetrics
+          : nextMetrics
+      );
+    }
+
+    updateHeaderMetrics();
+
+    const resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(updateHeaderMetrics);
+
+    resizeObserver?.observe(observedHeader);
+    window.addEventListener("resize", updateHeaderMetrics);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", updateHeaderMetrics);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined" || !activeDateKey) {
@@ -291,93 +356,103 @@ export function HomepageDayBrowser({
         ref={stickySentinelRef}
       />
       <Box
-        className="day-browser__header"
+        className="day-browser__header-shell"
         data-sticky-transition-lock={
           isStickyTransitionVisualLockActive ? "true" : undefined
         }
-        data-stuck={isDateHeaderVisuallyStuck ? "true" : undefined}
-        ref={dateHeaderRef}
+        style={dateHeaderShellStyle}
       >
-        <ActionIcon
-          aria-label="Previous date"
-          className="day-browser__arrow"
-          disabled={!previousDateKey || isNavigationLocked}
-          onClick={() => handleNavigateDate("previous")}
-          type="button"
-          variant="subtle"
+        <Box
+          className="day-browser__header"
+          data-sticky-transition-lock={
+            isStickyTransitionVisualLockActive ? "true" : undefined
+          }
+          data-stuck={isDateHeaderVisuallyStuck ? "true" : undefined}
+          ref={dateHeaderRef}
         >
-          <span aria-hidden="true">&lt;</span>
-        </ActionIcon>
-        <Popover
-          middlewares={{ flip: true, shift: true }}
-          onChange={setIsCalendarOpen}
-          opened={isCalendarOpen}
-          position="bottom"
-          shadow="xl"
-          width="auto"
-          withArrow
-        >
-          <Popover.Target>
-            <UnstyledButton
-              aria-expanded={isCalendarOpen}
-              aria-haspopup="dialog"
-              aria-label={`Choose date, currently ${activeDay.heading}`}
-              className="day-browser__heading-button"
-              disabled={isNavigationLocked || !calendarMonth}
-              onClick={() => setIsCalendarOpen((current) => !current)}
-              type="button"
-            >
-              <span className="sr-only">{activeDay.heading}</span>
-              <Box className="day-browser__heading-viewport">
-                <Box
-                  className="day-browser__heading-track"
-                  data-direction={transition?.direction}
-                  style={headingTrackStyle}
-                >
-                  {renderedHeadingPanes.map(({ dateKey, motionRole, phase }) => (
-                    <Box
-                      className="day-browser__heading-pane"
-                      data-motion-role={motionRole}
-                      data-phase={phase ?? undefined}
-                      key={`heading-${dateKey}`}
-                    >
-                      <span className="day-browser__heading-title">
-                        {loadedDayMap.get(dateKey)?.heading ??
-                          availableDayMap.get(dateKey)?.heading ??
-                          activeDay.heading}
-                      </span>
-                    </Box>
-                  ))}
+          <ActionIcon
+            aria-label="Previous date"
+            className="day-browser__arrow"
+            disabled={!previousDateKey || isNavigationLocked}
+            onClick={() => handleNavigateDate("previous")}
+            type="button"
+            variant="subtle"
+          >
+            <span aria-hidden="true">&lt;</span>
+          </ActionIcon>
+          <Popover
+            middlewares={{ flip: true, shift: true }}
+            onChange={setIsCalendarOpen}
+            opened={isCalendarOpen}
+            position="bottom"
+            shadow="xl"
+            width="auto"
+            withArrow
+          >
+            <Popover.Target>
+              <UnstyledButton
+                aria-expanded={isCalendarOpen}
+                aria-haspopup="dialog"
+                aria-label={`Choose date, currently ${activeDay.heading}`}
+                className="day-browser__heading-button"
+                disabled={isNavigationLocked || !calendarMonth}
+                onClick={() => setIsCalendarOpen((current) => !current)}
+                type="button"
+              >
+                <span className="sr-only">{activeDay.heading}</span>
+                <Box className="day-browser__heading-viewport">
+                  <Box
+                    className="day-browser__heading-track"
+                    data-direction={transition?.direction}
+                    style={headingTrackStyle}
+                  >
+                    {renderedHeadingPanes.map(
+                      ({ dateKey, motionRole, phase }) => (
+                        <Box
+                          className="day-browser__heading-pane"
+                          data-motion-role={motionRole}
+                          data-phase={phase ?? undefined}
+                          key={`heading-${dateKey}`}
+                        >
+                          <span className="day-browser__heading-title">
+                            {loadedDayMap.get(dateKey)?.heading ??
+                              availableDayMap.get(dateKey)?.heading ??
+                              activeDay.heading}
+                          </span>
+                        </Box>
+                      )
+                    )}
+                  </Box>
                 </Box>
-              </Box>
-            </UnstyledButton>
-          </Popover.Target>
-          <HomepageDayCalendarDropdown
-            calendarGestureHandlers={calendarGestureHandlers}
-            calendarMonth={calendarMonth}
-            onNextMonth={() => {
-              if (calendarMonth?.nextMonthKey) {
-                setCalendarMonthKey(calendarMonth.nextMonthKey);
-              }
-            }}
-            onPreviousMonth={() => {
-              if (calendarMonth?.previousMonthKey) {
-                setCalendarMonthKey(calendarMonth.previousMonthKey);
-              }
-            }}
-            onSelectDate={handleCalendarDateSelect}
-          />
-        </Popover>
-        <ActionIcon
-          aria-label="Next date"
-          className="day-browser__arrow"
-          disabled={!nextDateKey || isNavigationLocked}
-          onClick={() => handleNavigateDate("next")}
-          type="button"
-          variant="subtle"
-        >
-          <span aria-hidden="true">&gt;</span>
-        </ActionIcon>
+              </UnstyledButton>
+            </Popover.Target>
+            <HomepageDayCalendarDropdown
+              calendarGestureHandlers={calendarGestureHandlers}
+              calendarMonth={calendarMonth}
+              onNextMonth={() => {
+                if (calendarMonth?.nextMonthKey) {
+                  setCalendarMonthKey(calendarMonth.nextMonthKey);
+                }
+              }}
+              onPreviousMonth={() => {
+                if (calendarMonth?.previousMonthKey) {
+                  setCalendarMonthKey(calendarMonth.previousMonthKey);
+                }
+              }}
+              onSelectDate={handleCalendarDateSelect}
+            />
+          </Popover>
+          <ActionIcon
+            aria-label="Next date"
+            className="day-browser__arrow"
+            disabled={!nextDateKey || isNavigationLocked}
+            onClick={() => handleNavigateDate("next")}
+            type="button"
+            variant="subtle"
+          >
+            <span aria-hidden="true">&gt;</span>
+          </ActionIcon>
+        </Box>
       </Box>
       {isLoadingDay ? (
         <span className="sr-only" role="status">
