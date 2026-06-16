@@ -82,6 +82,7 @@ const STICKY_ACTIVATION_OFFSET_PX = 1;
 const STICKY_SCROLL_INTENT_STORAGE_KEY =
   "gig-radar:homepage-day-sticky-scroll-intent";
 const STICKY_SCROLL_INTENT_TTL_MS = 30000;
+const STICKY_VISUAL_LOCK_FAILSAFE_MS = 480;
 const EMPTY_RESERVE_PLAN: HomepageDayScrollReservePlan = {
   alignmentOffset: 0,
   dateKey: null,
@@ -171,17 +172,35 @@ export function shouldEnableHomepageDayStickyVisualLock(
 }
 
 export function shouldKeepHomepageDayStickyVisualLock({
+  hasPendingScrollTarget = false,
+  hasPendingStickyIntent = false,
   isContentAnimating,
+  isDateHeaderStuck,
   isDateTransitioning,
-  reserveMode
+  reserveMode,
+  stickySentinelTop
 }: {
+  hasPendingScrollTarget?: boolean;
+  hasPendingStickyIntent?: boolean;
   isContentAnimating: boolean;
+  isDateHeaderStuck: boolean;
   isDateTransitioning: boolean;
   reserveMode: HomepageDayScrollIntentMode | null;
+  stickySentinelTop: number;
 }): boolean {
-  return Boolean(
-    reserveMode === "sticky" && (isContentAnimating || isDateTransitioning)
-  );
+  if (hasPendingStickyIntent || hasPendingScrollTarget) {
+    return true;
+  }
+
+  if (reserveMode !== "sticky") {
+    return false;
+  }
+
+  if (isContentAnimating || isDateTransitioning) {
+    return true;
+  }
+
+  return !isDateHeaderStuck && stickySentinelTop >= 0;
 }
 
 export function getHomepageDayScrollTarget({
@@ -485,6 +504,7 @@ export function useHomepageDayScrollRestoration(
   const reservePlanRef =
     useRef<HomepageDayScrollReservePlan>(EMPTY_RESERVE_PLAN);
   const scrollRestoreFrameRef = useRef<number | null>(null);
+  const stickyVisualLockFailSafeRef = useRef<number | null>(null);
   const stickyVisualLockFrameRef = useRef<number | null>(null);
   const stickyVisualLockRef = useRef(false);
   const [reservePlan, setReservePlan] =
@@ -514,6 +534,13 @@ export function useHomepageDayScrollRestoration(
     }
   }
 
+  function cancelStickyVisualLockFailSafe() {
+    if (stickyVisualLockFailSafeRef.current !== null) {
+      window.clearTimeout(stickyVisualLockFailSafeRef.current);
+      stickyVisualLockFailSafeRef.current = null;
+    }
+  }
+
   function setStickyTransitionVisualLock(nextIsActive: boolean) {
     if (stickyVisualLockRef.current === nextIsActive) {
       return;
@@ -525,20 +552,37 @@ export function useHomepageDayScrollRestoration(
 
   function enableStickyTransitionVisualLock() {
     cancelStickyVisualLockFrame();
+    cancelStickyVisualLockFailSafe();
     setStickyTransitionVisualLock(true);
   }
 
   function clearStickyTransitionVisualLock() {
     cancelStickyVisualLockFrame();
+    cancelStickyVisualLockFailSafe();
     setStickyTransitionVisualLock(false);
   }
 
   function releaseStickyTransitionVisualLockAfterFrame() {
     cancelStickyVisualLockFrame();
+    cancelStickyVisualLockFailSafe();
     stickyVisualLockFrameRef.current = window.requestAnimationFrame(() => {
       stickyVisualLockFrameRef.current = null;
-      setStickyTransitionVisualLock(false);
+      stickyVisualLockFrameRef.current = window.requestAnimationFrame(() => {
+        stickyVisualLockFrameRef.current = null;
+        setStickyTransitionVisualLock(false);
+      });
     });
+  }
+
+  function scheduleStickyTransitionVisualLockFailSafe() {
+    if (stickyVisualLockFailSafeRef.current !== null) {
+      return;
+    }
+
+    stickyVisualLockFailSafeRef.current = window.setTimeout(() => {
+      stickyVisualLockFailSafeRef.current = null;
+      setStickyTransitionVisualLock(false);
+    }, STICKY_VISUAL_LOCK_FAILSAFE_MS);
   }
 
   function setPendingScrollIntent(nextIntent: HomepageDayScrollIntent | null) {
@@ -903,7 +947,6 @@ export function useHomepageDayScrollRestoration(
       behavior: "auto",
       top: scrollTarget
     });
-    releaseStickyTransitionVisualLockAfterFrame();
 
     return undefined;
   }, [
@@ -961,16 +1004,34 @@ export function useHomepageDayScrollRestoration(
   ]);
 
   useLayoutEffect(() => {
+    const hasPendingStickyIntent =
+      shouldEnableHomepageDayStickyVisualLock(pendingScrollIntent);
+    const shouldKeepLock = shouldKeepHomepageDayStickyVisualLock({
+      hasPendingScrollTarget: pendingScrollTarget !== null,
+      hasPendingStickyIntent,
+      isContentAnimating,
+      isDateHeaderStuck,
+      isDateTransitioning,
+      reserveMode: reservePlan.mode,
+      stickySentinelTop: getStickySentinelTop()
+    });
+
     if (
       !stickyVisualLockRef.current ||
-      shouldEnableHomepageDayStickyVisualLock(pendingScrollIntent) ||
-      shouldKeepHomepageDayStickyVisualLock({
-        isContentAnimating,
-        isDateTransitioning,
-        reserveMode: reservePlan.mode
-      }) ||
-      pendingScrollTarget !== null
+      shouldKeepLock
     ) {
+      if (
+        stickyVisualLockRef.current &&
+        shouldKeepLock &&
+        !hasPendingStickyIntent &&
+        pendingScrollTarget === null &&
+        !isContentAnimating &&
+        !isDateTransitioning &&
+        reservePlan.mode === "sticky"
+      ) {
+        scheduleStickyTransitionVisualLockFailSafe();
+      }
+
       return undefined;
     }
 
@@ -979,10 +1040,12 @@ export function useHomepageDayScrollRestoration(
     return undefined;
   }, [
     isContentAnimating,
+    isDateHeaderStuck,
     isDateTransitioning,
     pendingScrollIntent,
     pendingScrollTarget,
-    reservePlan.mode
+    reservePlan.mode,
+    stickySentinelRef
   ]);
 
   useLayoutEffect(() => {
@@ -1042,6 +1105,7 @@ export function useHomepageDayScrollRestoration(
   useEffect(() => {
     return () => {
       cancelStickyVisualLockFrame();
+      cancelStickyVisualLockFailSafe();
     };
   }, []);
 

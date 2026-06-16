@@ -884,10 +884,7 @@ body[data-filter-dropdown-open="true"] .date-pills {
   padding: 0.45rem 0;
   border-radius: 999px;
   isolation: isolate;
-  transform: translate3d(0, 0, 0);
   transition: padding 180ms ease;
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
 }
 
 .day-browser__header::before {
@@ -901,10 +898,7 @@ body[data-filter-dropdown-open="true"] .date-pills {
   content: "";
   opacity: 0;
   pointer-events: none;
-  transform: translate3d(0, 0, 0);
   transition: opacity 180ms ease;
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
 }
 
 .day-browser__header[data-stuck="true"] {
@@ -913,6 +907,16 @@ body[data-filter-dropdown-open="true"] .date-pills {
 
 .day-browser__header[data-stuck="true"]::before {
   opacity: 1;
+}
+
+.day-browser__header[data-sticky-transition-lock="true"] {
+  padding-inline: 0.45rem;
+  transition: none;
+}
+
+.day-browser__header[data-sticky-transition-lock="true"]::before {
+  opacity: 1;
+  transition: none;
 }
 
 .day-browser__heading-viewport,
