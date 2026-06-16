@@ -915,6 +915,9 @@ body[data-filter-dropdown-open="true"] .date-pills {
 }
 
 .day-browser__header[data-sticky-transition-lock="true"]::before {
+  background: color-mix(in srgb, var(--page-bg-fallback) 94%, var(--panel-bg));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   opacity: 1;
   transition: none;
 }
