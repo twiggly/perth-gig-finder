@@ -185,34 +185,90 @@ describe("homepage day scroll restoration helpers", () => {
     expect(
       shouldKeepHomepageDayStickyVisualLock({
         isContentAnimating: true,
+        isDateHeaderStuck: false,
         isDateTransitioning: true,
-        reserveMode: "sticky"
+        reserveMode: "sticky",
+        stickySentinelTop: 24
       })
     ).toBe(true);
 
     expect(
       shouldKeepHomepageDayStickyVisualLock({
         isContentAnimating: false,
+        isDateHeaderStuck: false,
         isDateTransitioning: true,
-        reserveMode: "sticky"
+        reserveMode: "sticky",
+        stickySentinelTop: 24
       })
     ).toBe(true);
   });
 
-  it("releases the sticky visual lock for preserve-scroll or settled transitions", () => {
+  it("keeps the sticky visual lock while sticky restoration is pending", () => {
     expect(
       shouldKeepHomepageDayStickyVisualLock({
-        isContentAnimating: true,
-        isDateTransitioning: true,
-        reserveMode: "preserve-scroll"
+        hasPendingStickyIntent: true,
+        isContentAnimating: false,
+        isDateHeaderStuck: false,
+        isDateTransitioning: false,
+        reserveMode: "sticky",
+        stickySentinelTop: 24
+      })
+    ).toBe(true);
+
+    expect(
+      shouldKeepHomepageDayStickyVisualLock({
+        hasPendingScrollTarget: true,
+        isContentAnimating: false,
+        isDateHeaderStuck: false,
+        isDateTransitioning: false,
+        reserveMode: "sticky",
+        stickySentinelTop: 24
+      })
+    ).toBe(true);
+  });
+
+  it("keeps the sticky visual lock until stickiness is confirmed", () => {
+    expect(
+      shouldKeepHomepageDayStickyVisualLock({
+        isContentAnimating: false,
+        isDateHeaderStuck: false,
+        isDateTransitioning: false,
+        reserveMode: "sticky",
+        stickySentinelTop: 1
+      })
+    ).toBe(true);
+  });
+
+  it("releases the sticky visual lock once sticky state or geometry is confirmed", () => {
+    expect(
+      shouldKeepHomepageDayStickyVisualLock({
+        isContentAnimating: false,
+        isDateHeaderStuck: true,
+        isDateTransitioning: false,
+        reserveMode: "sticky",
+        stickySentinelTop: 1
       })
     ).toBe(false);
 
     expect(
       shouldKeepHomepageDayStickyVisualLock({
         isContentAnimating: false,
+        isDateHeaderStuck: false,
         isDateTransitioning: false,
-        reserveMode: "sticky"
+        reserveMode: "sticky",
+        stickySentinelTop: -1
+      })
+    ).toBe(false);
+  });
+
+  it("releases the sticky visual lock for preserve-scroll transitions", () => {
+    expect(
+      shouldKeepHomepageDayStickyVisualLock({
+        isContentAnimating: true,
+        isDateHeaderStuck: false,
+        isDateTransitioning: true,
+        reserveMode: "preserve-scroll",
+        stickySentinelTop: 24
       })
     ).toBe(false);
   });
