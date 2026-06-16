@@ -14,6 +14,8 @@ import {
   getNextHomepageDayScrollIntent,
   getNextHomepageDayScrollDebtReserve,
   isHomepageDayScrollIntentFresh,
+  shouldEnableHomepageDayStickyVisualLock,
+  shouldKeepHomepageDayStickyVisualLock,
   shouldPlanHomepageDayScrollReserve,
   shouldRestoreHomepageDayScroll
 } from "./use-homepage-day-scroll-restoration";
@@ -156,6 +158,62 @@ describe("homepage day scroll restoration helpers", () => {
 
     expect(
       shouldRestoreHomepageDayScroll(intent, "2026-06-15", false, false)
+    ).toBe(false);
+  });
+
+  it("enables the sticky visual lock only for sticky intents", () => {
+    expect(
+      shouldEnableHomepageDayStickyVisualLock({
+        capturedScrollTop: 480,
+        mode: "sticky",
+        targetDateKey: "2026-06-15",
+        timestamp: 1000
+      })
+    ).toBe(true);
+
+    expect(
+      shouldEnableHomepageDayStickyVisualLock({
+        capturedScrollTop: 140,
+        mode: "preserve-scroll",
+        targetDateKey: "2026-06-15",
+        timestamp: 1000
+      })
+    ).toBe(false);
+  });
+
+  it("keeps the sticky visual lock while sticky transition layout is active", () => {
+    expect(
+      shouldKeepHomepageDayStickyVisualLock({
+        isContentAnimating: true,
+        isDateTransitioning: true,
+        reserveMode: "sticky"
+      })
+    ).toBe(true);
+
+    expect(
+      shouldKeepHomepageDayStickyVisualLock({
+        isContentAnimating: false,
+        isDateTransitioning: true,
+        reserveMode: "sticky"
+      })
+    ).toBe(true);
+  });
+
+  it("releases the sticky visual lock for preserve-scroll or settled transitions", () => {
+    expect(
+      shouldKeepHomepageDayStickyVisualLock({
+        isContentAnimating: true,
+        isDateTransitioning: true,
+        reserveMode: "preserve-scroll"
+      })
+    ).toBe(false);
+
+    expect(
+      shouldKeepHomepageDayStickyVisualLock({
+        isContentAnimating: false,
+        isDateTransitioning: false,
+        reserveMode: "sticky"
+      })
     ).toBe(false);
   });
 

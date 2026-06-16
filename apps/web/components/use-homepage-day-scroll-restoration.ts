@@ -39,6 +39,7 @@ interface UseHomepageDayScrollRestorationOptions {
 interface HomepageDayScrollRestoration {
   captureDateChangeLayout: (targetDateKey?: string) => void;
   clearDateChangeLayout: () => void;
+  isStickyTransitionVisualLockActive: boolean;
   scrollAlignmentDateKey: string | null;
   scrollAlignmentOffset: number;
   scrollCarryoverDateKey: string | null;
@@ -160,6 +161,26 @@ export function shouldRestoreHomepageDayScroll(
     intent?.targetDateKey === activeDateKey &&
     !isContentAnimating &&
     !isDateTransitioning
+  );
+}
+
+export function shouldEnableHomepageDayStickyVisualLock(
+  intent: HomepageDayScrollIntent | null
+): boolean {
+  return intent?.mode === "sticky";
+}
+
+export function shouldKeepHomepageDayStickyVisualLock({
+  isContentAnimating,
+  isDateTransitioning,
+  reserveMode
+}: {
+  isContentAnimating: boolean;
+  isDateTransitioning: boolean;
+  reserveMode: HomepageDayScrollIntentMode | null;
+}): boolean {
+  return Boolean(
+    reserveMode === "sticky" && (isContentAnimating || isDateTransitioning)
   );
 }
 
@@ -464,6 +485,8 @@ export function useHomepageDayScrollRestoration(
   const reservePlanRef =
     useRef<HomepageDayScrollReservePlan>(EMPTY_RESERVE_PLAN);
   const scrollRestoreFrameRef = useRef<number | null>(null);
+  const stickyVisualLockFrameRef = useRef<number | null>(null);
+  const stickyVisualLockRef = useRef(false);
   const [reservePlan, setReservePlan] =
     useState<HomepageDayScrollReservePlan>(EMPTY_RESERVE_PLAN);
   const [carryoverReserve, setCarryoverReserve] =
@@ -472,12 +495,50 @@ export function useHomepageDayScrollRestoration(
     useState<HomepageDayScrollIntent | null>(null);
   const [pendingScrollTarget, setPendingScrollTargetState] =
     useState<number | null>(null);
+  const [
+    isStickyTransitionVisualLockActive,
+    setIsStickyTransitionVisualLockActive
+  ] = useState(false);
 
   function cancelScrollFrames() {
     if (scrollRestoreFrameRef.current !== null) {
       window.cancelAnimationFrame(scrollRestoreFrameRef.current);
       scrollRestoreFrameRef.current = null;
     }
+  }
+
+  function cancelStickyVisualLockFrame() {
+    if (stickyVisualLockFrameRef.current !== null) {
+      window.cancelAnimationFrame(stickyVisualLockFrameRef.current);
+      stickyVisualLockFrameRef.current = null;
+    }
+  }
+
+  function setStickyTransitionVisualLock(nextIsActive: boolean) {
+    if (stickyVisualLockRef.current === nextIsActive) {
+      return;
+    }
+
+    stickyVisualLockRef.current = nextIsActive;
+    setIsStickyTransitionVisualLockActive(nextIsActive);
+  }
+
+  function enableStickyTransitionVisualLock() {
+    cancelStickyVisualLockFrame();
+    setStickyTransitionVisualLock(true);
+  }
+
+  function clearStickyTransitionVisualLock() {
+    cancelStickyVisualLockFrame();
+    setStickyTransitionVisualLock(false);
+  }
+
+  function releaseStickyTransitionVisualLockAfterFrame() {
+    cancelStickyVisualLockFrame();
+    stickyVisualLockFrameRef.current = window.requestAnimationFrame(() => {
+      stickyVisualLockFrameRef.current = null;
+      setStickyTransitionVisualLock(false);
+    });
   }
 
   function setPendingScrollIntent(nextIntent: HomepageDayScrollIntent | null) {
@@ -653,6 +714,12 @@ export function useHomepageDayScrollRestoration(
     });
     const provisionalReserveHeight = nextIntent ? window.innerHeight : 0;
 
+    if (shouldEnableHomepageDayStickyVisualLock(nextIntent)) {
+      enableStickyTransitionVisualLock();
+    } else {
+      clearStickyTransitionVisualLock();
+    }
+
     setPendingScrollIntent(nextIntent);
     updateCarryoverReserve(
       getHomepageDayScrollCarryoverReserve({
@@ -700,6 +767,7 @@ export function useHomepageDayScrollRestoration(
     cancelScrollFrames();
     clearCarryoverReserve();
     clearReservePlan();
+    clearStickyTransitionVisualLock();
   }
 
   useLayoutEffect(() => {
@@ -710,6 +778,10 @@ export function useHomepageDayScrollRestoration(
       !effectiveIntent
     ) {
       return undefined;
+    }
+
+    if (shouldEnableHomepageDayStickyVisualLock(effectiveIntent)) {
+      enableStickyTransitionVisualLock();
     }
 
     if (
@@ -831,6 +903,7 @@ export function useHomepageDayScrollRestoration(
       behavior: "auto",
       top: scrollTarget
     });
+    releaseStickyTransitionVisualLockAfterFrame();
 
     return undefined;
   }, [
@@ -888,6 +961,31 @@ export function useHomepageDayScrollRestoration(
   ]);
 
   useLayoutEffect(() => {
+    if (
+      !stickyVisualLockRef.current ||
+      shouldEnableHomepageDayStickyVisualLock(pendingScrollIntent) ||
+      shouldKeepHomepageDayStickyVisualLock({
+        isContentAnimating,
+        isDateTransitioning,
+        reserveMode: reservePlan.mode
+      }) ||
+      pendingScrollTarget !== null
+    ) {
+      return undefined;
+    }
+
+    releaseStickyTransitionVisualLockAfterFrame();
+
+    return undefined;
+  }, [
+    isContentAnimating,
+    isDateTransitioning,
+    pendingScrollIntent,
+    pendingScrollTarget,
+    reservePlan.mode
+  ]);
+
+  useLayoutEffect(() => {
     if (typeof window === "undefined" || pendingScrollTarget === null) {
       return undefined;
     }
@@ -942,6 +1040,12 @@ export function useHomepageDayScrollRestoration(
   }, [stickySentinelRef]);
 
   useEffect(() => {
+    return () => {
+      cancelStickyVisualLockFrame();
+    };
+  }, []);
+
+  useEffect(() => {
     if (
       reservePlan.dateKey !== null &&
       reservePlan.dateKey !== activeDateKey &&
@@ -954,6 +1058,7 @@ export function useHomepageDayScrollRestoration(
   return {
     captureDateChangeLayout,
     clearDateChangeLayout,
+    isStickyTransitionVisualLockActive,
     scrollAlignmentDateKey:
       reservePlan.mode === "sticky" && reservePlan.isPlanned
         ? reservePlan.dateKey
