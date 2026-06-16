@@ -879,7 +879,7 @@ body[data-filter-dropdown-open="true"] .date-pills {
   margin: 0 auto;
 }
 
-.day-browser__header-shell[data-sticky-transition-lock="true"] {
+.day-browser__header-shell[data-stuck="true"] {
   min-height: var(--day-browser-header-height, 4.1rem);
 }
 
@@ -919,13 +919,16 @@ body[data-filter-dropdown-open="true"] .date-pills {
   opacity: 1;
 }
 
-.day-browser__header[data-sticky-transition-lock="true"] {
+.day-browser__header[data-pinned="true"] {
   position: fixed;
   top: 0;
   left: var(--day-browser-header-left, 50%);
   width: var(--day-browser-header-width, min(100%, 32rem));
   padding-inline: 0.45rem;
   transform: var(--day-browser-header-transform, translateX(-50%));
+}
+
+.day-browser__header[data-sticky-transition-lock="true"] {
   transition: none;
 }
 

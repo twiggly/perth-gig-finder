@@ -195,6 +195,7 @@ export function HomepageDayBrowser({
   );
   const isDateHeaderVisuallyStuck =
     isDateHeaderStuck || isStickyTransitionVisualLockActive;
+  const isDateHeaderPinned = isDateHeaderVisuallyStuck;
   const dateHeaderShellStyle = useMemo(
     () =>
       dateHeaderMetrics
@@ -360,10 +361,12 @@ export function HomepageDayBrowser({
         data-sticky-transition-lock={
           isStickyTransitionVisualLockActive ? "true" : undefined
         }
+        data-stuck={isDateHeaderPinned ? "true" : undefined}
         style={dateHeaderShellStyle}
       >
         <Box
           className="day-browser__header"
+          data-pinned={isDateHeaderPinned ? "true" : undefined}
           data-sticky-transition-lock={
             isStickyTransitionVisualLockActive ? "true" : undefined
           }
