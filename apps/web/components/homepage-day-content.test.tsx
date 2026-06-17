@@ -61,8 +61,8 @@ function renderContent({
       phase: null
     }
   ],
+  scrollAlignmentDateKey = null,
   scrollCarryoverDateKey = null,
-  scrollOutgoingCompensationDateKey = null,
   scrollReserveTargetDateKey = null,
   transitionDirection
 }: {
@@ -71,8 +71,8 @@ function renderContent({
   isContentAnimating?: boolean;
   openGigId?: string | null;
   renderedContentPanes?: DayBrowserPaneState[];
+  scrollAlignmentDateKey?: string | null;
   scrollCarryoverDateKey?: string | null;
-  scrollOutgoingCompensationDateKey?: string | null;
   scrollReserveTargetDateKey?: string | null;
   transitionDirection?: "next" | "previous";
 } = {}) {
@@ -89,8 +89,8 @@ function renderContent({
         onToggleGig={() => {}}
         openGigId={openGigId}
         renderedContentPanes={renderedContentPanes}
+        scrollAlignmentDateKey={scrollAlignmentDateKey}
         scrollCarryoverDateKey={scrollCarryoverDateKey}
-        scrollOutgoingCompensationDateKey={scrollOutgoingCompensationDateKey}
         scrollReserveTargetDateKey={scrollReserveTargetDateKey}
         scrollTargetContentRef={React.createRef<HTMLDivElement>()}
         transitionDirection={transitionDirection}
@@ -187,7 +187,7 @@ describe("HomepageDayContent", () => {
     expect(html).not.toContain('data-active-date="true"');
     expect(html.match(/day-browser__scroll-reserve/g)).toHaveLength(2);
     expect(html).not.toContain("day-browser__scroll-inset");
-    expect(html).not.toContain('data-scroll-compensate-outgoing="true"');
+    expect(html).not.toContain('data-scroll-align-target="true"');
     expect(html).not.toContain('data-scroll-reserve-carryover="true"');
     expect(html).not.toContain('data-scroll-reserve-target="true"');
     expect(html.match(/day-browser__content-align/g)).toHaveLength(2);
@@ -202,7 +202,7 @@ describe("HomepageDayContent", () => {
     expect(html).toContain('data-active-date="true"');
     expect(html).toContain('data-scroll-reserve-target="true"');
     expect(html).not.toContain('data-scroll-reserve-carryover="true"');
-    expect(html).not.toContain('data-scroll-compensate-outgoing="true"');
+    expect(html).not.toContain('data-scroll-align-target="true"');
     expect(html.match(/day-browser__scroll-reserve/g)).toHaveLength(1);
     expect(html).not.toContain("day-browser__scroll-inset");
   });
@@ -241,13 +241,12 @@ describe("HomepageDayContent", () => {
     expect(html).toContain('data-motion-role="to"');
     expect(html).toContain('data-scroll-reserve-target="true"');
     expect(html.match(/data-scroll-reserve-target="true"/g)).toHaveLength(1);
-    expect(html).not.toContain('data-scroll-compensate-outgoing="true"');
-    expect(html).not.toContain("data-scroll-align");
+    expect(html).not.toContain('data-scroll-align-target="true"');
     expect(html.match(/day-browser__scroll-reserve/g)).toHaveLength(2);
     expect(html).not.toContain("day-browser__scroll-inset");
   });
 
-  it("marks only the outgoing from pane for scroll compensation", () => {
+  it("marks only the incoming to pane for scroll alignment", () => {
     const today = createDay();
     const tomorrow = createDay({
       dateKey: "2026-04-30",
@@ -273,25 +272,25 @@ describe("HomepageDayContent", () => {
           phase: "animating"
         }
       ],
-      scrollOutgoingCompensationDateKey: "2026-04-29",
+      scrollAlignmentDateKey: "2026-04-30",
       transitionDirection: "next"
     });
 
     expect(html).toContain('data-motion-role="from"');
     expect(html).toContain('data-motion-role="to"');
-    expect(html).toContain('data-scroll-compensate-outgoing="true"');
-    expect(html.match(/data-scroll-compensate-outgoing="true"/g)).toHaveLength(
+    expect(html).toContain('data-scroll-align-target="true"');
+    expect(html.match(/data-scroll-align-target="true"/g)).toHaveLength(
       1
     );
     expect(html).toMatch(
-      /class="[^"]*day-browser__content-align[^"]*" data-scroll-compensate-outgoing="true"/
+      /class="[^"]*day-browser__content-align[^"]*" data-scroll-align-target="true"/
     );
     expect(html).not.toMatch(
-      /class="[^"]*day-browser__content-pane[^"]*"[^>]*data-scroll-compensate-outgoing="true"/
+      /class="[^"]*day-browser__content-pane[^"]*"[^>]*data-scroll-align-target="true"/
     );
   });
 
-  it("can render incoming reserve and outgoing compensation together", () => {
+  it("can render incoming reserve and incoming alignment together", () => {
     const today = createDay();
     const tomorrow = createDay({
       dateKey: "2026-04-30",
@@ -317,29 +316,28 @@ describe("HomepageDayContent", () => {
           phase: "preparing"
         }
       ],
-      scrollOutgoingCompensationDateKey: "2026-04-29",
+      scrollAlignmentDateKey: "2026-04-30",
       scrollReserveTargetDateKey: "2026-04-30",
       transitionDirection: "next"
     });
 
     expect(html).toContain('data-motion-role="from"');
     expect(html).toContain('data-motion-role="to"');
-    expect(html).toContain('data-scroll-compensate-outgoing="true"');
+    expect(html).toContain('data-scroll-align-target="true"');
     expect(html).toContain('data-scroll-reserve-target="true"');
-    expect(html.match(/data-scroll-compensate-outgoing="true"/g)).toHaveLength(
+    expect(html.match(/data-scroll-align-target="true"/g)).toHaveLength(
       1
     );
     expect(html.match(/data-scroll-reserve-target="true"/g)).toHaveLength(1);
   });
 
-  it("does not keep outgoing compensation on the final active pane", () => {
+  it("does not keep scroll alignment on the final active pane", () => {
     const html = renderContent({
-      scrollOutgoingCompensationDateKey: "2026-04-29"
+      scrollAlignmentDateKey: "2026-04-29"
     });
 
     expect(html).toContain('data-motion-role="active"');
-    expect(html).not.toContain('data-scroll-compensate-outgoing="true"');
-    expect(html).not.toContain("data-scroll-align");
+    expect(html).not.toContain('data-scroll-align-target="true"');
   });
 
   it("marks the outgoing from pane as carryover without making it the target", () => {

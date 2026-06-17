@@ -39,6 +39,26 @@ interface HomepageDayBrowserProps {
   selectedVenueSlugs: string[];
 }
 
+export function HomepageDayHeaderCover({ heading }: { heading: string }) {
+  return (
+    <Box
+      aria-hidden="true"
+      className="day-browser__header day-browser__header-cover"
+      data-stuck="true"
+    >
+      <span className="day-browser__arrow day-browser__arrow--cover">
+        &lt;
+      </span>
+      <span className="day-browser__heading-button day-browser__heading-button--cover">
+        <span className="day-browser__heading-title">{heading}</span>
+      </span>
+      <span className="day-browser__arrow day-browser__arrow--cover">
+        &gt;
+      </span>
+    </Box>
+  );
+}
+
 const LOCAL_PREVIEW_ASSET_REVISION =
   process.env.NEXT_PUBLIC_LOCAL_PREVIEW_ASSET_REVISION ?? "0";
 
@@ -170,10 +190,11 @@ export function HomepageDayBrowser({
   const {
     captureDateChangeLayout,
     clearDateChangeLayout,
+    isStickyScrollCoverActive,
+    scrollAlignmentDateKey,
+    scrollAlignmentOffset,
     scrollCarryoverDateKey,
     scrollCarryoverReserve,
-    scrollOutgoingCompensationDateKey,
-    scrollOutgoingCompensationOffset,
     scrollReserveHeight,
     scrollReserveTargetDateKey
   } = useHomepageDayScrollRestoration({
@@ -191,14 +212,14 @@ export function HomepageDayBrowser({
     () =>
       ({
         ...contentViewportStyle,
+        "--day-browser-scroll-align-y": `${scrollAlignmentOffset}px`,
         "--day-browser-scroll-carryover-reserve": `${scrollCarryoverReserve}px`,
-        "--day-browser-scroll-outgoing-y": `${scrollOutgoingCompensationOffset}px`,
         "--day-browser-scroll-reserve": `${scrollReserveHeight}px`
       }) as React.CSSProperties,
     [
       contentViewportStyle,
+      scrollAlignmentOffset,
       scrollCarryoverReserve,
-      scrollOutgoingCompensationOffset,
       scrollReserveHeight
     ]
   );
@@ -400,6 +421,9 @@ export function HomepageDayBrowser({
           <span aria-hidden="true">&gt;</span>
         </ActionIcon>
       </Box>
+      {isStickyScrollCoverActive ? (
+        <HomepageDayHeaderCover heading={activeDay.heading} />
+      ) : null}
       {isLoadingDay ? (
         <span className="sr-only" role="status">
           Loading gigs for the selected date.
@@ -424,8 +448,8 @@ export function HomepageDayBrowser({
         }
         openGigId={openGigId}
         renderedContentPanes={renderedContentPanes}
+        scrollAlignmentDateKey={scrollAlignmentDateKey}
         scrollCarryoverDateKey={scrollCarryoverDateKey}
-        scrollOutgoingCompensationDateKey={scrollOutgoingCompensationDateKey}
         scrollReserveTargetDateKey={scrollReserveTargetDateKey}
         scrollTargetContentRef={scrollTargetContentRef}
         transitionDirection={transition?.direction}

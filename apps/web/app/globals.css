@@ -920,6 +920,26 @@ body[data-filter-dropdown-open="true"] .date-pills {
   opacity: 1;
 }
 
+.day-browser__header-cover {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 40;
+  margin: 0;
+  padding-inline: 0.45rem;
+  pointer-events: none;
+  transform: translate3d(-50%, 0, 0);
+}
+
+.day-browser__header-cover::before {
+  opacity: 1;
+}
+
+.day-browser__heading-button--cover,
+.day-browser__arrow--cover {
+  cursor: default;
+}
+
 .day-browser__heading-viewport,
 .day-browser__content-viewport {
   overflow: hidden;
@@ -1172,8 +1192,8 @@ body[data-filter-dropdown-open="true"] .date-pills {
   transform: translate3d(0, 0, 0);
 }
 
-.day-browser__content-align[data-scroll-compensate-outgoing="true"] {
-  transform: translate3d(0, var(--day-browser-scroll-outgoing-y, 0px), 0);
+.day-browser__content-align[data-scroll-align-target="true"] {
+  transform: translate3d(0, var(--day-browser-scroll-align-y, 0px), 0);
 }
 
 .day-browser__content-viewport,
