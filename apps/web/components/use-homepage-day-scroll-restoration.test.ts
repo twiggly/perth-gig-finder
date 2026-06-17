@@ -16,6 +16,7 @@ import {
   getNextHomepageDayScrollIntent,
   getNextHomepageDayScrollDebtReserve,
   isHomepageDayScrollIntentFresh,
+  shouldArmHomepageDayStickyScrollCover,
   shouldShowHomepageDayStickyScrollCover,
   shouldPlanHomepageDayScrollReserve
 } from "./use-homepage-day-scroll-restoration";
@@ -254,6 +255,35 @@ describe("homepage day scroll restoration helpers", () => {
     expect(
       shouldShowHomepageDayStickyScrollCover({
         currentScrollTop: 548,
+        mode: "preserve-scroll",
+        scrollTarget: 280
+      })
+    ).toBe(false);
+  });
+
+  it("arms the sticky scroll cover only after reserve planning is ready", () => {
+    expect(
+      shouldArmHomepageDayStickyScrollCover({
+        isReservePlanned: true,
+        plannedScrollTop: 548,
+        mode: "sticky",
+        scrollTarget: 280
+      })
+    ).toBe(true);
+
+    expect(
+      shouldArmHomepageDayStickyScrollCover({
+        isReservePlanned: false,
+        plannedScrollTop: 548,
+        mode: "sticky",
+        scrollTarget: 280
+      })
+    ).toBe(false);
+
+    expect(
+      shouldArmHomepageDayStickyScrollCover({
+        isReservePlanned: true,
+        plannedScrollTop: 548,
         mode: "preserve-scroll",
         scrollTarget: 280
       })

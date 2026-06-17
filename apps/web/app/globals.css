@@ -928,11 +928,20 @@ body[data-filter-dropdown-open="true"] .date-pills {
   margin: 0;
   padding-inline: 0.45rem;
   pointer-events: none;
+  transition: none;
   transform: translate3d(-50%, 0, 0);
 }
 
 .day-browser__header-cover::before {
+  background: color-mix(
+    in srgb,
+    var(--page-bg-fallback) 96%,
+    var(--soft-fill) 4%
+  );
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   opacity: 1;
+  transition: none;
 }
 
 .day-browser__heading-button--cover,
