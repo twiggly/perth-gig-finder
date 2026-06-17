@@ -7,7 +7,10 @@ import { theme } from "@/app/theme";
 import type { DateGroup } from "@/lib/homepage-dates";
 import type { GigCardRecord } from "@/lib/gigs";
 
-import { HomepageDayBrowser } from "./homepage-day-browser";
+import {
+  HomepageDayBrowser,
+  HomepageDayHeaderCover
+} from "./homepage-day-browser";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/"
@@ -105,5 +108,19 @@ describe("HomepageDayBrowser", () => {
 
     expect(html).toContain("ALT//THURSDAYS");
     expect(html).not.toContain("Tomorrow&#x27;s Show");
+  });
+
+  it("renders the sticky scroll cover as inert visual-only header markup", () => {
+    const html = renderToStaticMarkup(
+      <MantineProvider defaultColorScheme="dark" theme={theme}>
+        <HomepageDayHeaderCover heading="Thu, Jun 18th" />
+      </MantineProvider>
+    );
+
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).toContain("day-browser__header-cover");
+    expect(html).toContain('data-stuck="true"');
+    expect(html).toContain("Thu, Jun 18th");
+    expect(html).not.toContain("<button");
   });
 });

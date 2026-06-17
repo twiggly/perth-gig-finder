@@ -17,8 +17,8 @@ interface HomepageDayContentProps {
   onToggleGig: (gigId: string) => void;
   openGigId: string | null;
   renderedContentPanes: DayBrowserPaneState[];
+  scrollAlignmentDateKey: string | null;
   scrollCarryoverDateKey: string | null;
-  scrollOutgoingCompensationDateKey: string | null;
   scrollReserveTargetDateKey: string | null;
   scrollTargetContentRef: React.Ref<HTMLDivElement>;
   transitionDirection?: SwipeDirection;
@@ -33,8 +33,8 @@ export function HomepageDayContent({
   onToggleGig,
   openGigId,
   renderedContentPanes,
+  scrollAlignmentDateKey,
   scrollCarryoverDateKey,
-  scrollOutgoingCompensationDateKey,
   scrollReserveTargetDateKey,
   scrollTargetContentRef,
   transitionDirection
@@ -59,9 +59,8 @@ export function HomepageDayContent({
             (motionRole === "active" || motionRole === "to");
           const isScrollReserveCarryover =
             dateKey === scrollCarryoverDateKey && !isScrollReserveTarget;
-          const isScrollOutgoingCompensationTarget =
-            dateKey === scrollOutgoingCompensationDateKey &&
-            motionRole === "from";
+          const isScrollAlignTarget =
+            dateKey === scrollAlignmentDateKey && motionRole === "to";
 
           if (!day) {
             return null;
@@ -83,8 +82,8 @@ export function HomepageDayContent({
             >
               <Box
                 className="day-browser__content-align"
-                data-scroll-compensate-outgoing={
-                  isScrollOutgoingCompensationTarget ? "true" : undefined
+                data-scroll-align-target={
+                  isScrollAlignTarget ? "true" : undefined
                 }
               >
                 <Box
