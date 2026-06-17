@@ -22,7 +22,7 @@ describe("SiteHeader", () => {
     expect(html).toContain("site-header-shell");
     expect(html).toContain("Perth");
     expect(html).toContain("Gig Radar");
-    expect(html).not.toContain("Switch to light mode");
+    expect(html).not.toContain("Toggle color scheme");
     expect(html).not.toContain("Open account information");
   });
 
@@ -33,7 +33,7 @@ describe("SiteHeader", () => {
 
     expect(html).toContain("site-header-shell--detail");
     expect(html).toContain("Gig Radar");
-    expect(html).toContain("Switch to light mode");
+    expect(html).toContain("Toggle color scheme");
     expect(html).toContain("Open account information");
   });
 });

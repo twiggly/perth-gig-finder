@@ -2,11 +2,48 @@
 
 import { useEffect, useRef, useState } from "react";
 
-export function useHomepageDayStickyHeader() {
+interface HomepageDateHeaderStuckHoldInput {
+  isDateHeaderStuck: boolean;
+  stickySentinelTop?: number | null;
+}
+
+interface HomepageDateHeaderStuckHoldClearInput {
+  isDateHeaderTransitionStuckHold: boolean;
+  isDateTransitioning: boolean;
+}
+
+export function shouldHoldHomepageDateHeaderStuck({
+  isDateHeaderStuck,
+  stickySentinelTop
+}: HomepageDateHeaderStuckHoldInput): boolean {
+  return (
+    isDateHeaderStuck ||
+    (typeof stickySentinelTop === "number" && stickySentinelTop < 0)
+  );
+}
+
+export function shouldClearHomepageDateHeaderStuckHold({
+  isDateHeaderTransitionStuckHold,
+  isDateTransitioning
+}: HomepageDateHeaderStuckHoldClearInput): boolean {
+  return isDateHeaderTransitionStuckHold && !isDateTransitioning;
+}
+
+export function useHomepageDayStickyHeader({
+  isDateTransitioning
+}: {
+  isDateTransitioning: boolean;
+}) {
   const stickySentinelRef = useRef<HTMLSpanElement | null>(null);
   const stickyFrameRef = useRef<number | null>(null);
   const isDateHeaderStuckRef = useRef(false);
+  const [
+    isDateHeaderTransitionStuckHold,
+    setIsDateHeaderTransitionStuckHold
+  ] = useState(false);
   const [isDateHeaderStuck, setIsDateHeaderStuck] = useState(false);
+  const isDateHeaderVisuallyStuck =
+    isDateHeaderStuck || isDateHeaderTransitionStuckHold;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -64,8 +101,49 @@ export function useHomepageDayStickyHeader() {
     };
   }, []);
 
+  useEffect(() => {
+    if (
+      !shouldClearHomepageDateHeaderStuckHold({
+        isDateHeaderTransitionStuckHold,
+        isDateTransitioning
+      })
+    ) {
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      setIsDateHeaderTransitionStuckHold(false);
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      setIsDateHeaderTransitionStuckHold(false);
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [isDateHeaderTransitionStuckHold, isDateTransitioning]);
+
+  function captureDateHeaderTransitionStuckHold() {
+    const stickySentinelTop =
+      stickySentinelRef.current?.getBoundingClientRect().top ?? null;
+
+    setIsDateHeaderTransitionStuckHold(
+      shouldHoldHomepageDateHeaderStuck({
+        isDateHeaderStuck,
+        stickySentinelTop
+      })
+    );
+  }
+
+  function clearDateHeaderTransitionStuckHold() {
+    setIsDateHeaderTransitionStuckHold(false);
+  }
+
   return {
+    captureDateHeaderTransitionStuckHold,
+    clearDateHeaderTransitionStuckHold,
     isDateHeaderStuck,
+    isDateHeaderVisuallyStuck,
     stickySentinelRef
   };
 }
