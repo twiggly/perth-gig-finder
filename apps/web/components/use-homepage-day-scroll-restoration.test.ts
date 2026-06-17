@@ -1,24 +1,21 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  getHomepageDayStickyScrollCoverRelease,
   getHomepageDayNaturalMaxScrollTop,
   getHomepageDayPreservedScrollTarget,
-  getHomepageDayScrollDebtSettlement,
+  getHomepageDayScrollAlignmentOffset,
   getHomepageDayScrollCarryoverReserve,
   getHomepageDayScrollDebt,
   getHomepageDayTargetDocumentHeight,
   getHomepageDayScrollIntent,
-  getHomepageDayScrollAlignmentOffset,
   getHomepageDayScrollTarget,
   getHomepageDayStickyScrollTarget,
   getInitialHomepageDayScrollReservePlan,
   getNextHomepageDayScrollIntent,
   getNextHomepageDayScrollDebtReserve,
   isHomepageDayScrollIntentFresh,
-  shouldArmHomepageDayStickyScrollCover,
-  shouldShowHomepageDayStickyScrollCover,
-  shouldPlanHomepageDayScrollReserve
+  shouldPlanHomepageDayScrollReserve,
+  shouldRestoreHomepageDayScroll
 } from "./use-homepage-day-scroll-restoration";
 
 describe("homepage day scroll restoration helpers", () => {
@@ -127,6 +124,41 @@ describe("homepage day scroll restoration helpers", () => {
     ).toEqual(stickyIntent);
   });
 
+  it("waits until sticky requested date is active and no longer transitioning", () => {
+    const intent = {
+      capturedScrollTop: 480,
+      mode: "sticky" as const,
+      targetDateKey: "2026-06-15",
+      timestamp: 1000
+    };
+
+    expect(
+      shouldRestoreHomepageDayScroll(intent, "2026-06-15", false, false)
+    ).toBe(true);
+    expect(
+      shouldRestoreHomepageDayScroll(intent, "2026-06-15", true, false)
+    ).toBe(false);
+    expect(
+      shouldRestoreHomepageDayScroll(intent, "2026-06-15", false, true)
+    ).toBe(false);
+    expect(
+      shouldRestoreHomepageDayScroll(intent, "2026-06-16", false, false)
+    ).toBe(false);
+  });
+
+  it("never restores page scroll for preserve-scroll intent", () => {
+    const intent = {
+      capturedScrollTop: 140,
+      mode: "preserve-scroll" as const,
+      targetDateKey: "2026-06-15",
+      timestamp: 1000
+    };
+
+    expect(
+      shouldRestoreHomepageDayScroll(intent, "2026-06-15", false, false)
+    ).toBe(false);
+  });
+
   it("treats stored sticky scroll intent as short lived", () => {
     expect(
       isHomepageDayScrollIntentFresh(
@@ -195,7 +227,7 @@ describe("homepage day scroll restoration helpers", () => {
     ).toBe(444);
   });
 
-  it("calculates incoming alignment when sticky final scroll will move upward", () => {
+  it("calculates sticky pane alignment offset from current scroll to final target", () => {
     expect(
       getHomepageDayScrollAlignmentOffset({
         currentScrollTop: 1200,
@@ -205,7 +237,7 @@ describe("homepage day scroll restoration helpers", () => {
     ).toBe(796);
   });
 
-  it("does not align incoming content when sticky final scroll would move downward", () => {
+  it("does not add sticky pane alignment when the current scroll is already above the target", () => {
     expect(
       getHomepageDayScrollAlignmentOffset({
         currentScrollTop: 280,
@@ -215,17 +247,7 @@ describe("homepage day scroll restoration helpers", () => {
     ).toBe(0);
   });
 
-  it("does not align incoming content when sticky final scroll is not needed", () => {
-    expect(
-      getHomepageDayScrollAlignmentOffset({
-        currentScrollTop: 404,
-        mode: "sticky",
-        scrollTarget: 404
-      })
-    ).toBe(0);
-  });
-
-  it("does not align incoming content for preserve-scroll mode", () => {
+  it("does not add pane alignment for preserve-scroll mode", () => {
     expect(
       getHomepageDayScrollAlignmentOffset({
         currentScrollTop: 1200,
@@ -233,144 +255,6 @@ describe("homepage day scroll restoration helpers", () => {
         scrollTarget: 404
       })
     ).toBe(0);
-  });
-
-  it("shows the sticky scroll cover only when sticky final scroll changes the page position", () => {
-    expect(
-      shouldShowHomepageDayStickyScrollCover({
-        currentScrollTop: 548,
-        mode: "sticky",
-        scrollTarget: 280
-      })
-    ).toBe(true);
-
-    expect(
-      shouldShowHomepageDayStickyScrollCover({
-        currentScrollTop: 280,
-        mode: "sticky",
-        scrollTarget: 280
-      })
-    ).toBe(false);
-
-    expect(
-      shouldShowHomepageDayStickyScrollCover({
-        currentScrollTop: 548,
-        mode: "preserve-scroll",
-        scrollTarget: 280
-      })
-    ).toBe(false);
-  });
-
-  it("arms the sticky scroll cover only after reserve planning is ready", () => {
-    expect(
-      shouldArmHomepageDayStickyScrollCover({
-        isReservePlanned: true,
-        plannedScrollTop: 548,
-        mode: "sticky",
-        scrollTarget: 280
-      })
-    ).toBe(true);
-
-    expect(
-      shouldArmHomepageDayStickyScrollCover({
-        isReservePlanned: false,
-        plannedScrollTop: 548,
-        mode: "sticky",
-        scrollTarget: 280
-      })
-    ).toBe(false);
-
-    expect(
-      shouldArmHomepageDayStickyScrollCover({
-        isReservePlanned: true,
-        plannedScrollTop: 548,
-        mode: "preserve-scroll",
-        scrollTarget: 280
-      })
-    ).toBe(false);
-  });
-
-  it("keeps the sticky scroll cover active until sentinel geometry is stuck", () => {
-    expect(
-      getHomepageDayStickyScrollCoverRelease({
-        isCoverActive: true,
-        maxRetryCount: 4,
-        retryCount: 0,
-        stickySentinelTop: 0
-      })
-    ).toBe("retry");
-  });
-
-  it("clears the sticky scroll cover when sentinel geometry is stuck", () => {
-    expect(
-      getHomepageDayStickyScrollCoverRelease({
-        isCoverActive: true,
-        maxRetryCount: 4,
-        retryCount: 0,
-        stickySentinelTop: -1
-      })
-    ).toBe("clear");
-  });
-
-  it("eventually clears the sticky scroll cover as a fallback", () => {
-    expect(
-      getHomepageDayStickyScrollCoverRelease({
-        isCoverActive: true,
-        maxRetryCount: 4,
-        retryCount: 4,
-        stickySentinelTop: 0
-      })
-    ).toBe("fallback-clear");
-  });
-
-  it("does not release an inactive sticky scroll cover", () => {
-    expect(
-      getHomepageDayStickyScrollCoverRelease({
-        isCoverActive: false,
-        maxRetryCount: 4,
-        retryCount: 0,
-        stickySentinelTop: -1
-      })
-    ).toBe("keep");
-  });
-
-  it("shrinks reserve after scroll debt settles", () => {
-    expect(
-      getHomepageDayScrollDebtSettlement({
-        currentReserveHeight: 120,
-        naturalMaxScrollTop: 404,
-        scrollTop: 500
-      })
-    ).toEqual({
-      reserveHeight: 96,
-      shouldClear: false
-    });
-  });
-
-  it("does not grow reserve after scroll debt settles", () => {
-    expect(
-      getHomepageDayScrollDebtSettlement({
-        currentReserveHeight: 120,
-        naturalMaxScrollTop: 280,
-        scrollTop: 920
-      })
-    ).toEqual({
-      reserveHeight: 120,
-      shouldClear: false
-    });
-  });
-
-  it("clears settled reserve when scroll reaches the natural maximum", () => {
-    expect(
-      getHomepageDayScrollDebtSettlement({
-        currentReserveHeight: 120,
-        naturalMaxScrollTop: 280,
-        scrollTop: 280
-      })
-    ).toEqual({
-      reserveHeight: 0,
-      shouldClear: true
-    });
   });
 
   it("calculates natural max scroll top from natural scroll height", () => {

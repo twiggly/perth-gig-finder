@@ -241,12 +241,11 @@ describe("HomepageDayContent", () => {
     expect(html).toContain('data-motion-role="to"');
     expect(html).toContain('data-scroll-reserve-target="true"');
     expect(html.match(/data-scroll-reserve-target="true"/g)).toHaveLength(1);
-    expect(html).not.toContain('data-scroll-align-target="true"');
     expect(html.match(/day-browser__scroll-reserve/g)).toHaveLength(2);
     expect(html).not.toContain("day-browser__scroll-inset");
   });
 
-  it("marks only the incoming to pane for scroll alignment", () => {
+  it("marks only the incoming to pane as the scroll alignment target", () => {
     const today = createDay();
     const tomorrow = createDay({
       dateKey: "2026-04-30",
@@ -279,9 +278,7 @@ describe("HomepageDayContent", () => {
     expect(html).toContain('data-motion-role="from"');
     expect(html).toContain('data-motion-role="to"');
     expect(html).toContain('data-scroll-align-target="true"');
-    expect(html.match(/data-scroll-align-target="true"/g)).toHaveLength(
-      1
-    );
+    expect(html.match(/data-scroll-align-target="true"/g)).toHaveLength(1);
     expect(html).toMatch(
       /class="[^"]*day-browser__content-align[^"]*" data-scroll-align-target="true"/
     );
@@ -290,48 +287,7 @@ describe("HomepageDayContent", () => {
     );
   });
 
-  it("can render incoming reserve and incoming alignment together", () => {
-    const today = createDay();
-    const tomorrow = createDay({
-      dateKey: "2026-04-30",
-      heading: "Thu, Apr 30th",
-      items: [
-        createGig({
-          id: "gig-2",
-          title: "Tomorrow's Show"
-        })
-      ]
-    });
-    const html = renderContent({
-      days: [today, tomorrow],
-      renderedContentPanes: [
-        {
-          dateKey: "2026-04-29",
-          motionRole: "from",
-          phase: "preparing"
-        },
-        {
-          dateKey: "2026-04-30",
-          motionRole: "to",
-          phase: "preparing"
-        }
-      ],
-      scrollAlignmentDateKey: "2026-04-30",
-      scrollReserveTargetDateKey: "2026-04-30",
-      transitionDirection: "next"
-    });
-
-    expect(html).toContain('data-motion-role="from"');
-    expect(html).toContain('data-motion-role="to"');
-    expect(html).toContain('data-scroll-align-target="true"');
-    expect(html).toContain('data-scroll-reserve-target="true"');
-    expect(html.match(/data-scroll-align-target="true"/g)).toHaveLength(
-      1
-    );
-    expect(html.match(/data-scroll-reserve-target="true"/g)).toHaveLength(1);
-  });
-
-  it("does not keep scroll alignment on the final active pane", () => {
+  it("does not keep the scroll alignment target on the final active pane", () => {
     const html = renderContent({
       scrollAlignmentDateKey: "2026-04-29"
     });
