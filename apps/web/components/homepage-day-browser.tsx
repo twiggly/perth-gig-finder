@@ -106,7 +106,10 @@ export function HomepageDayBrowser({
     initialActiveDateKey,
     initialDays,
     isLoadingDay,
-    onDateChangeCancel: () => clearDateChangeLayoutRef.current(),
+    onDateChangeCancel: () => {
+      clearDateChangeLayoutRef.current();
+      clearDateHeaderTransitionStuckHold();
+    },
     onDateChangeStart: (nextDateKey) =>
       captureDateChangeLayoutSynchronously(nextDateKey),
     resetAdjacentImagePreloads: () => resetAdjacentImagePreloadsRef.current(),
@@ -142,8 +145,15 @@ export function HomepageDayBrowser({
     onNavigateDate: handleNavigateDate
   });
   resetDayWheelGestureRef.current = resetDayWheelGesture;
-  const { isDateHeaderStuck, stickySentinelRef } =
-    useHomepageDayStickyHeader();
+  const {
+    captureDateHeaderTransitionStuckHold,
+    clearDateHeaderTransitionStuckHold,
+    isDateHeaderStuck,
+    isDateHeaderVisuallyStuck,
+    stickySentinelRef
+  } = useHomepageDayStickyHeader({
+    isDateTransitioning: transition !== null
+  });
   const { resetAdjacentImagePreloads } = useHomepageAdjacentImagePreload({
     activeDateKey,
     loadedDayMap,
@@ -186,7 +196,6 @@ export function HomepageDayBrowser({
       scrollReserveHeight
     ]
   );
-
   useEffect(() => {
     if (typeof window === "undefined" || !activeDateKey) {
       return;
@@ -258,6 +267,7 @@ export function HomepageDayBrowser({
 
     if (!didNavigate) {
       clearDateChangeLayout();
+      clearDateHeaderTransitionStuckHold();
     }
 
     return didNavigate;
@@ -265,6 +275,7 @@ export function HomepageDayBrowser({
 
   function captureDateChangeLayoutSynchronously(targetDateKey?: string) {
     flushSync(() => {
+      captureDateHeaderTransitionStuckHold();
       captureDateChangeLayoutRef.current(targetDateKey);
     });
   }
@@ -289,7 +300,7 @@ export function HomepageDayBrowser({
       />
       <Box
         className="day-browser__header"
-        data-stuck={isDateHeaderStuck ? "true" : undefined}
+        data-stuck={isDateHeaderVisuallyStuck ? "true" : undefined}
         ref={dateHeaderRef}
       >
         <ActionIcon

@@ -384,6 +384,18 @@ code {
   display: block;
 }
 
+.site-header__theme-icon--moon {
+  display: none;
+}
+
+:root[data-mantine-color-scheme="light"] .site-header__theme-icon--sun {
+  display: none;
+}
+
+:root[data-mantine-color-scheme="light"] .site-header__theme-icon--moon {
+  display: block;
+}
+
 .account-modal {
   border: 1px solid var(--panel-border);
   border-radius: 1.45rem;

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { mantineHtmlProps } from "@mantine/core";
+import Script from "next/script";
 
 import "@mantine/core/styles.layer.css";
 import "./globals.css";
@@ -70,8 +71,10 @@ export default function RootLayout({
   return (
     <html lang="en" {...mantineHtmlProps}>
       <head>
-        <script
+        <Script
           dangerouslySetInnerHTML={{ __html: getAppColorSchemeScript() }}
+          id="app-color-scheme"
+          strategy="beforeInteractive"
         />
         <script
           dangerouslySetInnerHTML={{ __html: buildSiteStructuredDataJson() }}

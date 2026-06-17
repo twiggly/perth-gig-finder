@@ -22,8 +22,10 @@ describe("SiteHeaderActions", () => {
   it("renders theme and account controls", () => {
     const html = renderWithMantine(<SiteHeaderActions />);
 
-    expect(html).toContain('aria-label="Switch to light mode"');
-    expect(html).toContain('aria-pressed="false"');
+    expect(html).toContain('aria-label="Toggle color scheme"');
+    expect(html).toContain('title="Toggle color scheme"');
+    expect(html).toContain("site-header__theme-icon--sun");
+    expect(html).toContain("site-header__theme-icon--moon");
     expect(html).toContain('aria-label="Open account information"');
     expect(html).toContain('title="Account"');
     expect(html).toContain("site-header__profile");
