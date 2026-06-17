@@ -75,6 +75,8 @@ interface HomepageDayScrollReservePlan {
   isPlanned: boolean;
   mode: HomepageDayScrollIntentMode | null;
   naturalMaxScrollTop: number | null;
+  outgoingCompensationDateKey: string | null;
+  outgoingCompensationOffset: number;
   scrollTarget: number | null;
 }
 
@@ -105,6 +107,8 @@ const EMPTY_RESERVE_PLAN: HomepageDayScrollReservePlan = {
   isPlanned: false,
   mode: null,
   naturalMaxScrollTop: null,
+  outgoingCompensationDateKey: null,
+  outgoingCompensationOffset: 0,
   scrollTarget: null
 };
 const EMPTY_CARRYOVER_RESERVE: HomepageDayScrollCarryoverReserve = {
@@ -217,6 +221,35 @@ export function getHomepageDayOutgoingCompensationOffset({
   return scrollTarget < capturedScrollTop
     ? scrollTarget - capturedScrollTop
     : 0;
+}
+
+export function getHomepageDayOutgoingCompensationTarget({
+  capturedScrollTop,
+  fallbackDateKey,
+  isDateTransitioning,
+  mode,
+  scrollTarget,
+  sourceDateKey
+}: {
+  capturedScrollTop: number;
+  fallbackDateKey: string;
+  isDateTransitioning: boolean;
+  mode: HomepageDayScrollIntentMode | null;
+  scrollTarget: number | null;
+  sourceDateKey?: string;
+}): HomepageDayScrollOutgoingCompensation {
+  const offset = getHomepageDayOutgoingCompensationOffset({
+    capturedScrollTop,
+    mode,
+    scrollTarget
+  });
+
+  return isDateTransitioning && offset !== 0
+    ? {
+        dateKey: sourceDateKey ?? fallbackDateKey,
+        offset
+      }
+    : EMPTY_OUTGOING_COMPENSATION;
 }
 
 export function getHomepageDayNaturalMaxScrollTop({
@@ -354,6 +387,8 @@ export function getInitialHomepageDayScrollReservePlan(
     isPlanned: false,
     mode: intent?.mode ?? null,
     naturalMaxScrollTop: null,
+    outgoingCompensationDateKey: null,
+    outgoingCompensationOffset: 0,
     scrollTarget: null
   };
 }
@@ -511,10 +546,6 @@ export function useHomepageDayScrollRestoration(
   const previousActiveDateKeyRef = useRef(activeDateKey);
   const carryoverReserveRef =
     useRef<HomepageDayScrollCarryoverReserve>(EMPTY_CARRYOVER_RESERVE);
-  const outgoingCompensationRef =
-    useRef<HomepageDayScrollOutgoingCompensation>(
-      EMPTY_OUTGOING_COMPENSATION
-    );
   const reservePlanRef =
     useRef<HomepageDayScrollReservePlan>(EMPTY_RESERVE_PLAN);
   const scrollSettleTimeoutRef = useRef<number | null>(null);
@@ -522,10 +553,6 @@ export function useHomepageDayScrollRestoration(
     useState<HomepageDayScrollReservePlan>(EMPTY_RESERVE_PLAN);
   const [carryoverReserve, setCarryoverReserve] =
     useState<HomepageDayScrollCarryoverReserve>(EMPTY_CARRYOVER_RESERVE);
-  const [outgoingCompensation, setOutgoingCompensation] =
-    useState<HomepageDayScrollOutgoingCompensation>(
-      EMPTY_OUTGOING_COMPENSATION
-    );
   const [pendingScrollIntent, setPendingScrollIntentState] =
     useState<HomepageDayScrollIntent | null>(null);
 
@@ -562,18 +589,6 @@ export function useHomepageDayScrollRestoration(
   ) {
     carryoverReserveRef.current = nextCarryoverReserve;
     setCarryoverReserve(nextCarryoverReserve);
-  }
-
-  function clearOutgoingCompensation() {
-    outgoingCompensationRef.current = EMPTY_OUTGOING_COMPENSATION;
-    setOutgoingCompensation(EMPTY_OUTGOING_COMPENSATION);
-  }
-
-  function updateOutgoingCompensation(
-    nextCompensation: HomepageDayScrollOutgoingCompensation
-  ) {
-    outgoingCompensationRef.current = nextCompensation;
-    setOutgoingCompensation(nextCompensation);
   }
 
   function getStickySentinelTop() {
@@ -715,7 +730,6 @@ export function useHomepageDayScrollRestoration(
     snapshot?: HomepageDayScrollCaptureSnapshot
   ) {
     cancelScrollDebtSettlementTimers();
-    clearOutgoingCompensation();
 
     const currentReservePlan = reservePlanRef.current;
     const scrollTop = Math.max(0, snapshot?.scrollTop ?? window.scrollY);
@@ -790,7 +804,6 @@ export function useHomepageDayScrollRestoration(
     capturedStickyActivationScrollTopRef.current = null;
     setPendingScrollIntent(null);
     cancelScrollDebtSettlementTimers();
-    clearOutgoingCompensation();
     clearCarryoverReserve();
     clearReservePlan();
   }
@@ -847,6 +860,19 @@ export function useHomepageDayScrollRestoration(
       measuredStickyScrollTarget === null
         ? null
         : Math.max(measuredStickyScrollTarget, stickyActivationScrollTop);
+    const capturedStickyScrollTop =
+      effectiveIntent.mode === "sticky" && scrollTarget !== null
+        ? Math.max(effectiveIntent.capturedScrollTop, window.scrollY)
+        : effectiveIntent.capturedScrollTop;
+    const plannedOutgoingCompensation =
+      getHomepageDayOutgoingCompensationTarget({
+        capturedScrollTop: capturedStickyScrollTop,
+        fallbackDateKey: activeDateKey,
+        isDateTransitioning,
+        mode: effectiveIntent.mode,
+        scrollTarget,
+        sourceDateKey: effectiveIntent.sourceDateKey
+      });
     const effectiveScrollTop =
       effectiveIntent.mode === "sticky"
         ? scrollTarget ?? window.scrollY
@@ -875,40 +901,29 @@ export function useHomepageDayScrollRestoration(
       plannedScrollReserveHeight > reservePlan.height ||
       (plannedScrollReserveHeight > 0 &&
         reservePlan.naturalMaxScrollTop === null);
+    const shouldRenderCompensationBeforeScroll =
+      effectiveIntent.mode === "sticky" &&
+      (plannedOutgoingCompensation.dateKey !==
+        reservePlan.outgoingCompensationDateKey ||
+        plannedOutgoingCompensation.offset !==
+          reservePlan.outgoingCompensationOffset);
+    const nextReservePlan = {
+      dateKey: effectiveIntent.targetDateKey,
+      height: plannedScrollReserveHeight,
+      isPlanned: false,
+      mode: effectiveIntent.mode,
+      naturalMaxScrollTop,
+      outgoingCompensationDateKey: plannedOutgoingCompensation.dateKey,
+      outgoingCompensationOffset: plannedOutgoingCompensation.offset,
+      scrollTarget
+    };
 
-    if (shouldRenderReserveBeforeScroll) {
-      updateReservePlan({
-        dateKey: effectiveIntent.targetDateKey,
-        height: plannedScrollReserveHeight,
-        isPlanned: false,
-        mode: effectiveIntent.mode,
-        naturalMaxScrollTop,
-        scrollTarget
-      });
+    if (shouldRenderReserveBeforeScroll || shouldRenderCompensationBeforeScroll) {
+      updateReservePlan(nextReservePlan);
       return undefined;
     }
 
     if (effectiveIntent.mode === "sticky" && scrollTarget !== null) {
-      const capturedStickyScrollTop = Math.max(
-        effectiveIntent.capturedScrollTop,
-        window.scrollY
-      );
-      const outgoingCompensationOffset =
-        getHomepageDayOutgoingCompensationOffset({
-          capturedScrollTop: capturedStickyScrollTop,
-          mode: effectiveIntent.mode,
-          scrollTarget
-        });
-
-      if (outgoingCompensationOffset !== 0 && isDateTransitioning) {
-        updateOutgoingCompensation({
-          dateKey: effectiveIntent.sourceDateKey ?? activeDateKey,
-          offset: outgoingCompensationOffset
-        });
-      } else {
-        clearOutgoingCompensation();
-      }
-
       if (scrollTarget < capturedStickyScrollTop) {
         window.scrollTo({
           behavior: "auto",
@@ -925,6 +940,8 @@ export function useHomepageDayScrollRestoration(
       isPlanned: true,
       mode: effectiveIntent.mode,
       naturalMaxScrollTop,
+      outgoingCompensationDateKey: plannedOutgoingCompensation.dateKey,
+      outgoingCompensationOffset: plannedOutgoingCompensation.offset,
       scrollTarget
     });
 
@@ -938,6 +955,8 @@ export function useHomepageDayScrollRestoration(
     reservePlan.height,
     reservePlan.isPlanned,
     reservePlan.mode,
+    reservePlan.outgoingCompensationDateKey,
+    reservePlan.outgoingCompensationOffset,
     reservePlan.scrollTarget,
     scrollTargetContentRef,
     stickyHeaderRef,
@@ -1038,20 +1057,26 @@ export function useHomepageDayScrollRestoration(
       !isDateTransitioning
     ) {
       clearReservePlan();
+      return;
     }
 
     if (
-      outgoingCompensation.dateKey !== null &&
-      outgoingCompensation.dateKey !== activeDateKey &&
+      (reservePlan.outgoingCompensationDateKey !== null ||
+        reservePlan.outgoingCompensationOffset !== 0) &&
       !isDateTransitioning
     ) {
-      clearOutgoingCompensation();
+      updateReservePlan({
+        ...reservePlan,
+        outgoingCompensationDateKey: null,
+        outgoingCompensationOffset: 0
+      });
     }
   }, [
     activeDateKey,
     isDateTransitioning,
-    outgoingCompensation.dateKey,
-    reservePlan.dateKey
+    reservePlan.dateKey,
+    reservePlan.outgoingCompensationDateKey,
+    reservePlan.outgoingCompensationOffset
   ]);
 
   return {
@@ -1059,8 +1084,8 @@ export function useHomepageDayScrollRestoration(
     clearDateChangeLayout,
     scrollCarryoverDateKey: carryoverReserve.dateKey,
     scrollCarryoverReserve: carryoverReserve.height,
-    scrollOutgoingCompensationDateKey: outgoingCompensation.dateKey,
-    scrollOutgoingCompensationOffset: outgoingCompensation.offset,
+    scrollOutgoingCompensationDateKey: reservePlan.outgoingCompensationDateKey,
+    scrollOutgoingCompensationOffset: reservePlan.outgoingCompensationOffset,
     scrollReserveHeight: reservePlan.height,
     scrollReserveTargetDateKey: reservePlan.dateKey
   };

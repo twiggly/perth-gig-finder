@@ -291,6 +291,47 @@ describe("HomepageDayContent", () => {
     );
   });
 
+  it("can render incoming reserve and outgoing compensation together", () => {
+    const today = createDay();
+    const tomorrow = createDay({
+      dateKey: "2026-04-30",
+      heading: "Thu, Apr 30th",
+      items: [
+        createGig({
+          id: "gig-2",
+          title: "Tomorrow's Show"
+        })
+      ]
+    });
+    const html = renderContent({
+      days: [today, tomorrow],
+      renderedContentPanes: [
+        {
+          dateKey: "2026-04-29",
+          motionRole: "from",
+          phase: "preparing"
+        },
+        {
+          dateKey: "2026-04-30",
+          motionRole: "to",
+          phase: "preparing"
+        }
+      ],
+      scrollOutgoingCompensationDateKey: "2026-04-29",
+      scrollReserveTargetDateKey: "2026-04-30",
+      transitionDirection: "next"
+    });
+
+    expect(html).toContain('data-motion-role="from"');
+    expect(html).toContain('data-motion-role="to"');
+    expect(html).toContain('data-scroll-compensate-outgoing="true"');
+    expect(html).toContain('data-scroll-reserve-target="true"');
+    expect(html.match(/data-scroll-compensate-outgoing="true"/g)).toHaveLength(
+      1
+    );
+    expect(html.match(/data-scroll-reserve-target="true"/g)).toHaveLength(1);
+  });
+
   it("does not keep outgoing compensation on the final active pane", () => {
     const html = renderContent({
       scrollOutgoingCompensationDateKey: "2026-04-29"
