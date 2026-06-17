@@ -41,6 +41,7 @@ interface HomepageDayScrollRestoration {
   clearDateChangeLayout: () => void;
   scrollAlignmentDateKey: string | null;
   scrollAlignmentOffset: number;
+  scrollAlignmentSettlingDateKey: string | null;
   scrollCarryoverDateKey: string | null;
   scrollCarryoverReserve: number;
   scrollReserveHeight: number;
@@ -72,12 +73,22 @@ interface HomepageDayScrollCarryoverReserve {
   height: number;
 }
 
+interface HomepageDayScrollDebtSettlement {
+  alignmentOffset: number;
+  hasVisualAlignmentDebt: boolean;
+  isAlignmentSettling: boolean;
+  reserveHeight: number;
+  shouldClear: boolean;
+}
+
 type HomepageDayScrollIntentWindow = Window &
   typeof globalThis & {
     __gigRadarHomepageDayStickyScrollIntent?: HomepageDayScrollIntent | null;
   };
 
 const ACTIVE_DAY_SCROLL_OFFSET_PX = 8;
+const SCROLL_ALIGNMENT_SETTLE_MS = 160;
+const SCROLL_DEBT_SETTLE_IDLE_MS = 140;
 const STICKY_ACTIVATION_OFFSET_PX = 1;
 const STICKY_SCROLL_INTENT_STORAGE_KEY =
   "gig-radar:homepage-day-sticky-scroll-intent";
@@ -318,6 +329,50 @@ export function getNextHomepageDayScrollDebtReserve({
   );
 }
 
+export function getHomepageDayScrollDebtSettlement({
+  currentAlignmentOffset,
+  currentReserveHeight,
+  hasVisualAlignmentDebt,
+  naturalMaxScrollTop,
+  scrollTarget,
+  scrollTop
+}: {
+  currentAlignmentOffset: number;
+  currentReserveHeight: number;
+  hasVisualAlignmentDebt: boolean;
+  naturalMaxScrollTop: number | null;
+  scrollTarget: number | null;
+  scrollTop: number;
+}): HomepageDayScrollDebtSettlement {
+  const reserveHeight =
+    currentReserveHeight > 0 && naturalMaxScrollTop !== null
+      ? getNextHomepageDayScrollDebtReserve({
+          currentReserveHeight,
+          naturalMaxScrollTop,
+          scrollTop
+        })
+      : currentReserveHeight;
+  const alignmentOffset = hasVisualAlignmentDebt
+    ? getNextHomepageDayScrollAlignmentOffset({
+        currentAlignmentOffset,
+        scrollTarget,
+        scrollTop
+      })
+    : currentAlignmentOffset;
+  const isAlignmentSettling =
+    hasVisualAlignmentDebt && alignmentOffset < currentAlignmentOffset;
+  const nextHasVisualAlignmentDebt =
+    hasVisualAlignmentDebt && (alignmentOffset > 0 || isAlignmentSettling);
+
+  return {
+    alignmentOffset,
+    hasVisualAlignmentDebt: nextHasVisualAlignmentDebt,
+    isAlignmentSettling,
+    reserveHeight,
+    shouldClear: reserveHeight <= 0 && !nextHasVisualAlignmentDebt
+  };
+}
+
 export function getHomepageDayTargetDocumentHeight({
   currentContentHeight,
   documentHeight,
@@ -495,11 +550,15 @@ export function useHomepageDayScrollRestoration(
     useRef<HomepageDayScrollCarryoverReserve>(EMPTY_CARRYOVER_RESERVE);
   const reservePlanRef =
     useRef<HomepageDayScrollReservePlan>(EMPTY_RESERVE_PLAN);
+  const scrollAlignmentClearTimeoutRef = useRef<number | null>(null);
   const scrollRestoreFrameRef = useRef<number | null>(null);
+  const scrollSettleTimeoutRef = useRef<number | null>(null);
   const [reservePlan, setReservePlan] =
     useState<HomepageDayScrollReservePlan>(EMPTY_RESERVE_PLAN);
   const [carryoverReserve, setCarryoverReserve] =
     useState<HomepageDayScrollCarryoverReserve>(EMPTY_CARRYOVER_RESERVE);
+  const [scrollAlignmentSettlingDateKey, setScrollAlignmentSettlingDateKey] =
+    useState<string | null>(null);
   const [pendingScrollIntent, setPendingScrollIntentState] =
     useState<HomepageDayScrollIntent | null>(null);
   const [pendingScrollTarget, setPendingScrollTargetState] =
@@ -510,6 +569,27 @@ export function useHomepageDayScrollRestoration(
       window.cancelAnimationFrame(scrollRestoreFrameRef.current);
       scrollRestoreFrameRef.current = null;
     }
+  }
+
+  function cancelScrollDebtSettlementTimers() {
+    if (scrollSettleTimeoutRef.current !== null) {
+      window.clearTimeout(scrollSettleTimeoutRef.current);
+      scrollSettleTimeoutRef.current = null;
+    }
+
+    if (scrollAlignmentClearTimeoutRef.current !== null) {
+      window.clearTimeout(scrollAlignmentClearTimeoutRef.current);
+      scrollAlignmentClearTimeoutRef.current = null;
+    }
+  }
+
+  function clearScrollAlignmentSettling() {
+    if (scrollAlignmentClearTimeoutRef.current !== null) {
+      window.clearTimeout(scrollAlignmentClearTimeoutRef.current);
+      scrollAlignmentClearTimeoutRef.current = null;
+    }
+
+    setScrollAlignmentSettlingDateKey(null);
   }
 
   function setPendingScrollIntent(nextIntent: HomepageDayScrollIntent | null) {
@@ -524,6 +604,7 @@ export function useHomepageDayScrollRestoration(
   }
 
   function clearReservePlan() {
+    clearScrollAlignmentSettling();
     reservePlanRef.current = EMPTY_RESERVE_PLAN;
     setReservePlan(EMPTY_RESERVE_PLAN);
   }
@@ -620,7 +701,33 @@ export function useHomepageDayScrollRestoration(
     });
   }
 
-  function shrinkScrollDebtReserve() {
+  function finalizeScrollAlignmentSettlement(dateKey: string | null) {
+    scrollAlignmentClearTimeoutRef.current = null;
+    setScrollAlignmentSettlingDateKey(null);
+
+    const currentReservePlan = reservePlanRef.current;
+
+    if (
+      !dateKey ||
+      currentReservePlan.dateKey !== dateKey ||
+      currentReservePlan.alignmentOffset > 0 ||
+      !currentReservePlan.hasVisualAlignmentDebt
+    ) {
+      return;
+    }
+
+    if (currentReservePlan.height <= 0) {
+      clearReservePlan();
+      return;
+    }
+
+    updateReservePlan({
+      ...currentReservePlan,
+      hasVisualAlignmentDebt: false
+    });
+  }
+
+  function settleScrollDebtReserve() {
     if (typeof window === "undefined") {
       return;
     }
@@ -643,47 +750,68 @@ export function useHomepageDayScrollRestoration(
     const measuredNaturalMaxScrollTop = getCurrentNaturalMaxScrollTop();
     const naturalMaxScrollTop =
       measuredNaturalMaxScrollTop ?? currentReservePlan.naturalMaxScrollTop;
-    const nextReserveHeight =
-      currentReservePlan.height > 0 && naturalMaxScrollTop !== null
-        ? getNextHomepageDayScrollDebtReserve({
-            currentReserveHeight: currentReservePlan.height,
-            naturalMaxScrollTop,
-            scrollTop: window.scrollY
-          })
-        : currentReservePlan.height;
-    const nextAlignmentOffset = currentReservePlan.hasVisualAlignmentDebt
-      ? getNextHomepageDayScrollAlignmentOffset({
-          currentAlignmentOffset: currentReservePlan.alignmentOffset,
-          scrollTarget: currentReservePlan.scrollTarget,
-          scrollTop: window.scrollY
-        })
-      : currentReservePlan.alignmentOffset;
-    const nextHasVisualAlignmentDebt =
-      currentReservePlan.hasVisualAlignmentDebt && nextAlignmentOffset > 0;
+    const settlement = getHomepageDayScrollDebtSettlement({
+      currentAlignmentOffset: currentReservePlan.alignmentOffset,
+      currentReserveHeight: currentReservePlan.height,
+      hasVisualAlignmentDebt: currentReservePlan.hasVisualAlignmentDebt,
+      naturalMaxScrollTop,
+      scrollTarget: currentReservePlan.scrollTarget,
+      scrollTop: window.scrollY
+    });
 
-    if (nextReserveHeight <= 0 && !nextHasVisualAlignmentDebt) {
+    if (settlement.shouldClear) {
       clearReservePlan();
       return;
     }
 
     if (
-      nextReserveHeight < currentReservePlan.height ||
-      nextAlignmentOffset < currentReservePlan.alignmentOffset ||
-      nextHasVisualAlignmentDebt !==
+      settlement.reserveHeight < currentReservePlan.height ||
+      settlement.alignmentOffset < currentReservePlan.alignmentOffset ||
+      settlement.hasVisualAlignmentDebt !==
         currentReservePlan.hasVisualAlignmentDebt ||
       naturalMaxScrollTop !== currentReservePlan.naturalMaxScrollTop
     ) {
+      if (settlement.isAlignmentSettling) {
+        setScrollAlignmentSettlingDateKey(currentReservePlan.dateKey);
+
+        if (scrollAlignmentClearTimeoutRef.current !== null) {
+          window.clearTimeout(scrollAlignmentClearTimeoutRef.current);
+        }
+
+        scrollAlignmentClearTimeoutRef.current = window.setTimeout(
+          () => finalizeScrollAlignmentSettlement(currentReservePlan.dateKey),
+          SCROLL_ALIGNMENT_SETTLE_MS
+        );
+      }
+
       updateReservePlan({
         ...currentReservePlan,
-        alignmentOffset: nextAlignmentOffset,
-        hasVisualAlignmentDebt: nextHasVisualAlignmentDebt,
-        height: nextReserveHeight,
+        alignmentOffset: settlement.alignmentOffset,
+        hasVisualAlignmentDebt: settlement.hasVisualAlignmentDebt,
+        height: settlement.reserveHeight,
         naturalMaxScrollTop
       });
     }
   }
 
+  function scheduleScrollDebtSettlement() {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (scrollSettleTimeoutRef.current !== null) {
+      window.clearTimeout(scrollSettleTimeoutRef.current);
+    }
+
+    scrollSettleTimeoutRef.current = window.setTimeout(() => {
+      scrollSettleTimeoutRef.current = null;
+      settleScrollDebtReserve();
+    }, SCROLL_DEBT_SETTLE_IDLE_MS);
+  }
+
   function captureDateChangeLayout(targetDateKey?: string) {
+    cancelScrollDebtSettlementTimers();
+    setScrollAlignmentSettlingDateKey(null);
     cancelScrollFrames();
     setPendingScrollTarget(null);
 
@@ -742,6 +870,8 @@ export function useHomepageDayScrollRestoration(
   function clearDateChangeLayout() {
     setPendingScrollIntent(null);
     setPendingScrollTarget(null);
+    cancelScrollDebtSettlementTimers();
+    setScrollAlignmentSettlingDateKey(null);
     cancelScrollFrames();
     clearCarryoverReserve();
     clearReservePlan();
@@ -987,7 +1117,7 @@ export function useHomepageDayScrollRestoration(
       const sentinelTop = getStickySentinelTop();
 
       lastKnownStickyRef.current = sentinelTop < 0;
-      shrinkScrollDebtReserve();
+      scheduleScrollDebtSettlement();
     }
 
     updateLastKnownStickyState();
@@ -1003,6 +1133,7 @@ export function useHomepageDayScrollRestoration(
       window.removeEventListener("scroll", updateLastKnownStickyState);
       document.removeEventListener("scroll", updateLastKnownStickyState);
       window.removeEventListener("resize", updateLastKnownStickyState);
+      cancelScrollDebtSettlementTimers();
     };
   }, [stickySentinelRef]);
 
@@ -1027,6 +1158,7 @@ export function useHomepageDayScrollRestoration(
       reservePlan.hasVisualAlignmentDebt && reservePlan.isPlanned
         ? reservePlan.alignmentOffset
         : 0,
+    scrollAlignmentSettlingDateKey,
     scrollCarryoverDateKey: carryoverReserve.dateKey,
     scrollCarryoverReserve: carryoverReserve.height,
     scrollReserveHeight: reservePlan.height,

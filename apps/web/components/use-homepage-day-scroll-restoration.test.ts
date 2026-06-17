@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   getHomepageDayNaturalMaxScrollTop,
   getHomepageDayPreservedScrollTarget,
+  getHomepageDayScrollDebtSettlement,
   getHomepageDayScrollAlignmentOffset,
   getHomepageDayScrollCarryoverReserve,
   getHomepageDayScrollDebt,
@@ -310,6 +311,82 @@ describe("homepage day scroll restoration helpers", () => {
         scrollTop: 404
       })
     ).toBe(0);
+  });
+
+  it("keeps visual alignment debt active while idle settlement animates to zero", () => {
+    expect(
+      getHomepageDayScrollDebtSettlement({
+        currentAlignmentOffset: 220,
+        currentReserveHeight: 120,
+        hasVisualAlignmentDebt: true,
+        naturalMaxScrollTop: 404,
+        scrollTarget: 404,
+        scrollTop: 404
+      })
+    ).toEqual({
+      alignmentOffset: 0,
+      hasVisualAlignmentDebt: true,
+      isAlignmentSettling: true,
+      reserveHeight: 0,
+      shouldClear: false
+    });
+  });
+
+  it("settles reserve and alignment together after scroll idle", () => {
+    expect(
+      getHomepageDayScrollDebtSettlement({
+        currentAlignmentOffset: 620,
+        currentReserveHeight: 320,
+        hasVisualAlignmentDebt: true,
+        naturalMaxScrollTop: 280,
+        scrollTarget: 404,
+        scrollTop: 920
+      })
+    ).toEqual({
+      alignmentOffset: 516,
+      hasVisualAlignmentDebt: true,
+      isAlignmentSettling: true,
+      reserveHeight: 320,
+      shouldClear: false
+    });
+  });
+
+  it("does not grow reserve or alignment during idle settlement", () => {
+    expect(
+      getHomepageDayScrollDebtSettlement({
+        currentAlignmentOffset: 220,
+        currentReserveHeight: 120,
+        hasVisualAlignmentDebt: true,
+        naturalMaxScrollTop: 280,
+        scrollTarget: 404,
+        scrollTop: 920
+      })
+    ).toEqual({
+      alignmentOffset: 220,
+      hasVisualAlignmentDebt: true,
+      isAlignmentSettling: false,
+      reserveHeight: 120,
+      shouldClear: false
+    });
+  });
+
+  it("clears settled scroll debt when no reserve or alignment remains", () => {
+    expect(
+      getHomepageDayScrollDebtSettlement({
+        currentAlignmentOffset: 0,
+        currentReserveHeight: 120,
+        hasVisualAlignmentDebt: false,
+        naturalMaxScrollTop: 280,
+        scrollTarget: 404,
+        scrollTop: 280
+      })
+    ).toEqual({
+      alignmentOffset: 0,
+      hasVisualAlignmentDebt: false,
+      isAlignmentSettling: false,
+      reserveHeight: 0,
+      shouldClear: true
+    });
   });
 
   it("calculates natural max scroll top from natural scroll height", () => {

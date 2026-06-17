@@ -18,6 +18,7 @@ interface HomepageDayContentProps {
   openGigId: string | null;
   renderedContentPanes: DayBrowserPaneState[];
   scrollAlignmentDateKey: string | null;
+  scrollAlignmentSettlingDateKey: string | null;
   scrollCarryoverDateKey: string | null;
   scrollReserveTargetDateKey: string | null;
   scrollTargetContentRef: React.Ref<HTMLDivElement>;
@@ -34,6 +35,7 @@ export function HomepageDayContent({
   openGigId,
   renderedContentPanes,
   scrollAlignmentDateKey,
+  scrollAlignmentSettlingDateKey,
   scrollCarryoverDateKey,
   scrollReserveTargetDateKey,
   scrollTargetContentRef,
@@ -62,6 +64,8 @@ export function HomepageDayContent({
           const isScrollAlignTarget =
             dateKey === scrollAlignmentDateKey &&
             (motionRole === "active" || motionRole === "to");
+          const isScrollAlignSettling =
+            isScrollAlignTarget && dateKey === scrollAlignmentSettlingDateKey;
 
           if (!day) {
             return null;
@@ -85,6 +89,9 @@ export function HomepageDayContent({
                 className="day-browser__content-align"
                 data-scroll-align-target={
                   isScrollAlignTarget ? "true" : undefined
+                }
+                data-scroll-align-settling={
+                  isScrollAlignSettling ? "true" : undefined
                 }
               >
                 <Box
