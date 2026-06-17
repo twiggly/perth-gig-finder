@@ -62,6 +62,7 @@ function renderContent({
     }
   ],
   scrollAlignmentDateKey = null,
+  scrollAlignmentSettlingDateKey = null,
   scrollCarryoverDateKey = null,
   scrollReserveTargetDateKey = null,
   transitionDirection
@@ -72,6 +73,7 @@ function renderContent({
   openGigId?: string | null;
   renderedContentPanes?: DayBrowserPaneState[];
   scrollAlignmentDateKey?: string | null;
+  scrollAlignmentSettlingDateKey?: string | null;
   scrollCarryoverDateKey?: string | null;
   scrollReserveTargetDateKey?: string | null;
   transitionDirection?: "next" | "previous";
@@ -90,6 +92,7 @@ function renderContent({
         openGigId={openGigId}
         renderedContentPanes={renderedContentPanes}
         scrollAlignmentDateKey={scrollAlignmentDateKey}
+        scrollAlignmentSettlingDateKey={scrollAlignmentSettlingDateKey}
         scrollCarryoverDateKey={scrollCarryoverDateKey}
         scrollReserveTargetDateKey={scrollReserveTargetDateKey}
         scrollTargetContentRef={React.createRef<HTMLDivElement>()}
@@ -298,6 +301,17 @@ describe("HomepageDayContent", () => {
     expect(html).toMatch(
       /class="[^"]*day-browser__content-align[^"]*" data-scroll-align-target="true"/
     );
+  });
+
+  it("marks the active alignment target while scroll debt is settling", () => {
+    const html = renderContent({
+      scrollAlignmentDateKey: "2026-04-29",
+      scrollAlignmentSettlingDateKey: "2026-04-29"
+    });
+
+    expect(html).toContain('data-scroll-align-target="true"');
+    expect(html).toContain('data-scroll-align-settling="true"');
+    expect(html.match(/data-scroll-align-settling="true"/g)).toHaveLength(1);
   });
 
   it("marks the outgoing from pane as carryover without making it the target", () => {

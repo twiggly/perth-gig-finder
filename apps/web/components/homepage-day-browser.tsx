@@ -166,6 +166,7 @@ export function HomepageDayBrowser({
     clearDateChangeLayout,
     scrollAlignmentDateKey,
     scrollAlignmentOffset,
+    scrollAlignmentSettlingDateKey,
     scrollCarryoverDateKey,
     scrollCarryoverReserve,
     scrollReserveHeight,
@@ -409,6 +410,7 @@ export function HomepageDayBrowser({
         openGigId={openGigId}
         renderedContentPanes={renderedContentPanes}
         scrollAlignmentDateKey={scrollAlignmentDateKey}
+        scrollAlignmentSettlingDateKey={scrollAlignmentSettlingDateKey}
         scrollCarryoverDateKey={scrollCarryoverDateKey}
         scrollReserveTargetDateKey={scrollReserveTargetDateKey}
         scrollTargetContentRef={scrollTargetContentRef}

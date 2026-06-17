@@ -1176,6 +1176,10 @@ body[data-filter-dropdown-open="true"] .date-pills {
   transform: translate3d(0, var(--day-browser-scroll-align-y, 0px), 0);
 }
 
+.day-browser__content-align[data-scroll-align-settling="true"] {
+  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .day-browser__content-viewport,
 .day-browser__content-track {
   overflow-anchor: none;
