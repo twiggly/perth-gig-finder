@@ -51,9 +51,16 @@ export function HomepageDayBrowser({
 }: HomepageDayBrowserProps) {
   const previewAssetRevision = LOCAL_PREVIEW_ASSET_REVISION;
   const scrollTargetContentRef = useRef<HTMLDivElement | null>(null);
-  const captureDateChangeLayoutRef = useRef<(targetDateKey?: string) => void>(
-    () => {}
-  );
+  const captureDateChangeLayoutRef = useRef<
+    (
+      targetDateKey?: string,
+      snapshot?: {
+        isDateHeaderStuck: boolean;
+        scrollTop: number;
+        stickySentinelTop: number | null;
+      }
+    ) => void
+  >(() => {});
   const clearDateChangeLayoutRef = useRef<() => void>(() => {});
   const dateHeaderRef = useRef<HTMLDivElement | null>(null);
   const resetAdjacentImagePreloadsRef = useRef<() => void>(() => {});
@@ -148,7 +155,6 @@ export function HomepageDayBrowser({
   const {
     captureDateHeaderTransitionStuckHold,
     clearDateHeaderTransitionStuckHold,
-    isDateHeaderStuck,
     isDateHeaderVisuallyStuck,
     stickySentinelRef
   } = useHomepageDayStickyHeader({
@@ -164,18 +170,17 @@ export function HomepageDayBrowser({
   const {
     captureDateChangeLayout,
     clearDateChangeLayout,
-    scrollAlignmentDateKey,
-    scrollAlignmentOffset,
-    scrollAlignmentSettlingDateKey,
     scrollCarryoverDateKey,
     scrollCarryoverReserve,
+    scrollOutgoingCompensationDateKey,
+    scrollOutgoingCompensationOffset,
     scrollReserveHeight,
     scrollReserveTargetDateKey
   } = useHomepageDayScrollRestoration({
     activeDateKey,
     isContentAnimating,
     isDateTransitioning: transition !== null,
-    isDateHeaderStuck,
+    isDateHeaderStuck: isDateHeaderVisuallyStuck,
     scrollTargetContentRef,
     stickyHeaderRef: dateHeaderRef,
     stickySentinelRef
@@ -186,14 +191,14 @@ export function HomepageDayBrowser({
     () =>
       ({
         ...contentViewportStyle,
-        "--day-browser-scroll-align-y": `${scrollAlignmentOffset}px`,
         "--day-browser-scroll-carryover-reserve": `${scrollCarryoverReserve}px`,
+        "--day-browser-scroll-outgoing-y": `${scrollOutgoingCompensationOffset}px`,
         "--day-browser-scroll-reserve": `${scrollReserveHeight}px`
       }) as React.CSSProperties,
     [
       contentViewportStyle,
-      scrollAlignmentOffset,
       scrollCarryoverReserve,
+      scrollOutgoingCompensationOffset,
       scrollReserveHeight
     ]
   );
@@ -276,8 +281,18 @@ export function HomepageDayBrowser({
 
   function captureDateChangeLayoutSynchronously(targetDateKey?: string) {
     flushSync(() => {
+      const stickySentinelTop =
+        stickySentinelRef.current?.getBoundingClientRect().top ?? null;
+      const isDateHeaderStuckAtStart =
+        isDateHeaderVisuallyStuck ||
+        (typeof stickySentinelTop === "number" && stickySentinelTop < 0);
+
       captureDateHeaderTransitionStuckHold();
-      captureDateChangeLayoutRef.current(targetDateKey);
+      captureDateChangeLayoutRef.current(targetDateKey, {
+        isDateHeaderStuck: isDateHeaderStuckAtStart,
+        scrollTop: window.scrollY,
+        stickySentinelTop
+      });
     });
   }
 
@@ -409,9 +424,8 @@ export function HomepageDayBrowser({
         }
         openGigId={openGigId}
         renderedContentPanes={renderedContentPanes}
-        scrollAlignmentDateKey={scrollAlignmentDateKey}
-        scrollAlignmentSettlingDateKey={scrollAlignmentSettlingDateKey}
         scrollCarryoverDateKey={scrollCarryoverDateKey}
+        scrollOutgoingCompensationDateKey={scrollOutgoingCompensationDateKey}
         scrollReserveTargetDateKey={scrollReserveTargetDateKey}
         scrollTargetContentRef={scrollTargetContentRef}
         transitionDirection={transition?.direction}

@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   getHomepageDayNaturalMaxScrollTop,
+  getHomepageDayOutgoingCompensationOffset,
   getHomepageDayPreservedScrollTarget,
   getHomepageDayScrollDebtSettlement,
-  getHomepageDayScrollAlignmentOffset,
   getHomepageDayScrollCarryoverReserve,
   getHomepageDayScrollDebt,
   getHomepageDayTargetDocumentHeight,
@@ -12,13 +12,10 @@ import {
   getHomepageDayScrollTarget,
   getHomepageDayStickyScrollTarget,
   getInitialHomepageDayScrollReservePlan,
-  getNextHomepageDayScrollAlignmentOffset,
   getNextHomepageDayScrollIntent,
   getNextHomepageDayScrollDebtReserve,
   isHomepageDayScrollIntentFresh,
-  shouldPlanHomepageDayScrollReserve,
-  shouldRestoreHomepageDayScroll,
-  shouldUseHomepageDayVisualAlignmentDebt
+  shouldPlanHomepageDayScrollReserve
 } from "./use-homepage-day-scroll-restoration";
 
 describe("homepage day scroll restoration helpers", () => {
@@ -127,41 +124,6 @@ describe("homepage day scroll restoration helpers", () => {
     ).toEqual(stickyIntent);
   });
 
-  it("waits until sticky requested date is active and no longer transitioning", () => {
-    const intent = {
-      capturedScrollTop: 480,
-      mode: "sticky" as const,
-      targetDateKey: "2026-06-15",
-      timestamp: 1000
-    };
-
-    expect(
-      shouldRestoreHomepageDayScroll(intent, "2026-06-15", false, false)
-    ).toBe(true);
-    expect(
-      shouldRestoreHomepageDayScroll(intent, "2026-06-15", true, false)
-    ).toBe(false);
-    expect(
-      shouldRestoreHomepageDayScroll(intent, "2026-06-15", false, true)
-    ).toBe(false);
-    expect(
-      shouldRestoreHomepageDayScroll(intent, "2026-06-16", false, false)
-    ).toBe(false);
-  });
-
-  it("never restores page scroll for preserve-scroll intent", () => {
-    const intent = {
-      capturedScrollTop: 140,
-      mode: "preserve-scroll" as const,
-      targetDateKey: "2026-06-15",
-      timestamp: 1000
-    };
-
-    expect(
-      shouldRestoreHomepageDayScroll(intent, "2026-06-15", false, false)
-    ).toBe(false);
-  });
-
   it("treats stored sticky scroll intent as short lived", () => {
     expect(
       isHomepageDayScrollIntentFresh(
@@ -230,160 +192,80 @@ describe("homepage day scroll restoration helpers", () => {
     ).toBe(444);
   });
 
-  it("calculates sticky pane alignment offset from current scroll to final target", () => {
+  it("calculates outgoing compensation when sticky pre-scroll moves upward", () => {
     expect(
-      getHomepageDayScrollAlignmentOffset({
-        currentScrollTop: 1200,
+      getHomepageDayOutgoingCompensationOffset({
+        capturedScrollTop: 1200,
         mode: "sticky",
         scrollTarget: 404
       })
-    ).toBe(796);
+    ).toBe(-796);
   });
 
-  it("does not add sticky pane alignment when the current scroll is already above the target", () => {
+  it("does not compensate when sticky pre-scroll would move downward", () => {
     expect(
-      getHomepageDayScrollAlignmentOffset({
-        currentScrollTop: 280,
+      getHomepageDayOutgoingCompensationOffset({
+        capturedScrollTop: 280,
         mode: "sticky",
         scrollTarget: 404
       })
     ).toBe(0);
   });
 
-  it("does not add pane alignment for preserve-scroll mode", () => {
+  it("does not compensate when sticky pre-scroll is not needed", () => {
     expect(
-      getHomepageDayScrollAlignmentOffset({
-        currentScrollTop: 1200,
+      getHomepageDayOutgoingCompensationOffset({
+        capturedScrollTop: 404,
+        mode: "sticky",
+        scrollTarget: 404
+      })
+    ).toBe(0);
+  });
+
+  it("does not compensate outgoing panes for preserve-scroll mode", () => {
+    expect(
+      getHomepageDayOutgoingCompensationOffset({
+        capturedScrollTop: 1200,
         mode: "preserve-scroll",
         scrollTarget: 404
       })
     ).toBe(0);
   });
 
-  it("uses visual alignment debt only for positive sticky alignment", () => {
-    expect(
-      shouldUseHomepageDayVisualAlignmentDebt({
-        alignmentOffset: 120,
-        mode: "sticky"
-      })
-    ).toBe(true);
-
-    expect(
-      shouldUseHomepageDayVisualAlignmentDebt({
-        alignmentOffset: 0,
-        mode: "sticky"
-      })
-    ).toBe(false);
-
-    expect(
-      shouldUseHomepageDayVisualAlignmentDebt({
-        alignmentOffset: 120,
-        mode: "preserve-scroll"
-      })
-    ).toBe(false);
-  });
-
-  it("shrinks visual alignment debt as the user scrolls upward", () => {
-    expect(
-      getNextHomepageDayScrollAlignmentOffset({
-        currentAlignmentOffset: 620,
-        scrollTarget: 404,
-        scrollTop: 920
-      })
-    ).toBe(516);
-  });
-
-  it("does not grow visual alignment debt for the settled date", () => {
-    expect(
-      getNextHomepageDayScrollAlignmentOffset({
-        currentAlignmentOffset: 220,
-        scrollTarget: 404,
-        scrollTop: 920
-      })
-    ).toBe(220);
-  });
-
-  it("clears visual alignment debt when scroll reaches the sticky target", () => {
-    expect(
-      getNextHomepageDayScrollAlignmentOffset({
-        currentAlignmentOffset: 220,
-        scrollTarget: 404,
-        scrollTop: 404
-      })
-    ).toBe(0);
-  });
-
-  it("keeps visual alignment debt active while idle settlement animates to zero", () => {
+  it("shrinks reserve after scroll debt settles", () => {
     expect(
       getHomepageDayScrollDebtSettlement({
-        currentAlignmentOffset: 220,
         currentReserveHeight: 120,
-        hasVisualAlignmentDebt: true,
         naturalMaxScrollTop: 404,
-        scrollTarget: 404,
-        scrollTop: 404
+        scrollTop: 500
       })
     ).toEqual({
-      alignmentOffset: 0,
-      hasVisualAlignmentDebt: true,
-      isAlignmentSettling: true,
-      reserveHeight: 0,
+      reserveHeight: 96,
       shouldClear: false
     });
   });
 
-  it("settles reserve and alignment together after scroll idle", () => {
+  it("does not grow reserve after scroll debt settles", () => {
     expect(
       getHomepageDayScrollDebtSettlement({
-        currentAlignmentOffset: 620,
-        currentReserveHeight: 320,
-        hasVisualAlignmentDebt: true,
-        naturalMaxScrollTop: 280,
-        scrollTarget: 404,
-        scrollTop: 920
-      })
-    ).toEqual({
-      alignmentOffset: 516,
-      hasVisualAlignmentDebt: true,
-      isAlignmentSettling: true,
-      reserveHeight: 320,
-      shouldClear: false
-    });
-  });
-
-  it("does not grow reserve or alignment during idle settlement", () => {
-    expect(
-      getHomepageDayScrollDebtSettlement({
-        currentAlignmentOffset: 220,
         currentReserveHeight: 120,
-        hasVisualAlignmentDebt: true,
         naturalMaxScrollTop: 280,
-        scrollTarget: 404,
         scrollTop: 920
       })
     ).toEqual({
-      alignmentOffset: 220,
-      hasVisualAlignmentDebt: true,
-      isAlignmentSettling: false,
       reserveHeight: 120,
       shouldClear: false
     });
   });
 
-  it("clears settled scroll debt when no reserve or alignment remains", () => {
+  it("clears settled reserve when scroll reaches the natural maximum", () => {
     expect(
       getHomepageDayScrollDebtSettlement({
-        currentAlignmentOffset: 0,
         currentReserveHeight: 120,
-        hasVisualAlignmentDebt: false,
         naturalMaxScrollTop: 280,
-        scrollTarget: 404,
         scrollTop: 280
       })
     ).toEqual({
-      alignmentOffset: 0,
-      hasVisualAlignmentDebt: false,
-      isAlignmentSettling: false,
       reserveHeight: 0,
       shouldClear: true
     });
@@ -593,9 +475,7 @@ describe("homepage day scroll restoration helpers", () => {
         timestamp: 1000
       })
     ).toEqual({
-      alignmentOffset: 0,
       dateKey: "2026-06-18",
-      hasVisualAlignmentDebt: false,
       height: 0,
       isPlanned: false,
       mode: "sticky",
@@ -616,9 +496,7 @@ describe("homepage day scroll restoration helpers", () => {
         720
       )
     ).toEqual({
-      alignmentOffset: 0,
       dateKey: "2026-06-18",
-      hasVisualAlignmentDebt: false,
       height: 720,
       isPlanned: false,
       mode: "sticky",
@@ -639,9 +517,7 @@ describe("homepage day scroll restoration helpers", () => {
         720
       )
     ).toEqual({
-      alignmentOffset: 0,
       dateKey: "2026-06-18",
-      hasVisualAlignmentDebt: false,
       height: 0,
       isPlanned: false,
       mode: "preserve-scroll",
@@ -652,9 +528,7 @@ describe("homepage day scroll restoration helpers", () => {
 
   it("does not create provisional reserve for non-sticky changes", () => {
     expect(getInitialHomepageDayScrollReservePlan(null, 720)).toEqual({
-      alignmentOffset: 0,
       dateKey: null,
-      hasVisualAlignmentDebt: false,
       height: 0,
       isPlanned: false,
       mode: null,
