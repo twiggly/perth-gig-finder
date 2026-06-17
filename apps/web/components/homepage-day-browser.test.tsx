@@ -7,10 +7,7 @@ import { theme } from "@/app/theme";
 import type { DateGroup } from "@/lib/homepage-dates";
 import type { GigCardRecord } from "@/lib/gigs";
 
-import {
-  HomepageDayBrowser,
-  HomepageDayHeaderCover
-} from "./homepage-day-browser";
+import { HomepageDayBrowser } from "./homepage-day-browser";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/"
@@ -108,68 +105,5 @@ describe("HomepageDayBrowser", () => {
 
     expect(html).toContain("ALT//THURSDAYS");
     expect(html).not.toContain("Tomorrow&#x27;s Show");
-  });
-
-  it("renders the sticky scroll cover as inert visual-only header markup", () => {
-    const today = {
-      dateKey: "2026-06-17",
-      heading: "Wed, Jun 17th",
-      items: [createGig()]
-    };
-    const tomorrow = {
-      dateKey: "2026-06-18",
-      heading: "Thu, Jun 18th",
-      items: [createGig({ id: "gig-2" })]
-    };
-    const html = renderToStaticMarkup(
-      <MantineProvider defaultColorScheme="dark" theme={theme}>
-        <HomepageDayHeaderCover
-          availableDayMap={
-            new Map([
-              [today.dateKey, { dateKey: today.dateKey, heading: today.heading }],
-              [
-                tomorrow.dateKey,
-                { dateKey: tomorrow.dateKey, heading: tomorrow.heading }
-              ]
-            ])
-          }
-          fallbackHeading={today.heading}
-          headingTrackStyle={
-            {
-              "--day-browser-heading-duration": "240ms"
-            } as React.CSSProperties
-          }
-          loadedDayMap={
-            new Map([
-              [today.dateKey, today],
-              [tomorrow.dateKey, tomorrow]
-            ])
-          }
-          renderedHeadingPanes={[
-            {
-              dateKey: today.dateKey,
-              motionRole: "from",
-              phase: "animating"
-            },
-            {
-              dateKey: tomorrow.dateKey,
-              motionRole: "to",
-              phase: "animating"
-            }
-          ]}
-          transitionDirection="next"
-        />
-      </MantineProvider>
-    );
-
-    expect(html).toContain('aria-hidden="true"');
-    expect(html).toContain("day-browser__header-cover");
-    expect(html).toContain('data-stuck="true"');
-    expect(html).toContain('data-direction="next"');
-    expect(html).toContain('data-motion-role="from"');
-    expect(html).toContain('data-motion-role="to"');
-    expect(html).toContain("Wed, Jun 17th");
-    expect(html).toContain("Thu, Jun 18th");
-    expect(html).not.toContain("<button");
   });
 });

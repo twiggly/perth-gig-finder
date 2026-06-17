@@ -27,10 +27,7 @@ import { HomepageDayCalendarDropdown } from "./homepage-day-calendar-dropdown";
 import { HomepageDayContent } from "./homepage-day-content";
 import { useHomepageDayCache } from "./use-homepage-day-cache";
 import { useHomepageDayGestures } from "./use-homepage-day-gestures";
-import {
-  useHomepageDayNavigation,
-  type DayBrowserPaneState
-} from "./use-homepage-day-navigation";
+import { useHomepageDayNavigation } from "./use-homepage-day-navigation";
 import { useHomepageDayScrollRestoration } from "./use-homepage-day-scroll-restoration";
 import { useHomepageDayStickyHeader } from "./use-homepage-day-sticky-header";
 
@@ -40,63 +37,6 @@ interface HomepageDayBrowserProps {
   initialActiveDateKey: string;
   initialDays: HomepageDayPayload[];
   selectedVenueSlugs: string[];
-}
-
-interface HomepageDayHeaderCoverProps {
-  availableDayMap: Map<string, DateSummary>;
-  fallbackHeading: string;
-  headingTrackStyle: React.CSSProperties;
-  loadedDayMap: Map<string, HomepageDayPayload>;
-  renderedHeadingPanes: DayBrowserPaneState[];
-  transitionDirection?: SwipeDirection;
-}
-
-export function HomepageDayHeaderCover({
-  availableDayMap,
-  fallbackHeading,
-  headingTrackStyle,
-  loadedDayMap,
-  renderedHeadingPanes,
-  transitionDirection
-}: HomepageDayHeaderCoverProps) {
-  return (
-    <Box
-      aria-hidden="true"
-      className="day-browser__header day-browser__header-cover"
-      data-stuck="true"
-    >
-      <span className="day-browser__arrow day-browser__arrow--cover">
-        &lt;
-      </span>
-      <span className="day-browser__heading-button day-browser__heading-button--cover">
-        <Box className="day-browser__heading-viewport">
-          <Box
-            className="day-browser__heading-track"
-            data-direction={transitionDirection}
-            style={headingTrackStyle}
-          >
-            {renderedHeadingPanes.map(({ dateKey, motionRole, phase }) => (
-              <Box
-                className="day-browser__heading-pane"
-                data-motion-role={motionRole}
-                data-phase={phase ?? undefined}
-                key={`cover-heading-${dateKey}`}
-              >
-                <span className="day-browser__heading-title">
-                  {loadedDayMap.get(dateKey)?.heading ??
-                    availableDayMap.get(dateKey)?.heading ??
-                    fallbackHeading}
-                </span>
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      </span>
-      <span className="day-browser__arrow day-browser__arrow--cover">
-        &gt;
-      </span>
-    </Box>
-  );
 }
 
 const LOCAL_PREVIEW_ASSET_REVISION =
@@ -111,16 +51,9 @@ export function HomepageDayBrowser({
 }: HomepageDayBrowserProps) {
   const previewAssetRevision = LOCAL_PREVIEW_ASSET_REVISION;
   const scrollTargetContentRef = useRef<HTMLDivElement | null>(null);
-  const captureDateChangeLayoutRef = useRef<
-    (
-      targetDateKey?: string,
-      snapshot?: {
-        isDateHeaderStuck: boolean;
-        scrollTop: number;
-        stickySentinelTop: number | null;
-      }
-    ) => void
-  >(() => {});
+  const captureDateChangeLayoutRef = useRef<(targetDateKey?: string) => void>(
+    () => {}
+  );
   const clearDateChangeLayoutRef = useRef<() => void>(() => {});
   const dateHeaderRef = useRef<HTMLDivElement | null>(null);
   const resetAdjacentImagePreloadsRef = useRef<() => void>(() => {});
@@ -215,6 +148,7 @@ export function HomepageDayBrowser({
   const {
     captureDateHeaderTransitionStuckHold,
     clearDateHeaderTransitionStuckHold,
+    isDateHeaderStuck,
     isDateHeaderVisuallyStuck,
     stickySentinelRef
   } = useHomepageDayStickyHeader({
@@ -230,7 +164,6 @@ export function HomepageDayBrowser({
   const {
     captureDateChangeLayout,
     clearDateChangeLayout,
-    isStickyScrollCoverActive,
     scrollAlignmentDateKey,
     scrollAlignmentOffset,
     scrollCarryoverDateKey,
@@ -241,7 +174,7 @@ export function HomepageDayBrowser({
     activeDateKey,
     isContentAnimating,
     isDateTransitioning: transition !== null,
-    isDateHeaderStuck: isDateHeaderVisuallyStuck,
+    isDateHeaderStuck,
     scrollTargetContentRef,
     stickyHeaderRef: dateHeaderRef,
     stickySentinelRef
@@ -342,18 +275,8 @@ export function HomepageDayBrowser({
 
   function captureDateChangeLayoutSynchronously(targetDateKey?: string) {
     flushSync(() => {
-      const stickySentinelTop =
-        stickySentinelRef.current?.getBoundingClientRect().top ?? null;
-      const isDateHeaderStuckAtStart =
-        isDateHeaderVisuallyStuck ||
-        (typeof stickySentinelTop === "number" && stickySentinelTop < 0);
-
       captureDateHeaderTransitionStuckHold();
-      captureDateChangeLayoutRef.current(targetDateKey, {
-        isDateHeaderStuck: isDateHeaderStuckAtStart,
-        scrollTop: window.scrollY,
-        stickySentinelTop
-      });
+      captureDateChangeLayoutRef.current(targetDateKey);
     });
   }
 
@@ -461,16 +384,6 @@ export function HomepageDayBrowser({
           <span aria-hidden="true">&gt;</span>
         </ActionIcon>
       </Box>
-      {isStickyScrollCoverActive ? (
-        <HomepageDayHeaderCover
-          availableDayMap={availableDayMap}
-          fallbackHeading={activeDay.heading}
-          headingTrackStyle={headingTrackStyle}
-          loadedDayMap={loadedDayMap}
-          renderedHeadingPanes={renderedHeadingPanes}
-          transitionDirection={transition?.direction}
-        />
-      ) : null}
       {isLoadingDay ? (
         <span className="sr-only" role="status">
           Loading gigs for the selected date.
