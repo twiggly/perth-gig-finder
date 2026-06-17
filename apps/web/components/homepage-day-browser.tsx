@@ -164,6 +164,7 @@ export function HomepageDayBrowser({
   const {
     captureDateChangeLayout,
     clearDateChangeLayout,
+    isStickyScrollRestorationVisualHoldActive,
     scrollAlignmentDateKey,
     scrollAlignmentOffset,
     scrollCarryoverDateKey,
@@ -196,6 +197,8 @@ export function HomepageDayBrowser({
       scrollReserveHeight
     ]
   );
+  const isDateHeaderRenderedStuck =
+    isDateHeaderVisuallyStuck || isStickyScrollRestorationVisualHoldActive;
   useEffect(() => {
     if (typeof window === "undefined" || !activeDateKey) {
       return;
@@ -300,7 +303,10 @@ export function HomepageDayBrowser({
       />
       <Box
         className="day-browser__header"
-        data-stuck={isDateHeaderVisuallyStuck ? "true" : undefined}
+        data-sticky-restoring={
+          isStickyScrollRestorationVisualHoldActive ? "true" : undefined
+        }
+        data-stuck={isDateHeaderRenderedStuck ? "true" : undefined}
         ref={dateHeaderRef}
       >
         <ActionIcon

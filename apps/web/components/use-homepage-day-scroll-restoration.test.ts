@@ -6,6 +6,7 @@ import {
   getHomepageDayScrollAlignmentOffset,
   getHomepageDayScrollCarryoverReserve,
   getHomepageDayScrollDebt,
+  getHomepageDayStickyScrollRestorationHoldRelease,
   getHomepageDayTargetDocumentHeight,
   getHomepageDayScrollIntent,
   getHomepageDayScrollTarget,
@@ -157,6 +158,66 @@ describe("homepage day scroll restoration helpers", () => {
     expect(
       shouldRestoreHomepageDayScroll(intent, "2026-06-15", false, false)
     ).toBe(false);
+  });
+
+  it("keeps sticky restoration hold until the final scroll has run", () => {
+    expect(
+      getHomepageDayStickyScrollRestorationHoldRelease({
+        hasScrolled: false,
+        isHoldActive: true,
+        maxRetryCount: 3,
+        retryCount: 0,
+        stickySentinelTop: -12
+      })
+    ).toBe("keep");
+  });
+
+  it("keeps sticky restoration hold for one frame after the final scroll", () => {
+    expect(
+      getHomepageDayStickyScrollRestorationHoldRelease({
+        hasScrolled: true,
+        isHoldActive: true,
+        maxRetryCount: 3,
+        retryCount: 0,
+        stickySentinelTop: -12
+      })
+    ).toBe("retry");
+  });
+
+  it("clears sticky restoration hold once post-scroll geometry confirms stuck", () => {
+    expect(
+      getHomepageDayStickyScrollRestorationHoldRelease({
+        hasScrolled: true,
+        isHoldActive: true,
+        maxRetryCount: 3,
+        retryCount: 1,
+        stickySentinelTop: -12
+      })
+    ).toBe("clear");
+  });
+
+  it("retries sticky restoration hold while post-scroll geometry is unsettled", () => {
+    expect(
+      getHomepageDayStickyScrollRestorationHoldRelease({
+        hasScrolled: true,
+        isHoldActive: true,
+        maxRetryCount: 3,
+        retryCount: 1,
+        stickySentinelTop: 4
+      })
+    ).toBe("retry");
+  });
+
+  it("eventually releases sticky restoration hold with a bounded fallback", () => {
+    expect(
+      getHomepageDayStickyScrollRestorationHoldRelease({
+        hasScrolled: true,
+        isHoldActive: true,
+        maxRetryCount: 3,
+        retryCount: 3,
+        stickySentinelTop: 4
+      })
+    ).toBe("fallback-clear");
   });
 
   it("treats stored sticky scroll intent as short lived", () => {

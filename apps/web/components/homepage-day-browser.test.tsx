@@ -1,17 +1,36 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MantineProvider } from "@mantine/core";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { theme } from "@/app/theme";
 import type { DateGroup } from "@/lib/homepage-dates";
 import type { GigCardRecord } from "@/lib/gigs";
 
-import { HomepageDayBrowser } from "./homepage-day-browser";
+const scrollRestorationMockState = vi.hoisted(() => ({
+  isStickyScrollRestorationVisualHoldActive: false
+}));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/"
 }));
+
+vi.mock("./use-homepage-day-scroll-restoration", () => ({
+  useHomepageDayScrollRestoration: () => ({
+    captureDateChangeLayout: () => {},
+    clearDateChangeLayout: () => {},
+    isStickyScrollRestorationVisualHoldActive:
+      scrollRestorationMockState.isStickyScrollRestorationVisualHoldActive,
+    scrollAlignmentDateKey: null,
+    scrollAlignmentOffset: 0,
+    scrollCarryoverDateKey: null,
+    scrollCarryoverReserve: 0,
+    scrollReserveHeight: 0,
+    scrollReserveTargetDateKey: null
+  })
+}));
+
+import { HomepageDayBrowser } from "./homepage-day-browser";
 
 function createGig(
   overrides: Partial<GigCardRecord> = {}
@@ -69,6 +88,10 @@ function renderBrowser(days: Array<DateGroup<GigCardRecord>>) {
 }
 
 describe("HomepageDayBrowser", () => {
+  beforeEach(() => {
+    scrollRestorationMockState.isStickyScrollRestorationVisualHoldActive = false;
+  });
+
   it("renders the date heading as a calendar trigger", () => {
     const html = renderBrowser([
       {
@@ -82,6 +105,21 @@ describe("HomepageDayBrowser", () => {
     expect(html).toContain('aria-haspopup="dialog"');
     expect(html).toContain("day-browser__heading-button");
     expect(html).toContain("Wed, Apr 29th");
+  });
+
+  it("keeps the date header visually stuck while sticky scroll restoration is active", () => {
+    scrollRestorationMockState.isStickyScrollRestorationVisualHoldActive = true;
+
+    const html = renderBrowser([
+      {
+        dateKey: "2026-04-29",
+        heading: "Wed, Apr 29th",
+        items: [createGig()]
+      }
+    ]);
+
+    expect(html).toContain('data-sticky-restoring="true"');
+    expect(html).toContain('data-stuck="true"');
   });
 
   it("renders only the active day even when adjacent days are seeded", () => {
