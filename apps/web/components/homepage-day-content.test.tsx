@@ -287,13 +287,17 @@ describe("HomepageDayContent", () => {
     );
   });
 
-  it("does not keep the scroll alignment target on the final active pane", () => {
+  it("keeps the scroll alignment target on the final active pane while debt exists", () => {
     const html = renderContent({
       scrollAlignmentDateKey: "2026-04-29"
     });
 
     expect(html).toContain('data-motion-role="active"');
-    expect(html).not.toContain('data-scroll-align-target="true"');
+    expect(html).toContain('data-scroll-align-target="true"');
+    expect(html.match(/data-scroll-align-target="true"/g)).toHaveLength(1);
+    expect(html).toMatch(
+      /class="[^"]*day-browser__content-align[^"]*" data-scroll-align-target="true"/
+    );
   });
 
   it("marks the outgoing from pane as carryover without making it the target", () => {

@@ -11,11 +11,13 @@ import {
   getHomepageDayScrollTarget,
   getHomepageDayStickyScrollTarget,
   getInitialHomepageDayScrollReservePlan,
+  getNextHomepageDayScrollAlignmentOffset,
   getNextHomepageDayScrollIntent,
   getNextHomepageDayScrollDebtReserve,
   isHomepageDayScrollIntentFresh,
   shouldPlanHomepageDayScrollReserve,
-  shouldRestoreHomepageDayScroll
+  shouldRestoreHomepageDayScroll,
+  shouldUseHomepageDayVisualAlignmentDebt
 } from "./use-homepage-day-scroll-restoration";
 
 describe("homepage day scroll restoration helpers", () => {
@@ -257,6 +259,59 @@ describe("homepage day scroll restoration helpers", () => {
     ).toBe(0);
   });
 
+  it("uses visual alignment debt only for positive sticky alignment", () => {
+    expect(
+      shouldUseHomepageDayVisualAlignmentDebt({
+        alignmentOffset: 120,
+        mode: "sticky"
+      })
+    ).toBe(true);
+
+    expect(
+      shouldUseHomepageDayVisualAlignmentDebt({
+        alignmentOffset: 0,
+        mode: "sticky"
+      })
+    ).toBe(false);
+
+    expect(
+      shouldUseHomepageDayVisualAlignmentDebt({
+        alignmentOffset: 120,
+        mode: "preserve-scroll"
+      })
+    ).toBe(false);
+  });
+
+  it("shrinks visual alignment debt as the user scrolls upward", () => {
+    expect(
+      getNextHomepageDayScrollAlignmentOffset({
+        currentAlignmentOffset: 620,
+        scrollTarget: 404,
+        scrollTop: 920
+      })
+    ).toBe(516);
+  });
+
+  it("does not grow visual alignment debt for the settled date", () => {
+    expect(
+      getNextHomepageDayScrollAlignmentOffset({
+        currentAlignmentOffset: 220,
+        scrollTarget: 404,
+        scrollTop: 920
+      })
+    ).toBe(220);
+  });
+
+  it("clears visual alignment debt when scroll reaches the sticky target", () => {
+    expect(
+      getNextHomepageDayScrollAlignmentOffset({
+        currentAlignmentOffset: 220,
+        scrollTarget: 404,
+        scrollTop: 404
+      })
+    ).toBe(0);
+  });
+
   it("calculates natural max scroll top from natural scroll height", () => {
     expect(
       getHomepageDayNaturalMaxScrollTop({
@@ -463,6 +518,7 @@ describe("homepage day scroll restoration helpers", () => {
     ).toEqual({
       alignmentOffset: 0,
       dateKey: "2026-06-18",
+      hasVisualAlignmentDebt: false,
       height: 0,
       isPlanned: false,
       mode: "sticky",
@@ -485,6 +541,7 @@ describe("homepage day scroll restoration helpers", () => {
     ).toEqual({
       alignmentOffset: 0,
       dateKey: "2026-06-18",
+      hasVisualAlignmentDebt: false,
       height: 720,
       isPlanned: false,
       mode: "sticky",
@@ -507,6 +564,7 @@ describe("homepage day scroll restoration helpers", () => {
     ).toEqual({
       alignmentOffset: 0,
       dateKey: "2026-06-18",
+      hasVisualAlignmentDebt: false,
       height: 0,
       isPlanned: false,
       mode: "preserve-scroll",
@@ -519,6 +577,7 @@ describe("homepage day scroll restoration helpers", () => {
     expect(getInitialHomepageDayScrollReservePlan(null, 720)).toEqual({
       alignmentOffset: 0,
       dateKey: null,
+      hasVisualAlignmentDebt: false,
       height: 0,
       isPlanned: false,
       mode: null,

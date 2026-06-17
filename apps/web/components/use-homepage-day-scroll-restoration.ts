@@ -59,6 +59,7 @@ interface HomepageDayScrollIntent {
 interface HomepageDayScrollReservePlan {
   alignmentOffset: number;
   dateKey: string | null;
+  hasVisualAlignmentDebt: boolean;
   height: number;
   isPlanned: boolean;
   mode: HomepageDayScrollIntentMode | null;
@@ -84,6 +85,7 @@ const STICKY_SCROLL_INTENT_TTL_MS = 30000;
 const EMPTY_RESERVE_PLAN: HomepageDayScrollReservePlan = {
   alignmentOffset: 0,
   dateKey: null,
+  hasVisualAlignmentDebt: false,
   height: 0,
   isPlanned: false,
   mode: null,
@@ -204,6 +206,35 @@ export function getHomepageDayScrollAlignmentOffset({
   return Math.max(0, currentScrollTop - scrollTarget);
 }
 
+export function shouldUseHomepageDayVisualAlignmentDebt({
+  alignmentOffset,
+  mode
+}: {
+  alignmentOffset: number;
+  mode: HomepageDayScrollIntentMode | null;
+}): boolean {
+  return mode === "sticky" && alignmentOffset > 0;
+}
+
+export function getNextHomepageDayScrollAlignmentOffset({
+  currentAlignmentOffset,
+  scrollTarget,
+  scrollTop
+}: {
+  currentAlignmentOffset: number;
+  scrollTarget: number | null;
+  scrollTop: number;
+}): number {
+  if (scrollTarget === null) {
+    return 0;
+  }
+
+  return Math.min(
+    currentAlignmentOffset,
+    Math.max(0, scrollTop - scrollTarget)
+  );
+}
+
 export function getHomepageDayNaturalMaxScrollTop({
   clientHeight,
   scrollHeight
@@ -309,6 +340,7 @@ export function getInitialHomepageDayScrollReservePlan(
   return {
     alignmentOffset: 0,
     dateKey: intent?.targetDateKey ?? null,
+    hasVisualAlignmentDebt: false,
     height: intent ? provisionalHeight : 0,
     isPlanned: false,
     mode: intent?.mode ?? null,
@@ -604,34 +636,47 @@ export function useHomepageDayScrollRestoration(
 
     const currentReservePlan = reservePlanRef.current;
 
-    if (
-      !currentReservePlan.dateKey ||
-      currentReservePlan.height <= 0 ||
-      currentReservePlan.naturalMaxScrollTop === null
-    ) {
+    if (!currentReservePlan.dateKey) {
       return;
     }
 
     const measuredNaturalMaxScrollTop = getCurrentNaturalMaxScrollTop();
     const naturalMaxScrollTop =
       measuredNaturalMaxScrollTop ?? currentReservePlan.naturalMaxScrollTop;
-    const nextReserveHeight = getNextHomepageDayScrollDebtReserve({
-      currentReserveHeight: currentReservePlan.height,
-      naturalMaxScrollTop,
-      scrollTop: window.scrollY
-    });
+    const nextReserveHeight =
+      currentReservePlan.height > 0 && naturalMaxScrollTop !== null
+        ? getNextHomepageDayScrollDebtReserve({
+            currentReserveHeight: currentReservePlan.height,
+            naturalMaxScrollTop,
+            scrollTop: window.scrollY
+          })
+        : currentReservePlan.height;
+    const nextAlignmentOffset = currentReservePlan.hasVisualAlignmentDebt
+      ? getNextHomepageDayScrollAlignmentOffset({
+          currentAlignmentOffset: currentReservePlan.alignmentOffset,
+          scrollTarget: currentReservePlan.scrollTarget,
+          scrollTop: window.scrollY
+        })
+      : currentReservePlan.alignmentOffset;
+    const nextHasVisualAlignmentDebt =
+      currentReservePlan.hasVisualAlignmentDebt && nextAlignmentOffset > 0;
 
-    if (nextReserveHeight <= 0) {
+    if (nextReserveHeight <= 0 && !nextHasVisualAlignmentDebt) {
       clearReservePlan();
       return;
     }
 
     if (
       nextReserveHeight < currentReservePlan.height ||
+      nextAlignmentOffset < currentReservePlan.alignmentOffset ||
+      nextHasVisualAlignmentDebt !==
+        currentReservePlan.hasVisualAlignmentDebt ||
       naturalMaxScrollTop !== currentReservePlan.naturalMaxScrollTop
     ) {
       updateReservePlan({
         ...currentReservePlan,
+        alignmentOffset: nextAlignmentOffset,
+        hasVisualAlignmentDebt: nextHasVisualAlignmentDebt,
         height: nextReserveHeight,
         naturalMaxScrollTop
       });
@@ -748,9 +793,24 @@ export function useHomepageDayScrollRestoration(
       effectiveIntent.mode === "sticky"
         ? getCurrentStickyScrollTarget()
         : null;
+    const capturedStickyScrollTop =
+      effectiveIntent.mode === "sticky"
+        ? Math.max(effectiveIntent.capturedScrollTop, window.scrollY)
+        : window.scrollY;
+    const alignmentOffset = getHomepageDayScrollAlignmentOffset({
+      currentScrollTop: capturedStickyScrollTop,
+      mode: effectiveIntent.mode,
+      scrollTarget
+    });
+    const hasVisualAlignmentDebt = shouldUseHomepageDayVisualAlignmentDebt({
+      alignmentOffset,
+      mode: effectiveIntent.mode
+    });
     const effectiveScrollTop =
       effectiveIntent.mode === "sticky"
-        ? scrollTarget ?? window.scrollY
+        ? hasVisualAlignmentDebt
+          ? capturedStickyScrollTop
+          : scrollTarget ?? window.scrollY
         : effectiveIntent.capturedScrollTop;
     const scrollReserveHeight =
       naturalMaxScrollTop === null
@@ -759,15 +819,11 @@ export function useHomepageDayScrollRestoration(
             naturalMaxScrollTop,
             scrollTop: effectiveScrollTop
           });
-    const alignmentOffset = getHomepageDayScrollAlignmentOffset({
-      currentScrollTop: window.scrollY,
-      mode: effectiveIntent.mode,
-      scrollTarget
-    });
 
     updateReservePlan({
       alignmentOffset,
       dateKey: effectiveIntent.targetDateKey,
+      hasVisualAlignmentDebt,
       height: scrollReserveHeight,
       isPlanned: true,
       mode: effectiveIntent.mode,
@@ -794,6 +850,7 @@ export function useHomepageDayScrollRestoration(
 
     if (
       typeof window === "undefined" ||
+      !effectiveIntent ||
       !shouldRestoreHomepageDayScroll(
         effectiveIntent,
         activeDateKey,
@@ -807,11 +864,14 @@ export function useHomepageDayScrollRestoration(
 
     const scrollTarget = getCurrentStickyScrollTarget() ?? reservePlan.scrollTarget;
     const naturalMaxScrollTop = getCurrentNaturalMaxScrollTop();
+    const restoreScrollTop = reservePlan.hasVisualAlignmentDebt
+      ? Math.max(effectiveIntent.capturedScrollTop, window.scrollY)
+      : scrollTarget;
 
     if (naturalMaxScrollTop !== null) {
       const requiredReserveHeight = getHomepageDayScrollDebt({
         naturalMaxScrollTop,
-        scrollTop: scrollTarget
+        scrollTop: restoreScrollTop
       });
 
       if (requiredReserveHeight > reservePlan.height) {
@@ -827,6 +887,10 @@ export function useHomepageDayScrollRestoration(
 
     setPendingScrollIntent(null);
     clearCarryoverReserve();
+    if (reservePlan.hasVisualAlignmentDebt) {
+      return undefined;
+    }
+
     window.scrollTo({
       behavior: "auto",
       top: scrollTarget
@@ -838,6 +902,7 @@ export function useHomepageDayScrollRestoration(
     isContentAnimating,
     isDateTransitioning,
     pendingScrollIntent,
+    reservePlan.hasVisualAlignmentDebt,
     reservePlan.height,
     reservePlan.isPlanned,
     reservePlan.naturalMaxScrollTop,
@@ -955,11 +1020,11 @@ export function useHomepageDayScrollRestoration(
     captureDateChangeLayout,
     clearDateChangeLayout,
     scrollAlignmentDateKey:
-      reservePlan.mode === "sticky" && reservePlan.isPlanned
+      reservePlan.hasVisualAlignmentDebt && reservePlan.isPlanned
         ? reservePlan.dateKey
         : null,
     scrollAlignmentOffset:
-      reservePlan.mode === "sticky" && reservePlan.isPlanned
+      reservePlan.hasVisualAlignmentDebt && reservePlan.isPlanned
         ? reservePlan.alignmentOffset
         : 0,
     scrollCarryoverDateKey: carryoverReserve.dateKey,
