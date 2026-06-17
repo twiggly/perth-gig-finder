@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   getHomepageDayNaturalMaxScrollTop,
   getHomepageDayOutgoingCompensationOffset,
+  getHomepageDayOutgoingCompensationTarget,
   getHomepageDayPreservedScrollTarget,
   getHomepageDayScrollDebtSettlement,
   getHomepageDayScrollCarryoverReserve,
@@ -230,6 +231,67 @@ describe("homepage day scroll restoration helpers", () => {
         scrollTarget: 404
       })
     ).toBe(0);
+  });
+
+  it("targets outgoing compensation during sticky date transitions before pre-scroll", () => {
+    expect(
+      getHomepageDayOutgoingCompensationTarget({
+        capturedScrollTop: 1200,
+        fallbackDateKey: "2026-06-18",
+        isDateTransitioning: true,
+        mode: "sticky",
+        scrollTarget: 404,
+        sourceDateKey: "2026-06-19"
+      })
+    ).toEqual({
+      dateKey: "2026-06-19",
+      offset: -796
+    });
+  });
+
+  it("falls back to the active date for outgoing compensation targets", () => {
+    expect(
+      getHomepageDayOutgoingCompensationTarget({
+        capturedScrollTop: 1200,
+        fallbackDateKey: "2026-06-19",
+        isDateTransitioning: true,
+        mode: "sticky",
+        scrollTarget: 404
+      })
+    ).toEqual({
+      dateKey: "2026-06-19",
+      offset: -796
+    });
+  });
+
+  it("does not target outgoing compensation outside sticky transition pre-scroll", () => {
+    expect(
+      getHomepageDayOutgoingCompensationTarget({
+        capturedScrollTop: 1200,
+        fallbackDateKey: "2026-06-18",
+        isDateTransitioning: false,
+        mode: "sticky",
+        scrollTarget: 404,
+        sourceDateKey: "2026-06-19"
+      })
+    ).toEqual({
+      dateKey: null,
+      offset: 0
+    });
+
+    expect(
+      getHomepageDayOutgoingCompensationTarget({
+        capturedScrollTop: 1200,
+        fallbackDateKey: "2026-06-18",
+        isDateTransitioning: true,
+        mode: "preserve-scroll",
+        scrollTarget: 404,
+        sourceDateKey: "2026-06-19"
+      })
+    ).toEqual({
+      dateKey: null,
+      offset: 0
+    });
   });
 
   it("shrinks reserve after scroll debt settles", () => {
@@ -480,6 +542,8 @@ describe("homepage day scroll restoration helpers", () => {
       isPlanned: false,
       mode: "sticky",
       naturalMaxScrollTop: null,
+      outgoingCompensationDateKey: null,
+      outgoingCompensationOffset: 0,
       scrollTarget: null
     });
   });
@@ -501,6 +565,8 @@ describe("homepage day scroll restoration helpers", () => {
       isPlanned: false,
       mode: "sticky",
       naturalMaxScrollTop: null,
+      outgoingCompensationDateKey: null,
+      outgoingCompensationOffset: 0,
       scrollTarget: null
     });
   });
@@ -522,6 +588,8 @@ describe("homepage day scroll restoration helpers", () => {
       isPlanned: false,
       mode: "preserve-scroll",
       naturalMaxScrollTop: null,
+      outgoingCompensationDateKey: null,
+      outgoingCompensationOffset: 0,
       scrollTarget: null
     });
   });
@@ -533,6 +601,8 @@ describe("homepage day scroll restoration helpers", () => {
       isPlanned: false,
       mode: null,
       naturalMaxScrollTop: null,
+      outgoingCompensationDateKey: null,
+      outgoingCompensationOffset: 0,
       scrollTarget: null
     });
   });
