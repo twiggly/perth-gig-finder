@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  shouldClearHomepageDateHeaderStuckHold,
+  getHomepageDateHeaderStuckHoldRelease,
   shouldHoldHomepageDateHeaderStuck
 } from "./use-homepage-day-sticky-header";
 
@@ -39,30 +39,63 @@ describe("homepage day sticky header helpers", () => {
     ).toBe(false);
   });
 
-  it("clears the stuck date header hold after a transition settles", () => {
+  it("does not release the stuck hold merely because a transition settled", () => {
     expect(
-      shouldClearHomepageDateHeaderStuckHold({
+      getHomepageDateHeaderStuckHoldRelease({
         isDateHeaderTransitionStuckHold: true,
-        isDateTransitioning: false
+        isDateTransitioning: false,
+        maxRetryCount: 3,
+        retryCount: 0,
+        stickySentinelTop: 0
       })
-    ).toBe(true);
+    ).toBe("retry");
   });
 
   it("keeps the stuck date header hold while a transition is active", () => {
     expect(
-      shouldClearHomepageDateHeaderStuckHold({
+      getHomepageDateHeaderStuckHoldRelease({
         isDateHeaderTransitionStuckHold: true,
-        isDateTransitioning: true
+        isDateTransitioning: true,
+        maxRetryCount: 3,
+        retryCount: 0,
+        stickySentinelTop: -1
       })
-    ).toBe(false);
+    ).toBe("keep");
   });
 
   it("does not clear a stuck date header hold when no hold is active", () => {
     expect(
-      shouldClearHomepageDateHeaderStuckHold({
+      getHomepageDateHeaderStuckHoldRelease({
         isDateHeaderTransitionStuckHold: false,
-        isDateTransitioning: false
+        isDateTransitioning: false,
+        maxRetryCount: 3,
+        retryCount: 0,
+        stickySentinelTop: -1
       })
-    ).toBe(false);
+    ).toBe("keep");
+  });
+
+  it("releases the stuck hold when final sentinel geometry is stuck", () => {
+    expect(
+      getHomepageDateHeaderStuckHoldRelease({
+        isDateHeaderTransitionStuckHold: true,
+        isDateTransitioning: false,
+        maxRetryCount: 3,
+        retryCount: 0,
+        stickySentinelTop: -1
+      })
+    ).toBe("clear");
+  });
+
+  it("eventually releases the stuck hold as a fallback", () => {
+    expect(
+      getHomepageDateHeaderStuckHoldRelease({
+        isDateHeaderTransitionStuckHold: true,
+        isDateTransitioning: false,
+        maxRetryCount: 3,
+        retryCount: 3,
+        stickySentinelTop: 0
+      })
+    ).toBe("fallback-clear");
   });
 });

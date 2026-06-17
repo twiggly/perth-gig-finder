@@ -1,16 +1,27 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 interface HomepageDateHeaderStuckHoldInput {
   isDateHeaderStuck: boolean;
   stickySentinelTop?: number | null;
 }
 
-interface HomepageDateHeaderStuckHoldClearInput {
+type HomepageDateHeaderStuckHoldRelease =
+  | "clear"
+  | "keep"
+  | "retry"
+  | "fallback-clear";
+
+interface HomepageDateHeaderStuckHoldReleaseInput {
   isDateHeaderTransitionStuckHold: boolean;
   isDateTransitioning: boolean;
+  maxRetryCount: number;
+  retryCount: number;
+  stickySentinelTop?: number | null;
 }
+
+const DATE_HEADER_STUCK_HOLD_RELEASE_MAX_RETRIES = 3;
 
 export function shouldHoldHomepageDateHeaderStuck({
   isDateHeaderStuck,
@@ -22,11 +33,26 @@ export function shouldHoldHomepageDateHeaderStuck({
   );
 }
 
-export function shouldClearHomepageDateHeaderStuckHold({
+export function getHomepageDateHeaderStuckHoldRelease({
   isDateHeaderTransitionStuckHold,
-  isDateTransitioning
-}: HomepageDateHeaderStuckHoldClearInput): boolean {
-  return isDateHeaderTransitionStuckHold && !isDateTransitioning;
+  isDateTransitioning,
+  maxRetryCount,
+  retryCount,
+  stickySentinelTop
+}: HomepageDateHeaderStuckHoldReleaseInput): HomepageDateHeaderStuckHoldRelease {
+  if (!isDateHeaderTransitionStuckHold || isDateTransitioning) {
+    return "keep";
+  }
+
+  if (typeof stickySentinelTop === "number" && stickySentinelTop < 0) {
+    return "clear";
+  }
+
+  if (retryCount < maxRetryCount) {
+    return "retry";
+  }
+
+  return "fallback-clear";
 }
 
 export function useHomepageDayStickyHeader({
@@ -35,12 +61,15 @@ export function useHomepageDayStickyHeader({
   isDateTransitioning: boolean;
 }) {
   const stickySentinelRef = useRef<HTMLSpanElement | null>(null);
+  const stuckHoldReleaseFrameRef = useRef<number | null>(null);
+  const stuckHoldReleaseRetryCountRef = useRef(0);
   const stickyFrameRef = useRef<number | null>(null);
   const isDateHeaderStuckRef = useRef(false);
   const [
     isDateHeaderTransitionStuckHold,
     setIsDateHeaderTransitionStuckHold
   ] = useState(false);
+  const [stuckHoldReleaseRetryTick, setStuckHoldReleaseRetryTick] = useState(0);
   const [isDateHeaderStuck, setIsDateHeaderStuck] = useState(false);
   const isDateHeaderVisuallyStuck =
     isDateHeaderStuck || isDateHeaderTransitionStuckHold;
@@ -101,27 +130,68 @@ export function useHomepageDayStickyHeader({
     };
   }, []);
 
-  useEffect(() => {
-    if (
-      !shouldClearHomepageDateHeaderStuckHold({
-        isDateHeaderTransitionStuckHold,
-        isDateTransitioning
-      })
-    ) {
-      return;
-    }
-
+  useLayoutEffect(() => {
     if (typeof window === "undefined") {
-      setIsDateHeaderTransitionStuckHold(false);
+      if (isDateHeaderTransitionStuckHold && !isDateTransitioning) {
+        setIsDateHeaderTransitionStuckHold(false);
+      }
+
       return;
     }
 
-    const frameId = window.requestAnimationFrame(() => {
-      setIsDateHeaderTransitionStuckHold(false);
+    if (stuckHoldReleaseFrameRef.current !== null) {
+      window.cancelAnimationFrame(stuckHoldReleaseFrameRef.current);
+      stuckHoldReleaseFrameRef.current = null;
+    }
+
+    const stickySentinelTop =
+      stickySentinelRef.current?.getBoundingClientRect().top ?? null;
+    const release = getHomepageDateHeaderStuckHoldRelease({
+      isDateHeaderTransitionStuckHold,
+      isDateTransitioning,
+      maxRetryCount: DATE_HEADER_STUCK_HOLD_RELEASE_MAX_RETRIES,
+      retryCount: stuckHoldReleaseRetryCountRef.current,
+      stickySentinelTop
     });
 
-    return () => window.cancelAnimationFrame(frameId);
-  }, [isDateHeaderTransitionStuckHold, isDateTransitioning]);
+    if (release === "keep") {
+      if (!isDateHeaderTransitionStuckHold) {
+        stuckHoldReleaseRetryCountRef.current = 0;
+      }
+
+      return undefined;
+    }
+
+    if (release === "clear" || release === "fallback-clear") {
+      const measuredIsStuck =
+        typeof stickySentinelTop === "number" && stickySentinelTop < 0;
+
+      stuckHoldReleaseRetryCountRef.current = 0;
+      if (isDateHeaderStuckRef.current !== measuredIsStuck) {
+        isDateHeaderStuckRef.current = measuredIsStuck;
+        setIsDateHeaderStuck(measuredIsStuck);
+      }
+      setIsDateHeaderTransitionStuckHold(false);
+      return undefined;
+    }
+
+    stuckHoldReleaseFrameRef.current = window.requestAnimationFrame(() => {
+      stuckHoldReleaseFrameRef.current = null;
+      stuckHoldReleaseRetryCountRef.current += 1;
+      setStuckHoldReleaseRetryTick((current) => current + 1);
+    });
+
+    return () => {
+      if (stuckHoldReleaseFrameRef.current !== null) {
+        window.cancelAnimationFrame(stuckHoldReleaseFrameRef.current);
+        stuckHoldReleaseFrameRef.current = null;
+      }
+    };
+  }, [
+    isDateHeaderTransitionStuckHold,
+    isDateTransitioning,
+    stuckHoldReleaseRetryTick
+  ]);
 
   function captureDateHeaderTransitionStuckHold() {
     const stickySentinelTop =
@@ -133,9 +203,17 @@ export function useHomepageDayStickyHeader({
         stickySentinelTop
       })
     );
+    stuckHoldReleaseRetryCountRef.current = 0;
   }
 
   function clearDateHeaderTransitionStuckHold() {
+    stuckHoldReleaseRetryCountRef.current = 0;
+
+    if (typeof window !== "undefined" && stuckHoldReleaseFrameRef.current !== null) {
+      window.cancelAnimationFrame(stuckHoldReleaseFrameRef.current);
+      stuckHoldReleaseFrameRef.current = null;
+    }
+
     setIsDateHeaderTransitionStuckHold(false);
   }
 
