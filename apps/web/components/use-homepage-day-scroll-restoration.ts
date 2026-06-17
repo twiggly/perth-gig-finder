@@ -11,6 +11,8 @@ import {
 interface HomepageDayScrollIntentInput {
   isDateHeaderStuck: boolean;
   scrollTop?: number;
+  sourceDateKey?: string;
+  stickyActivationScrollTop?: number;
   targetDateKey?: string;
 }
 
@@ -36,14 +38,22 @@ interface UseHomepageDayScrollRestorationOptions {
   stickySentinelRef: RefObject<HTMLElement | null>;
 }
 
+interface HomepageDayScrollCaptureSnapshot {
+  isDateHeaderStuck: boolean;
+  scrollTop: number;
+  stickySentinelTop: number | null;
+}
+
 interface HomepageDayScrollRestoration {
-  captureDateChangeLayout: (targetDateKey?: string) => void;
+  captureDateChangeLayout: (
+    targetDateKey?: string,
+    snapshot?: HomepageDayScrollCaptureSnapshot
+  ) => void;
   clearDateChangeLayout: () => void;
-  scrollAlignmentDateKey: string | null;
-  scrollAlignmentOffset: number;
-  scrollAlignmentSettlingDateKey: string | null;
   scrollCarryoverDateKey: string | null;
   scrollCarryoverReserve: number;
+  scrollOutgoingCompensationDateKey: string | null;
+  scrollOutgoingCompensationOffset: number;
   scrollReserveHeight: number;
   scrollReserveTargetDateKey: string | null;
 }
@@ -53,14 +63,14 @@ type HomepageDayScrollIntentMode = "sticky" | "preserve-scroll";
 interface HomepageDayScrollIntent {
   capturedScrollTop: number;
   mode: HomepageDayScrollIntentMode;
+  sourceDateKey?: string;
+  stickyActivationScrollTop?: number;
   targetDateKey: string;
   timestamp: number;
 }
 
 interface HomepageDayScrollReservePlan {
-  alignmentOffset: number;
   dateKey: string | null;
-  hasVisualAlignmentDebt: boolean;
   height: number;
   isPlanned: boolean;
   mode: HomepageDayScrollIntentMode | null;
@@ -73,12 +83,9 @@ interface HomepageDayScrollCarryoverReserve {
   height: number;
 }
 
-interface HomepageDayScrollDebtSettlement {
-  alignmentOffset: number;
-  hasVisualAlignmentDebt: boolean;
-  isAlignmentSettling: boolean;
-  reserveHeight: number;
-  shouldClear: boolean;
+interface HomepageDayScrollOutgoingCompensation {
+  dateKey: string | null;
+  offset: number;
 }
 
 type HomepageDayScrollIntentWindow = Window &
@@ -87,16 +94,13 @@ type HomepageDayScrollIntentWindow = Window &
   };
 
 const ACTIVE_DAY_SCROLL_OFFSET_PX = 8;
-const SCROLL_ALIGNMENT_SETTLE_MS = 160;
 const SCROLL_DEBT_SETTLE_IDLE_MS = 140;
 const STICKY_ACTIVATION_OFFSET_PX = 1;
 const STICKY_SCROLL_INTENT_STORAGE_KEY =
   "gig-radar:homepage-day-sticky-scroll-intent";
 const STICKY_SCROLL_INTENT_TTL_MS = 30000;
 const EMPTY_RESERVE_PLAN: HomepageDayScrollReservePlan = {
-  alignmentOffset: 0,
   dateKey: null,
-  hasVisualAlignmentDebt: false,
   height: 0,
   isPlanned: false,
   mode: null,
@@ -107,10 +111,16 @@ const EMPTY_CARRYOVER_RESERVE: HomepageDayScrollCarryoverReserve = {
   dateKey: null,
   height: 0
 };
+const EMPTY_OUTGOING_COMPENSATION: HomepageDayScrollOutgoingCompensation = {
+  dateKey: null,
+  offset: 0
+};
 
 export function getHomepageDayScrollIntent({
   isDateHeaderStuck,
   scrollTop = 0,
+  sourceDateKey,
+  stickyActivationScrollTop,
   targetDateKey
 }: HomepageDayScrollIntentInput): HomepageDayScrollIntent | null {
   if (!targetDateKey) {
@@ -126,6 +136,10 @@ export function getHomepageDayScrollIntent({
   return {
     capturedScrollTop,
     mode: isDateHeaderStuck ? "sticky" : "preserve-scroll",
+    sourceDateKey,
+    stickyActivationScrollTop: isDateHeaderStuck
+      ? stickyActivationScrollTop
+      : undefined,
     targetDateKey,
     timestamp: Date.now()
   };
@@ -162,20 +176,6 @@ export function getNextHomepageDayScrollIntent({
     : currentIntent;
 }
 
-export function shouldRestoreHomepageDayScroll(
-  intent: HomepageDayScrollIntent | null,
-  activeDateKey: string,
-  isContentAnimating: boolean,
-  isDateTransitioning: boolean
-): boolean {
-  return (
-    intent?.mode === "sticky" &&
-    intent?.targetDateKey === activeDateKey &&
-    !isContentAnimating &&
-    !isDateTransitioning
-  );
-}
-
 export function getHomepageDayScrollTarget({
   contentTop,
   currentScrollY,
@@ -201,12 +201,12 @@ export function getHomepageDayStickyScrollTarget({
   return Math.max(contentScrollTarget, stickyActivationTarget);
 }
 
-export function getHomepageDayScrollAlignmentOffset({
-  currentScrollTop,
+export function getHomepageDayOutgoingCompensationOffset({
+  capturedScrollTop,
   mode,
   scrollTarget
 }: {
-  currentScrollTop: number;
+  capturedScrollTop: number;
   mode: HomepageDayScrollIntentMode | null;
   scrollTarget: number | null;
 }): number {
@@ -214,36 +214,9 @@ export function getHomepageDayScrollAlignmentOffset({
     return 0;
   }
 
-  return Math.max(0, currentScrollTop - scrollTarget);
-}
-
-export function shouldUseHomepageDayVisualAlignmentDebt({
-  alignmentOffset,
-  mode
-}: {
-  alignmentOffset: number;
-  mode: HomepageDayScrollIntentMode | null;
-}): boolean {
-  return mode === "sticky" && alignmentOffset > 0;
-}
-
-export function getNextHomepageDayScrollAlignmentOffset({
-  currentAlignmentOffset,
-  scrollTarget,
-  scrollTop
-}: {
-  currentAlignmentOffset: number;
-  scrollTarget: number | null;
-  scrollTop: number;
-}): number {
-  if (scrollTarget === null) {
-    return 0;
-  }
-
-  return Math.min(
-    currentAlignmentOffset,
-    Math.max(0, scrollTop - scrollTarget)
-  );
+  return scrollTarget < capturedScrollTop
+    ? scrollTarget - capturedScrollTop
+    : 0;
 }
 
 export function getHomepageDayNaturalMaxScrollTop({
@@ -330,20 +303,17 @@ export function getNextHomepageDayScrollDebtReserve({
 }
 
 export function getHomepageDayScrollDebtSettlement({
-  currentAlignmentOffset,
   currentReserveHeight,
-  hasVisualAlignmentDebt,
   naturalMaxScrollTop,
-  scrollTarget,
   scrollTop
 }: {
-  currentAlignmentOffset: number;
   currentReserveHeight: number;
-  hasVisualAlignmentDebt: boolean;
   naturalMaxScrollTop: number | null;
-  scrollTarget: number | null;
   scrollTop: number;
-}): HomepageDayScrollDebtSettlement {
+}): {
+  reserveHeight: number;
+  shouldClear: boolean;
+} {
   const reserveHeight =
     currentReserveHeight > 0 && naturalMaxScrollTop !== null
       ? getNextHomepageDayScrollDebtReserve({
@@ -352,24 +322,10 @@ export function getHomepageDayScrollDebtSettlement({
           scrollTop
         })
       : currentReserveHeight;
-  const alignmentOffset = hasVisualAlignmentDebt
-    ? getNextHomepageDayScrollAlignmentOffset({
-        currentAlignmentOffset,
-        scrollTarget,
-        scrollTop
-      })
-    : currentAlignmentOffset;
-  const isAlignmentSettling =
-    hasVisualAlignmentDebt && alignmentOffset < currentAlignmentOffset;
-  const nextHasVisualAlignmentDebt =
-    hasVisualAlignmentDebt && (alignmentOffset > 0 || isAlignmentSettling);
 
   return {
-    alignmentOffset,
-    hasVisualAlignmentDebt: nextHasVisualAlignmentDebt,
-    isAlignmentSettling,
     reserveHeight,
-    shouldClear: reserveHeight <= 0 && !nextHasVisualAlignmentDebt
+    shouldClear: reserveHeight <= 0
   };
 }
 
@@ -393,9 +349,7 @@ export function getInitialHomepageDayScrollReservePlan(
     intent?.mode === "sticky" ? Math.max(0, provisionalReserveHeight) : 0;
 
   return {
-    alignmentOffset: 0,
     dateKey: intent?.targetDateKey ?? null,
-    hasVisualAlignmentDebt: false,
     height: intent ? provisionalHeight : 0,
     isPlanned: false,
     mode: intent?.mode ?? null,
@@ -475,6 +429,14 @@ function readStoredHomepageDayScrollIntent(): HomepageDayScrollIntent | null {
                 ? maybeIntent.capturedScrollTop
                 : window.scrollY,
             mode,
+            sourceDateKey:
+              typeof maybeIntent.sourceDateKey === "string"
+                ? maybeIntent.sourceDateKey
+                : undefined,
+            stickyActivationScrollTop:
+              typeof maybeIntent.stickyActivationScrollTop === "number"
+                ? maybeIntent.stickyActivationScrollTop
+                : undefined,
             targetDateKey: maybeIntent.targetDateKey,
             timestamp: maybeIntent.timestamp
           }
@@ -543,53 +505,35 @@ export function useHomepageDayScrollRestoration(
     stickySentinelRef
   } = options;
   const lastKnownStickyRef = useRef(false);
+  const capturedStickyActivationScrollTopRef = useRef<number | null>(null);
+  const isDateTransitioningRef = useRef(isDateTransitioning);
   const pendingScrollIntentRef = useRef<HomepageDayScrollIntent | null>(null);
-  const pendingScrollTargetRef = useRef<number | null>(null);
   const previousActiveDateKeyRef = useRef(activeDateKey);
   const carryoverReserveRef =
     useRef<HomepageDayScrollCarryoverReserve>(EMPTY_CARRYOVER_RESERVE);
+  const outgoingCompensationRef =
+    useRef<HomepageDayScrollOutgoingCompensation>(
+      EMPTY_OUTGOING_COMPENSATION
+    );
   const reservePlanRef =
     useRef<HomepageDayScrollReservePlan>(EMPTY_RESERVE_PLAN);
-  const scrollAlignmentClearTimeoutRef = useRef<number | null>(null);
-  const scrollRestoreFrameRef = useRef<number | null>(null);
   const scrollSettleTimeoutRef = useRef<number | null>(null);
   const [reservePlan, setReservePlan] =
     useState<HomepageDayScrollReservePlan>(EMPTY_RESERVE_PLAN);
   const [carryoverReserve, setCarryoverReserve] =
     useState<HomepageDayScrollCarryoverReserve>(EMPTY_CARRYOVER_RESERVE);
-  const [scrollAlignmentSettlingDateKey, setScrollAlignmentSettlingDateKey] =
-    useState<string | null>(null);
+  const [outgoingCompensation, setOutgoingCompensation] =
+    useState<HomepageDayScrollOutgoingCompensation>(
+      EMPTY_OUTGOING_COMPENSATION
+    );
   const [pendingScrollIntent, setPendingScrollIntentState] =
     useState<HomepageDayScrollIntent | null>(null);
-  const [pendingScrollTarget, setPendingScrollTargetState] =
-    useState<number | null>(null);
-
-  function cancelScrollFrames() {
-    if (scrollRestoreFrameRef.current !== null) {
-      window.cancelAnimationFrame(scrollRestoreFrameRef.current);
-      scrollRestoreFrameRef.current = null;
-    }
-  }
 
   function cancelScrollDebtSettlementTimers() {
     if (scrollSettleTimeoutRef.current !== null) {
       window.clearTimeout(scrollSettleTimeoutRef.current);
       scrollSettleTimeoutRef.current = null;
     }
-
-    if (scrollAlignmentClearTimeoutRef.current !== null) {
-      window.clearTimeout(scrollAlignmentClearTimeoutRef.current);
-      scrollAlignmentClearTimeoutRef.current = null;
-    }
-  }
-
-  function clearScrollAlignmentSettling() {
-    if (scrollAlignmentClearTimeoutRef.current !== null) {
-      window.clearTimeout(scrollAlignmentClearTimeoutRef.current);
-      scrollAlignmentClearTimeoutRef.current = null;
-    }
-
-    setScrollAlignmentSettlingDateKey(null);
   }
 
   function setPendingScrollIntent(nextIntent: HomepageDayScrollIntent | null) {
@@ -598,13 +542,7 @@ export function useHomepageDayScrollRestoration(
     setPendingScrollIntentState(nextIntent);
   }
 
-  function setPendingScrollTarget(nextTarget: number | null) {
-    pendingScrollTargetRef.current = nextTarget;
-    setPendingScrollTargetState(nextTarget);
-  }
-
   function clearReservePlan() {
-    clearScrollAlignmentSettling();
     reservePlanRef.current = EMPTY_RESERVE_PLAN;
     setReservePlan(EMPTY_RESERVE_PLAN);
   }
@@ -624,6 +562,18 @@ export function useHomepageDayScrollRestoration(
   ) {
     carryoverReserveRef.current = nextCarryoverReserve;
     setCarryoverReserve(nextCarryoverReserve);
+  }
+
+  function clearOutgoingCompensation() {
+    outgoingCompensationRef.current = EMPTY_OUTGOING_COMPENSATION;
+    setOutgoingCompensation(EMPTY_OUTGOING_COMPENSATION);
+  }
+
+  function updateOutgoingCompensation(
+    nextCompensation: HomepageDayScrollOutgoingCompensation
+  ) {
+    outgoingCompensationRef.current = nextCompensation;
+    setOutgoingCompensation(nextCompensation);
   }
 
   function getStickySentinelTop() {
@@ -701,41 +651,13 @@ export function useHomepageDayScrollRestoration(
     });
   }
 
-  function finalizeScrollAlignmentSettlement(dateKey: string | null) {
-    scrollAlignmentClearTimeoutRef.current = null;
-    setScrollAlignmentSettlingDateKey(null);
-
-    const currentReservePlan = reservePlanRef.current;
-
-    if (
-      !dateKey ||
-      currentReservePlan.dateKey !== dateKey ||
-      currentReservePlan.alignmentOffset > 0 ||
-      !currentReservePlan.hasVisualAlignmentDebt
-    ) {
-      return;
-    }
-
-    if (currentReservePlan.height <= 0) {
-      clearReservePlan();
-      return;
-    }
-
-    updateReservePlan({
-      ...currentReservePlan,
-      hasVisualAlignmentDebt: false
-    });
-  }
-
   function settleScrollDebtReserve() {
     if (typeof window === "undefined") {
       return;
     }
 
     const hasPendingRestore =
-      Boolean(pendingScrollIntentRef.current) ||
-      pendingScrollTargetRef.current !== null ||
-      scrollRestoreFrameRef.current !== null;
+      Boolean(pendingScrollIntentRef.current) || isDateTransitioningRef.current;
 
     if (hasPendingRestore) {
       return;
@@ -751,11 +673,8 @@ export function useHomepageDayScrollRestoration(
     const naturalMaxScrollTop =
       measuredNaturalMaxScrollTop ?? currentReservePlan.naturalMaxScrollTop;
     const settlement = getHomepageDayScrollDebtSettlement({
-      currentAlignmentOffset: currentReservePlan.alignmentOffset,
       currentReserveHeight: currentReservePlan.height,
-      hasVisualAlignmentDebt: currentReservePlan.hasVisualAlignmentDebt,
       naturalMaxScrollTop,
-      scrollTarget: currentReservePlan.scrollTarget,
       scrollTop: window.scrollY
     });
 
@@ -766,28 +685,10 @@ export function useHomepageDayScrollRestoration(
 
     if (
       settlement.reserveHeight < currentReservePlan.height ||
-      settlement.alignmentOffset < currentReservePlan.alignmentOffset ||
-      settlement.hasVisualAlignmentDebt !==
-        currentReservePlan.hasVisualAlignmentDebt ||
       naturalMaxScrollTop !== currentReservePlan.naturalMaxScrollTop
     ) {
-      if (settlement.isAlignmentSettling) {
-        setScrollAlignmentSettlingDateKey(currentReservePlan.dateKey);
-
-        if (scrollAlignmentClearTimeoutRef.current !== null) {
-          window.clearTimeout(scrollAlignmentClearTimeoutRef.current);
-        }
-
-        scrollAlignmentClearTimeoutRef.current = window.setTimeout(
-          () => finalizeScrollAlignmentSettlement(currentReservePlan.dateKey),
-          SCROLL_ALIGNMENT_SETTLE_MS
-        );
-      }
-
       updateReservePlan({
         ...currentReservePlan,
-        alignmentOffset: settlement.alignmentOffset,
-        hasVisualAlignmentDebt: settlement.hasVisualAlignmentDebt,
         height: settlement.reserveHeight,
         naturalMaxScrollTop
       });
@@ -809,18 +710,31 @@ export function useHomepageDayScrollRestoration(
     }, SCROLL_DEBT_SETTLE_IDLE_MS);
   }
 
-  function captureDateChangeLayout(targetDateKey?: string) {
+  function captureDateChangeLayout(
+    targetDateKey?: string,
+    snapshot?: HomepageDayScrollCaptureSnapshot
+  ) {
     cancelScrollDebtSettlementTimers();
-    setScrollAlignmentSettlingDateKey(null);
-    cancelScrollFrames();
-    setPendingScrollTarget(null);
+    clearOutgoingCompensation();
 
     const currentReservePlan = reservePlanRef.current;
+    const scrollTop = Math.max(0, snapshot?.scrollTop ?? window.scrollY);
+    const stickySentinelTop = snapshot?.stickySentinelTop ?? getStickySentinelTop();
+    const isStuck = snapshot?.isDateHeaderStuck ?? isDateHeaderStuckNow();
+    const stickyActivationScrollTop = isStuck
+      ? Math.max(
+          0,
+          scrollTop + stickySentinelTop + STICKY_ACTIVATION_OFFSET_PX
+        )
+      : null;
+    capturedStickyActivationScrollTopRef.current = stickyActivationScrollTop;
     const nextIntent = getNextHomepageDayScrollIntent({
       currentIntent: pendingScrollIntentRef.current,
       nextIntent: getHomepageDayScrollIntent({
-        isDateHeaderStuck: isDateHeaderStuckNow(),
-        scrollTop: window.scrollY,
+        isDateHeaderStuck: isStuck,
+        scrollTop,
+        sourceDateKey: activeDateKey,
+        stickyActivationScrollTop: stickyActivationScrollTop ?? undefined,
         targetDateKey
       })
     });
@@ -854,6 +768,11 @@ export function useHomepageDayScrollRestoration(
     return {
       capturedScrollTop: window.scrollY,
       mode: "sticky",
+      sourceDateKey: previousActiveDateKeyRef.current,
+      stickyActivationScrollTop: Math.max(
+        0,
+        window.scrollY + getStickySentinelTop() + STICKY_ACTIVATION_OFFSET_PX
+      ),
       targetDateKey: activeDateKey,
       timestamp: Date.now()
     };
@@ -868,11 +787,10 @@ export function useHomepageDayScrollRestoration(
   }
 
   function clearDateChangeLayout() {
+    capturedStickyActivationScrollTopRef.current = null;
     setPendingScrollIntent(null);
-    setPendingScrollTarget(null);
     cancelScrollDebtSettlementTimers();
-    setScrollAlignmentSettlingDateKey(null);
-    cancelScrollFrames();
+    clearOutgoingCompensation();
     clearCarryoverReserve();
     clearReservePlan();
   }
@@ -919,28 +837,19 @@ export function useHomepageDayScrollRestoration(
 
     const naturalMaxScrollTop = getCurrentNaturalMaxScrollTop();
 
+    const measuredStickyScrollTarget =
+      effectiveIntent.mode === "sticky" ? getCurrentStickyScrollTarget() : null;
+    const stickyActivationScrollTop = Math.max(
+      effectiveIntent.stickyActivationScrollTop ?? 0,
+      capturedStickyActivationScrollTopRef.current ?? 0
+    );
     const scrollTarget =
-      effectiveIntent.mode === "sticky"
-        ? getCurrentStickyScrollTarget()
-        : null;
-    const capturedStickyScrollTop =
-      effectiveIntent.mode === "sticky"
-        ? Math.max(effectiveIntent.capturedScrollTop, window.scrollY)
-        : window.scrollY;
-    const alignmentOffset = getHomepageDayScrollAlignmentOffset({
-      currentScrollTop: capturedStickyScrollTop,
-      mode: effectiveIntent.mode,
-      scrollTarget
-    });
-    const hasVisualAlignmentDebt = shouldUseHomepageDayVisualAlignmentDebt({
-      alignmentOffset,
-      mode: effectiveIntent.mode
-    });
+      measuredStickyScrollTarget === null
+        ? null
+        : Math.max(measuredStickyScrollTarget, stickyActivationScrollTop);
     const effectiveScrollTop =
       effectiveIntent.mode === "sticky"
-        ? hasVisualAlignmentDebt
-          ? capturedStickyScrollTop
-          : scrollTarget ?? window.scrollY
+        ? scrollTarget ?? window.scrollY
         : effectiveIntent.capturedScrollTop;
     const scrollReserveHeight =
       naturalMaxScrollTop === null
@@ -949,12 +858,70 @@ export function useHomepageDayScrollRestoration(
             naturalMaxScrollTop,
             scrollTop: effectiveScrollTop
           });
+    const stickyProvisionalReserveHeight =
+      effectiveIntent.mode === "sticky" && !reservePlan.isPlanned
+        ? window.innerHeight
+        : 0;
+    const plannedScrollReserveHeight =
+      effectiveIntent.mode === "sticky"
+        ? Math.max(
+            reservePlan.height,
+            scrollReserveHeight,
+            stickyProvisionalReserveHeight
+          )
+        : scrollReserveHeight;
+
+    const shouldRenderReserveBeforeScroll =
+      plannedScrollReserveHeight > reservePlan.height ||
+      (plannedScrollReserveHeight > 0 &&
+        reservePlan.naturalMaxScrollTop === null);
+
+    if (shouldRenderReserveBeforeScroll) {
+      updateReservePlan({
+        dateKey: effectiveIntent.targetDateKey,
+        height: plannedScrollReserveHeight,
+        isPlanned: false,
+        mode: effectiveIntent.mode,
+        naturalMaxScrollTop,
+        scrollTarget
+      });
+      return undefined;
+    }
+
+    if (effectiveIntent.mode === "sticky" && scrollTarget !== null) {
+      const capturedStickyScrollTop = Math.max(
+        effectiveIntent.capturedScrollTop,
+        window.scrollY
+      );
+      const outgoingCompensationOffset =
+        getHomepageDayOutgoingCompensationOffset({
+          capturedScrollTop: capturedStickyScrollTop,
+          mode: effectiveIntent.mode,
+          scrollTarget
+        });
+
+      if (outgoingCompensationOffset !== 0 && isDateTransitioning) {
+        updateOutgoingCompensation({
+          dateKey: effectiveIntent.sourceDateKey ?? activeDateKey,
+          offset: outgoingCompensationOffset
+        });
+      } else {
+        clearOutgoingCompensation();
+      }
+
+      if (scrollTarget < capturedStickyScrollTop) {
+        window.scrollTo({
+          behavior: "auto",
+          top: scrollTarget
+        });
+      }
+      setPendingScrollIntent(null);
+      clearCarryoverReserve();
+    }
 
     updateReservePlan({
-      alignmentOffset,
       dateKey: effectiveIntent.targetDateKey,
-      hasVisualAlignmentDebt,
-      height: scrollReserveHeight,
+      height: plannedScrollReserveHeight,
       isPlanned: true,
       mode: effectiveIntent.mode,
       naturalMaxScrollTop,
@@ -968,75 +935,13 @@ export function useHomepageDayScrollRestoration(
     isDateTransitioning,
     pendingScrollIntent,
     reservePlan.dateKey,
+    reservePlan.height,
     reservePlan.isPlanned,
     reservePlan.mode,
+    reservePlan.scrollTarget,
     scrollTargetContentRef,
     stickyHeaderRef,
     stickySentinelRef
-  ]);
-
-  useLayoutEffect(() => {
-    const effectiveIntent = getEffectiveScrollIntent();
-
-    if (
-      typeof window === "undefined" ||
-      !effectiveIntent ||
-      !shouldRestoreHomepageDayScroll(
-        effectiveIntent,
-        activeDateKey,
-        isContentAnimating,
-        isDateTransitioning
-      ) ||
-      reservePlan.scrollTarget === null
-    ) {
-      return undefined;
-    }
-
-    const scrollTarget = getCurrentStickyScrollTarget() ?? reservePlan.scrollTarget;
-    const naturalMaxScrollTop = getCurrentNaturalMaxScrollTop();
-    const restoreScrollTop = reservePlan.hasVisualAlignmentDebt
-      ? Math.max(effectiveIntent.capturedScrollTop, window.scrollY)
-      : scrollTarget;
-
-    if (naturalMaxScrollTop !== null) {
-      const requiredReserveHeight = getHomepageDayScrollDebt({
-        naturalMaxScrollTop,
-        scrollTop: restoreScrollTop
-      });
-
-      if (requiredReserveHeight > reservePlan.height) {
-        updateReservePlan({
-          ...reservePlan,
-          height: requiredReserveHeight,
-          naturalMaxScrollTop,
-          scrollTarget
-        });
-        return undefined;
-      }
-    }
-
-    setPendingScrollIntent(null);
-    clearCarryoverReserve();
-    if (reservePlan.hasVisualAlignmentDebt) {
-      return undefined;
-    }
-
-    window.scrollTo({
-      behavior: "auto",
-      top: scrollTarget
-    });
-
-    return undefined;
-  }, [
-    activeDateKey,
-    isContentAnimating,
-    isDateTransitioning,
-    pendingScrollIntent,
-    reservePlan.hasVisualAlignmentDebt,
-    reservePlan.height,
-    reservePlan.isPlanned,
-    reservePlan.naturalMaxScrollTop,
-    reservePlan.scrollTarget
   ]);
 
   useLayoutEffect(() => {
@@ -1083,26 +988,14 @@ export function useHomepageDayScrollRestoration(
   ]);
 
   useLayoutEffect(() => {
-    if (typeof window === "undefined" || pendingScrollTarget === null) {
-      return undefined;
+    isDateTransitioningRef.current = isDateTransitioning;
+  }, [isDateTransitioning]);
+
+  useEffect(() => {
+    if (!isDateTransitioning && reservePlan.dateKey !== null) {
+      scheduleScrollDebtSettlement();
     }
-
-    scrollRestoreFrameRef.current = window.requestAnimationFrame(() => {
-      scrollRestoreFrameRef.current = null;
-      window.scrollTo({
-        behavior: "auto",
-        top: pendingScrollTarget
-      });
-      setPendingScrollTarget(null);
-    });
-
-    return () => {
-      if (scrollRestoreFrameRef.current !== null) {
-        window.cancelAnimationFrame(scrollRestoreFrameRef.current);
-        scrollRestoreFrameRef.current = null;
-      }
-    };
-  }, [pendingScrollTarget]);
+  }, [isDateTransitioning, reservePlan.dateKey]);
 
   useLayoutEffect(() => {
     previousActiveDateKeyRef.current = activeDateKey;
@@ -1141,26 +1034,33 @@ export function useHomepageDayScrollRestoration(
     if (
       reservePlan.dateKey !== null &&
       reservePlan.dateKey !== activeDateKey &&
-      !pendingScrollIntentRef.current
+      !pendingScrollIntentRef.current &&
+      !isDateTransitioning
     ) {
       clearReservePlan();
     }
-  }, [activeDateKey, reservePlan.dateKey]);
+
+    if (
+      outgoingCompensation.dateKey !== null &&
+      outgoingCompensation.dateKey !== activeDateKey &&
+      !isDateTransitioning
+    ) {
+      clearOutgoingCompensation();
+    }
+  }, [
+    activeDateKey,
+    isDateTransitioning,
+    outgoingCompensation.dateKey,
+    reservePlan.dateKey
+  ]);
 
   return {
     captureDateChangeLayout,
     clearDateChangeLayout,
-    scrollAlignmentDateKey:
-      reservePlan.hasVisualAlignmentDebt && reservePlan.isPlanned
-        ? reservePlan.dateKey
-        : null,
-    scrollAlignmentOffset:
-      reservePlan.hasVisualAlignmentDebt && reservePlan.isPlanned
-        ? reservePlan.alignmentOffset
-        : 0,
-    scrollAlignmentSettlingDateKey,
     scrollCarryoverDateKey: carryoverReserve.dateKey,
     scrollCarryoverReserve: carryoverReserve.height,
+    scrollOutgoingCompensationDateKey: outgoingCompensation.dateKey,
+    scrollOutgoingCompensationOffset: outgoingCompensation.offset,
     scrollReserveHeight: reservePlan.height,
     scrollReserveTargetDateKey: reservePlan.dateKey
   };
