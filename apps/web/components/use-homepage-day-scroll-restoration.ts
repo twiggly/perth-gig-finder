@@ -234,6 +234,27 @@ export function shouldShowHomepageDayStickyScrollCover({
   );
 }
 
+export function shouldArmHomepageDayStickyScrollCover({
+  isReservePlanned,
+  plannedScrollTop,
+  mode,
+  scrollTarget
+}: {
+  isReservePlanned: boolean;
+  plannedScrollTop: number;
+  mode: HomepageDayScrollIntentMode | null;
+  scrollTarget: number | null;
+}): boolean {
+  return (
+    isReservePlanned &&
+    shouldShowHomepageDayStickyScrollCover({
+      currentScrollTop: plannedScrollTop,
+      mode,
+      scrollTarget
+    })
+  );
+}
+
 export function getHomepageDayStickyScrollCoverRelease({
   isCoverActive,
   maxRetryCount,
@@ -955,16 +976,30 @@ export function useHomepageDayScrollRestoration(
       plannedScrollReserveHeight > reservePlan.height ||
       (plannedScrollReserveHeight > 0 &&
         reservePlan.naturalMaxScrollTop === null);
+    const isReservePlanned = !shouldRenderReserveBeforeScroll;
 
     updateReservePlan({
       alignmentOffset,
       dateKey: effectiveIntent.targetDateKey,
       height: plannedScrollReserveHeight,
-      isPlanned: !shouldRenderReserveBeforeScroll,
+      isPlanned: isReservePlanned,
       mode: effectiveIntent.mode,
       naturalMaxScrollTop,
       scrollTarget
     });
+
+    if (
+      shouldArmHomepageDayStickyScrollCover({
+        isReservePlanned,
+        plannedScrollTop: window.scrollY,
+        mode: effectiveIntent.mode,
+        scrollTarget
+      }) &&
+      !isStickyScrollCoverActive
+    ) {
+      stickyScrollCoverReleaseRetryCountRef.current = 0;
+      setIsStickyScrollCoverActive(true);
+    }
 
     return undefined;
   }, [
@@ -977,6 +1012,7 @@ export function useHomepageDayScrollRestoration(
     reservePlan.isPlanned,
     reservePlan.mode,
     reservePlan.scrollTarget,
+    isStickyScrollCoverActive,
     scrollTargetContentRef,
     stickyHeaderRef,
     stickySentinelRef
