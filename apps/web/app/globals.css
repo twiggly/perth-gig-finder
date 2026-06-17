@@ -920,6 +920,11 @@ body[data-filter-dropdown-open="true"] .date-pills {
   opacity: 1;
 }
 
+.day-browser__header[data-sticky-restoring="true"],
+.day-browser__header[data-sticky-restoring="true"]::before {
+  transition: none;
+}
+
 .day-browser__heading-viewport,
 .day-browser__content-viewport {
   overflow: hidden;
