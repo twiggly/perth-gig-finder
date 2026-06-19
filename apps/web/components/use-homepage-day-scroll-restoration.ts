@@ -30,6 +30,7 @@ interface UseHomepageDayScrollRestorationOptions {
   activeDateKey: string;
   isContentAnimating: boolean;
   isDateTransitioning: boolean;
+  isDateTransitionSettling: boolean;
   isDateHeaderStuck: boolean;
   scrollTargetContentRef: RefObject<HTMLElement | null>;
   stickyHeaderRef: RefObject<HTMLElement | null>;
@@ -167,13 +168,14 @@ export function shouldRestoreHomepageDayScroll(
   intent: HomepageDayScrollIntent | null,
   activeDateKey: string,
   isContentAnimating: boolean,
-  isDateTransitioning: boolean
+  isDateTransitioning: boolean,
+  isDateTransitionSettling = false
 ): boolean {
   return (
     intent?.mode === "sticky" &&
     intent?.targetDateKey === activeDateKey &&
     !isContentAnimating &&
-    !isDateTransitioning
+    (!isDateTransitioning || isDateTransitionSettling)
   );
 }
 
@@ -502,6 +504,7 @@ export function useHomepageDayScrollRestoration(
     activeDateKey,
     isContentAnimating,
     isDateTransitioning,
+    isDateTransitionSettling,
     isDateHeaderStuck,
     scrollTargetContentRef,
     stickyHeaderRef,
@@ -899,7 +902,8 @@ export function useHomepageDayScrollRestoration(
         effectiveIntent,
         activeDateKey,
         isContentAnimating,
-        isDateTransitioning
+        isDateTransitioning,
+        isDateTransitionSettling
       ) ||
       reservePlan.scrollTarget === null
     ) {
@@ -965,6 +969,7 @@ export function useHomepageDayScrollRestoration(
     reservePlan.isPlanned,
     reservePlan.naturalMaxScrollTop,
     reservePlan.scrollTarget,
+    isDateTransitionSettling,
     stickyRestorationHold
   ]);
 
@@ -1033,7 +1038,7 @@ export function useHomepageDayScrollRestoration(
       effectiveIntent?.mode !== "preserve-scroll" ||
       effectiveIntent.targetDateKey !== activeDateKey ||
       isContentAnimating ||
-      isDateTransitioning ||
+      (isDateTransitioning && !isDateTransitionSettling) ||
       !reservePlan.isPlanned ||
       reservePlan.naturalMaxScrollTop === null
     ) {
@@ -1062,6 +1067,7 @@ export function useHomepageDayScrollRestoration(
     activeDateKey,
     isContentAnimating,
     isDateTransitioning,
+    isDateTransitionSettling,
     pendingScrollIntent,
     reservePlan.height,
     reservePlan.isPlanned,

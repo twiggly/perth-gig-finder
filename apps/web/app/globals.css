@@ -1008,13 +1008,19 @@ body[data-filter-dropdown-open="true"] .date-pills {
 }
 
 .day-browser__heading-track[data-direction="next"]
-  .day-browser__heading-pane[data-motion-role="from"][data-phase="animating"] {
+  .day-browser__heading-pane[data-motion-role="from"]:is(
+    [data-phase="animating"],
+    [data-phase="settling"]
+  ) {
   opacity: 0;
   transform: translate3d(calc(var(--day-browser-heading-distance) * -1), 0, 0);
 }
 
 .day-browser__heading-track[data-direction="previous"]
-  .day-browser__heading-pane[data-motion-role="from"][data-phase="animating"] {
+  .day-browser__heading-pane[data-motion-role="from"]:is(
+    [data-phase="animating"],
+    [data-phase="settling"]
+  ) {
   opacity: 0;
   transform: translate3d(var(--day-browser-heading-distance), 0, 0);
 }
@@ -1033,7 +1039,10 @@ body[data-filter-dropdown-open="true"] .date-pills {
   transform: translate3d(calc(var(--day-browser-heading-distance) * -1), 0, 0);
 }
 
-.day-browser__heading-pane[data-motion-role="to"][data-phase="animating"] {
+.day-browser__heading-pane[data-motion-role="to"]:is(
+  [data-phase="animating"],
+  [data-phase="settling"]
+) {
   opacity: 1;
   transform: translate3d(0, 0, 0);
 }
@@ -1209,7 +1218,10 @@ body[data-filter-dropdown-open="true"] .date-pills {
   will-change: opacity;
 }
 
-.day-browser__content-pane[data-motion-role="from"][data-phase="animating"] {
+.day-browser__content-pane[data-motion-role="from"]:is(
+  [data-phase="animating"],
+  [data-phase="settling"]
+) {
   opacity: 0;
 }
 
@@ -1217,7 +1229,10 @@ body[data-filter-dropdown-open="true"] .date-pills {
   opacity: 0;
 }
 
-.day-browser__content-pane[data-motion-role="to"][data-phase="animating"] {
+.day-browser__content-pane[data-motion-role="to"]:is(
+  [data-phase="animating"],
+  [data-phase="settling"]
+) {
   opacity: 1;
 }
 

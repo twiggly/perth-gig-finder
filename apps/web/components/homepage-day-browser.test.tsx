@@ -30,7 +30,10 @@ vi.mock("./use-homepage-day-scroll-restoration", () => ({
   })
 }));
 
-import { HomepageDayBrowser } from "./homepage-day-browser";
+import {
+  HomepageDayBrowser,
+  shouldRenderHomepageDateHeaderStuck
+} from "./homepage-day-browser";
 
 function createGig(
   overrides: Partial<GigCardRecord> = {}
@@ -120,6 +123,28 @@ describe("HomepageDayBrowser", () => {
 
     expect(html).toContain('data-sticky-restoring="true"');
     expect(html).toContain('data-stuck="true"');
+  });
+
+  it("keeps the date header visually stuck during sticky-start transition handoff", () => {
+    expect(
+      shouldRenderHomepageDateHeaderStuck({
+        hasActiveDateScrollReserve: false,
+        isDateHeaderVisuallyStuck: false,
+        isStickyScrollRestorationVisualHoldActive: false,
+        isStickyStartedTransitionActive: true
+      })
+    ).toBe(true);
+  });
+
+  it("does not force stuck styling when no sticky hold source is active", () => {
+    expect(
+      shouldRenderHomepageDateHeaderStuck({
+        hasActiveDateScrollReserve: false,
+        isDateHeaderVisuallyStuck: false,
+        isStickyScrollRestorationVisualHoldActive: false,
+        isStickyStartedTransitionActive: false
+      })
+    ).toBe(false);
   });
 
   it("renders only the active day even when adjacent days are seeded", () => {

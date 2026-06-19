@@ -60,7 +60,9 @@ export function HomepageDayContent({
           const isScrollReserveCarryover =
             dateKey === scrollCarryoverDateKey && !isScrollReserveTarget;
           const isScrollAlignTarget =
-            dateKey === scrollAlignmentDateKey && motionRole === "to";
+            dateKey === scrollAlignmentDateKey &&
+            motionRole === "to" &&
+            phase !== "settling";
 
           if (!day) {
             return null;

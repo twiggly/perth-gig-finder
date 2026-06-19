@@ -296,6 +296,40 @@ describe("HomepageDayContent", () => {
     expect(html).not.toContain('data-scroll-align-target="true"');
   });
 
+  it("does not keep the scroll alignment target during transition settling", () => {
+    const today = createDay();
+    const tomorrow = createDay({
+      dateKey: "2026-04-30",
+      heading: "Thu, Apr 30th",
+      items: [
+        createGig({
+          id: "gig-2",
+          title: "Tomorrow's Show"
+        })
+      ]
+    });
+    const html = renderContent({
+      days: [today, tomorrow],
+      renderedContentPanes: [
+        {
+          dateKey: "2026-04-29",
+          motionRole: "from",
+          phase: "settling"
+        },
+        {
+          dateKey: "2026-04-30",
+          motionRole: "to",
+          phase: "settling"
+        }
+      ],
+      scrollAlignmentDateKey: "2026-04-30",
+      transitionDirection: "next"
+    });
+
+    expect(html).toContain('data-phase="settling"');
+    expect(html).not.toContain('data-scroll-align-target="true"');
+  });
+
   it("marks the outgoing from pane as carryover without making it the target", () => {
     const today = createDay();
     const tomorrow = createDay({

@@ -30,6 +30,7 @@ describe("buildHomepageDayTransitionPanes", () => {
       direction: "next",
       fromDateKey: "2026-04-29",
       phase: "animating",
+      startedWithStickyHeader: false,
       toDateKey: "2026-04-30"
     };
 
@@ -52,6 +53,7 @@ describe("buildHomepageDayTransitionPanes", () => {
       direction: "next",
       fromDateKey: "2026-04-29",
       phase: "animating",
+      startedWithStickyHeader: true,
       toDateKey: "2026-04-30"
     };
     const completion = completeHomepageDayTransition(
@@ -62,7 +64,10 @@ describe("buildHomepageDayTransitionPanes", () => {
 
     expect(completion).toEqual({
       activeDateKey: "2026-04-30",
-      transition
+      transition: {
+        ...transition,
+        phase: "settling"
+      }
     });
     expect(
       buildHomepageDayTransitionPanes(
@@ -73,12 +78,12 @@ describe("buildHomepageDayTransitionPanes", () => {
       {
         dateKey: "2026-04-29",
         motionRole: "from",
-        phase: "animating"
+        phase: "settling"
       },
       {
         dateKey: "2026-04-30",
         motionRole: "to",
-        phase: "animating"
+        phase: "settling"
       }
     ]);
   });
@@ -145,6 +150,7 @@ describe("buildHomepageDayTransitionPanes", () => {
       direction: "next",
       fromDateKey: "2026-04-29",
       phase: "animating",
+      startedWithStickyHeader: false,
       toDateKey: "2026-04-30"
     };
 
@@ -170,18 +176,20 @@ describe("buildHomepageDayTransitionPanes", () => {
         pendingTransition: {
           direction: "next",
           fromDateKey: "2026-04-29",
+          startedWithStickyHeader: true,
           toDateKey: "2026-04-30"
         },
         prefersReducedMotion: false
       })
     ).toEqual({
       activeDateKey: "2026-04-29",
-      transition: {
-        direction: "next",
-        fromDateKey: "2026-04-29",
-        phase: "preparing",
-        toDateKey: "2026-04-30"
-      }
+        transition: {
+          direction: "next",
+          fromDateKey: "2026-04-29",
+          phase: "preparing",
+          startedWithStickyHeader: true,
+          toDateKey: "2026-04-30"
+        }
     });
   });
 
@@ -192,6 +200,7 @@ describe("buildHomepageDayTransitionPanes", () => {
         pendingTransition: {
           direction: "next",
           fromDateKey: "2026-04-29",
+          startedWithStickyHeader: true,
           toDateKey: "2026-04-30"
         },
         prefersReducedMotion: true

@@ -144,6 +144,9 @@ describe("homepage day scroll restoration helpers", () => {
       shouldRestoreHomepageDayScroll(intent, "2026-06-15", false, true)
     ).toBe(false);
     expect(
+      shouldRestoreHomepageDayScroll(intent, "2026-06-15", false, true, true)
+    ).toBe(true);
+    expect(
       shouldRestoreHomepageDayScroll(intent, "2026-06-16", false, false)
     ).toBe(false);
   });
