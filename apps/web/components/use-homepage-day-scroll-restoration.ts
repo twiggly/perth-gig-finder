@@ -363,6 +363,12 @@ export function getInitialHomepageDayScrollReservePlan(
   };
 }
 
+export function getHomepageDayStickyVisualHoldDateKey(
+  intent: HomepageDayScrollIntent | null
+): string | null {
+  return intent?.mode === "sticky" ? intent.targetDateKey : null;
+}
+
 export function shouldPlanHomepageDayScrollReserve({
   intent,
   reserveIsPlanned,
@@ -523,6 +529,9 @@ export function useHomepageDayScrollRestoration(
     useState<number | null>(null);
   const [stickyRestorationHold, setStickyRestorationHoldState] =
     useState<HomepageDayStickyScrollRestorationHold | null>(null);
+  const stickyVisualHoldDateKeyRef = useRef<string | null>(null);
+  const [stickyVisualHoldDateKey, setStickyVisualHoldDateKeyState] =
+    useState<string | null>(null);
 
   function cancelScrollFrames() {
     if (scrollRestoreFrameRef.current !== null) {
@@ -557,6 +566,11 @@ export function useHomepageDayScrollRestoration(
   ) {
     stickyRestorationHoldRef.current = nextHold;
     setStickyRestorationHoldState(nextHold);
+  }
+
+  function setStickyVisualHoldDateKey(nextDateKey: string | null) {
+    stickyVisualHoldDateKeyRef.current = nextDateKey;
+    setStickyVisualHoldDateKeyState(nextDateKey);
   }
 
   function clearStickyRestorationHold() {
@@ -729,6 +743,9 @@ export function useHomepageDayScrollRestoration(
     const provisionalReserveHeight = nextIntent ? window.innerHeight : 0;
 
     setPendingScrollIntent(nextIntent);
+    setStickyVisualHoldDateKey(
+      getHomepageDayStickyVisualHoldDateKey(nextIntent)
+    );
     updateCarryoverReserve(
       getHomepageDayScrollCarryoverReserve({
         activeDateKey,
@@ -774,6 +791,7 @@ export function useHomepageDayScrollRestoration(
     setPendingScrollTarget(null);
     cancelScrollFrames();
     clearStickyRestorationHold();
+    setStickyVisualHoldDateKey(null);
     clearCarryoverReserve();
     clearReservePlan();
   }
@@ -786,6 +804,13 @@ export function useHomepageDayScrollRestoration(
       !effectiveIntent
     ) {
       return undefined;
+    }
+
+    const nextStickyVisualHoldDateKey =
+      getHomepageDayStickyVisualHoldDateKey(effectiveIntent);
+
+    if (stickyVisualHoldDateKeyRef.current !== nextStickyVisualHoldDateKey) {
+      setStickyVisualHoldDateKey(nextStickyVisualHoldDateKey);
     }
 
     if (
@@ -1110,7 +1135,12 @@ export function useHomepageDayScrollRestoration(
   return {
     captureDateChangeLayout,
     clearDateChangeLayout,
-    isStickyScrollRestorationVisualHoldActive: stickyRestorationHold !== null,
+    isStickyScrollRestorationVisualHoldActive:
+      stickyRestorationHold !== null ||
+      stickyVisualHoldDateKey === activeDateKey ||
+      (reservePlan.mode === "sticky" &&
+        reservePlan.dateKey === activeDateKey &&
+        reservePlan.isPlanned),
     scrollAlignmentDateKey:
       reservePlan.mode === "sticky" && reservePlan.isPlanned
         ? reservePlan.dateKey

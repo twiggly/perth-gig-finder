@@ -2,6 +2,7 @@
 
 import React, {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState
@@ -39,8 +40,137 @@ interface HomepageDayBrowserProps {
   selectedVenueSlugs: string[];
 }
 
+interface StoredDateHeaderVisualHold {
+  targetDateKey?: string;
+  timestamp: number;
+}
+
+type HomepageDayBrowserWindow = Window &
+  typeof globalThis & {
+    __gigRadarHomepageDateHeaderVisualHold?: StoredDateHeaderVisualHold | null;
+  };
+
+const DATE_HEADER_VISUAL_HOLD_HISTORY_KEY =
+  "__gigRadarHomepageDateHeaderVisualHold";
 const LOCAL_PREVIEW_ASSET_REVISION =
   process.env.NEXT_PUBLIC_LOCAL_PREVIEW_ASSET_REVISION ?? "0";
+const DATE_HEADER_VISUAL_HOLD_STORAGE_KEY =
+  "gig-radar:homepage-date-header-visual-hold";
+const DATE_HEADER_VISUAL_HOLD_TTL_MS = 30000;
+
+function readStoredDateHeaderVisualHold(): StoredDateHeaderVisualHold | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const browserWindow = window as HomepageDayBrowserWindow;
+  const inMemoryHold =
+    browserWindow.__gigRadarHomepageDateHeaderVisualHold ?? null;
+
+  if (inMemoryHold) {
+    return inMemoryHold;
+  }
+
+  const historyHold =
+    (window.history.state as Record<string, unknown> | null)?.[
+      DATE_HEADER_VISUAL_HOLD_HISTORY_KEY
+    ] ?? null;
+
+  if (
+    historyHold &&
+    typeof historyHold === "object" &&
+    "timestamp" in historyHold &&
+    typeof historyHold.timestamp === "number"
+  ) {
+    const maybeHistoryHold = historyHold as Partial<StoredDateHeaderVisualHold>;
+
+    return {
+      targetDateKey:
+        typeof maybeHistoryHold.targetDateKey === "string"
+          ? maybeHistoryHold.targetDateKey
+          : undefined,
+      timestamp: historyHold.timestamp
+    };
+  }
+
+  try {
+    const rawHold = window.sessionStorage.getItem(
+      DATE_HEADER_VISUAL_HOLD_STORAGE_KEY
+    );
+
+    if (!rawHold) {
+      return null;
+    }
+
+    const maybeHold = JSON.parse(rawHold) as Partial<StoredDateHeaderVisualHold>;
+
+    return typeof maybeHold.timestamp === "number"
+      ? {
+          targetDateKey: maybeHold.targetDateKey,
+          timestamp: maybeHold.timestamp
+        }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredDateHeaderVisualHold(
+  hold: StoredDateHeaderVisualHold | null
+) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const browserWindow = window as HomepageDayBrowserWindow;
+  browserWindow.__gigRadarHomepageDateHeaderVisualHold = hold;
+
+  const currentHistoryState =
+    typeof window.history.state === "object" && window.history.state !== null
+      ? window.history.state
+      : {};
+  const nextHistoryState = {
+    ...currentHistoryState,
+    [DATE_HEADER_VISUAL_HOLD_HISTORY_KEY]: hold
+  };
+
+  if (!hold) {
+    delete nextHistoryState[DATE_HEADER_VISUAL_HOLD_HISTORY_KEY];
+  }
+
+  window.history.replaceState(nextHistoryState, "", window.location.href);
+
+  try {
+    if (!hold) {
+      window.sessionStorage.removeItem(DATE_HEADER_VISUAL_HOLD_STORAGE_KEY);
+      return;
+    }
+
+    window.sessionStorage.setItem(
+      DATE_HEADER_VISUAL_HOLD_STORAGE_KEY,
+      JSON.stringify(hold)
+    );
+  } catch {
+    // Storage can be unavailable in privacy modes; the in-memory hold still covers SPA handoffs.
+  }
+}
+
+function shouldUseStoredDateHeaderVisualHold({
+  activeDateKey,
+  hold,
+  now = Date.now()
+}: {
+  activeDateKey: string;
+  hold: StoredDateHeaderVisualHold | null;
+  now?: number;
+}) {
+  return Boolean(
+    hold &&
+      hold.targetDateKey === activeDateKey &&
+      now - hold.timestamp >= 0 &&
+      now - hold.timestamp <= DATE_HEADER_VISUAL_HOLD_TTL_MS
+  );
+}
 
 export function HomepageDayBrowser({
   availableDays,
@@ -58,6 +188,10 @@ export function HomepageDayBrowser({
   const dateHeaderRef = useRef<HTMLDivElement | null>(null);
   const resetAdjacentImagePreloadsRef = useRef<() => void>(() => {});
   const resetDayWheelGestureRef = useRef<() => void>(() => {});
+  const [
+    dateHeaderVisualHoldDateKey,
+    setDateHeaderVisualHoldDateKey
+  ] = useState<string | null>(null);
   const [calendarMonthKey, setCalendarMonthKey] = useState<string | null>(null);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [openGigId, setOpenGigId] = useState<string | null>(null);
@@ -109,6 +243,8 @@ export function HomepageDayBrowser({
     onDateChangeCancel: () => {
       clearDateChangeLayoutRef.current();
       clearDateHeaderTransitionStuckHold();
+      setDateHeaderVisualHoldDateKey(null);
+      writeStoredDateHeaderVisualHold(null);
     },
     onDateChangeStart: (nextDateKey) =>
       captureDateChangeLayoutSynchronously(nextDateKey),
@@ -148,7 +284,6 @@ export function HomepageDayBrowser({
   const {
     captureDateHeaderTransitionStuckHold,
     clearDateHeaderTransitionStuckHold,
-    isDateHeaderStuck,
     isDateHeaderVisuallyStuck,
     stickySentinelRef
   } = useHomepageDayStickyHeader({
@@ -175,7 +310,7 @@ export function HomepageDayBrowser({
     activeDateKey,
     isContentAnimating,
     isDateTransitioning: transition !== null,
-    isDateHeaderStuck,
+    isDateHeaderStuck: isDateHeaderVisuallyStuck,
     scrollTargetContentRef,
     stickyHeaderRef: dateHeaderRef,
     stickySentinelRef
@@ -197,8 +332,27 @@ export function HomepageDayBrowser({
       scrollReserveHeight
     ]
   );
+  const hasActiveDateScrollReserve =
+    scrollReserveHeight > 0 && scrollReserveTargetDateKey === activeDateKey;
   const isDateHeaderRenderedStuck =
-    isDateHeaderVisuallyStuck || isStickyScrollRestorationVisualHoldActive;
+    isDateHeaderVisuallyStuck ||
+    isStickyScrollRestorationVisualHoldActive ||
+    dateHeaderVisualHoldDateKey === activeDateKey ||
+    hasActiveDateScrollReserve;
+
+  useLayoutEffect(() => {
+    const storedHold = readStoredDateHeaderVisualHold();
+
+    if (
+      shouldUseStoredDateHeaderVisualHold({
+        activeDateKey,
+        hold: storedHold
+      })
+    ) {
+      setDateHeaderVisualHoldDateKey(activeDateKey);
+    }
+  }, [activeDateKey]);
+
   useEffect(() => {
     if (typeof window === "undefined" || !activeDateKey) {
       return;
@@ -266,18 +420,46 @@ export function HomepageDayBrowser({
   }
 
   function handleNavigateDate(direction: SwipeDirection): boolean {
+    captureDateHeaderVisualHold(
+      direction === "next" ? nextDateKey : previousDateKey
+    );
+
     const didNavigate = navigateAdjacentDate(direction);
 
     if (!didNavigate) {
       clearDateChangeLayout();
       clearDateHeaderTransitionStuckHold();
+      setDateHeaderVisualHoldDateKey(null);
+      writeStoredDateHeaderVisualHold(null);
     }
 
     return didNavigate;
   }
 
+  function captureDateHeaderVisualHold(targetDateKey?: string | null) {
+    const stickySentinelTop =
+      stickySentinelRef.current?.getBoundingClientRect().top ?? null;
+    const shouldHoldDateHeader =
+      Boolean(targetDateKey) &&
+      (isDateHeaderRenderedStuck ||
+        (typeof stickySentinelTop === "number" && stickySentinelTop < 0));
+    const nextVisualHoldDateKey =
+      shouldHoldDateHeader && targetDateKey ? targetDateKey : null;
+
+    setDateHeaderVisualHoldDateKey(nextVisualHoldDateKey);
+    writeStoredDateHeaderVisualHold(
+      nextVisualHoldDateKey
+        ? {
+            targetDateKey: nextVisualHoldDateKey,
+            timestamp: Date.now()
+          }
+        : null
+    );
+  }
+
   function captureDateChangeLayoutSynchronously(targetDateKey?: string) {
     flushSync(() => {
+      captureDateHeaderVisualHold(targetDateKey);
       captureDateHeaderTransitionStuckHold();
       captureDateChangeLayoutRef.current(targetDateKey);
     });

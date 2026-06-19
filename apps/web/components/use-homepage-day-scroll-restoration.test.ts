@@ -7,6 +7,7 @@ import {
   getHomepageDayScrollCarryoverReserve,
   getHomepageDayScrollDebt,
   getHomepageDayStickyScrollRestorationHoldRelease,
+  getHomepageDayStickyVisualHoldDateKey,
   getHomepageDayTargetDocumentHeight,
   getHomepageDayScrollIntent,
   getHomepageDayScrollTarget,
@@ -158,6 +159,30 @@ describe("homepage day scroll restoration helpers", () => {
     expect(
       shouldRestoreHomepageDayScroll(intent, "2026-06-15", false, false)
     ).toBe(false);
+  });
+
+  it("keeps a visual sticky hold for sticky-started target dates", () => {
+    expect(
+      getHomepageDayStickyVisualHoldDateKey({
+        capturedScrollTop: 480,
+        mode: "sticky",
+        targetDateKey: "2026-06-22",
+        timestamp: 1000
+      })
+    ).toBe("2026-06-22");
+  });
+
+  it("does not create a visual sticky hold for preserve-scroll changes", () => {
+    expect(
+      getHomepageDayStickyVisualHoldDateKey({
+        capturedScrollTop: 140,
+        mode: "preserve-scroll",
+        targetDateKey: "2026-06-22",
+        timestamp: 1000
+      })
+    ).toBeNull();
+
+    expect(getHomepageDayStickyVisualHoldDateKey(null)).toBeNull();
   });
 
   it("keeps sticky restoration hold until the final scroll has run", () => {
