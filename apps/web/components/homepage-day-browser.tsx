@@ -303,7 +303,6 @@ export function HomepageDayBrowser({
       />
       <Box
         className="day-browser__header"
-        data-date-transitioning={transition !== null ? "true" : undefined}
         data-sticky-restoring={
           isStickyScrollRestorationVisualHoldActive ? "true" : undefined
         }
