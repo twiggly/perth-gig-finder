@@ -10,6 +10,14 @@ import type { GigCardRecord } from "@/lib/gigs";
 const scrollRestorationMockState = vi.hoisted(() => ({
   isStickyScrollRestorationVisualHoldActive: false
 }));
+const navigationMockState = vi.hoisted(() => ({
+  transition: null as null | {
+    direction: "next" | "previous";
+    fromDateKey: string;
+    phase: "preparing" | "animating";
+    toDateKey: string;
+  }
+}));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/"
@@ -28,6 +36,51 @@ vi.mock("./use-homepage-day-scroll-restoration", () => ({
     scrollReserveHeight: 0,
     scrollReserveTargetDateKey: null
   })
+}));
+
+vi.mock("./use-homepage-day-navigation", () => ({
+  useHomepageDayNavigation: ({
+    initialActiveDateKey
+  }: {
+    initialActiveDateKey: string;
+  }) => {
+    const transition = navigationMockState.transition;
+    const renderedPanes = transition
+      ? [
+          {
+            dateKey: transition.fromDateKey,
+            motionRole: "from",
+            phase: transition.phase
+          },
+          {
+            dateKey: transition.toDateKey,
+            motionRole: "to",
+            phase: transition.phase
+          }
+        ]
+      : [
+          {
+            dateKey: initialActiveDateKey,
+            motionRole: "active",
+            phase: null
+          }
+        ];
+
+    return {
+      activeDateKey: initialActiveDateKey,
+      contentViewportStyle: {},
+      headingTrackStyle: {},
+      isContentAnimating: transition?.phase === "animating",
+      isNavigationLocked: Boolean(transition),
+      navigateAdjacentDate: () => false,
+      nextDateKey: "2026-04-30",
+      previousDateKey: null,
+      renderedContentPanes: renderedPanes,
+      renderedHeadingPanes: renderedPanes,
+      requestDateChange: async () => {},
+      transition
+    };
+  }
 }));
 
 import { HomepageDayBrowser } from "./homepage-day-browser";
@@ -90,6 +143,7 @@ function renderBrowser(days: Array<DateGroup<GigCardRecord>>) {
 describe("HomepageDayBrowser", () => {
   beforeEach(() => {
     scrollRestorationMockState.isStickyScrollRestorationVisualHoldActive = false;
+    navigationMockState.transition = null;
   });
 
   it("renders the date heading as a calendar trigger", () => {
@@ -120,6 +174,35 @@ describe("HomepageDayBrowser", () => {
 
     expect(html).toContain('data-sticky-restoring="true"');
     expect(html).toContain('data-stuck="true"');
+  });
+
+  it("marks the date header while a date transition is active", () => {
+    navigationMockState.transition = {
+      direction: "next",
+      fromDateKey: "2026-04-29",
+      phase: "preparing",
+      toDateKey: "2026-04-30"
+    };
+
+    const html = renderBrowser([
+      {
+        dateKey: "2026-04-29",
+        heading: "Wed, Apr 29th",
+        items: [createGig()]
+      },
+      {
+        dateKey: "2026-04-30",
+        heading: "Thu, Apr 30th",
+        items: [
+          createGig({
+            id: "gig-2",
+            title: "Tomorrow's Show"
+          })
+        ]
+      }
+    ]);
+
+    expect(html).toContain('data-date-transitioning="true"');
   });
 
   it("renders only the active day even when adjacent days are seeded", () => {

@@ -896,7 +896,11 @@ body[data-filter-dropdown-open="true"] .date-pills {
   padding: 0.45rem 0;
   border-radius: 999px;
   isolation: isolate;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
   transition: padding 180ms ease;
+  will-change: padding, transform;
 }
 
 .day-browser__header::before {
@@ -905,11 +909,16 @@ body[data-filter-dropdown-open="true"] .date-pills {
   z-index: -1;
   border-radius: inherit;
   background: color-mix(in srgb, var(--page-bg-fallback) 86%, transparent);
+  transform: translate3d(0, 0, 0);
   backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
   content: "";
   opacity: 0;
   pointer-events: none;
   transition: opacity 180ms ease;
+  will-change: opacity, transform;
 }
 
 .day-browser__header[data-stuck="true"] {
@@ -920,9 +929,18 @@ body[data-filter-dropdown-open="true"] .date-pills {
   opacity: 1;
 }
 
+.day-browser__header[data-date-transitioning="true"],
+.day-browser__header[data-date-transitioning="true"]::before,
 .day-browser__header[data-sticky-restoring="true"],
 .day-browser__header[data-sticky-restoring="true"]::before {
   transition: none;
+}
+
+.day-browser__header[data-date-transitioning="true"]::before,
+.day-browser__header[data-sticky-restoring="true"]::before {
+  background: color-mix(in srgb, var(--page-bg-fallback) 94%, var(--text) 6%);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .day-browser__heading-viewport,
