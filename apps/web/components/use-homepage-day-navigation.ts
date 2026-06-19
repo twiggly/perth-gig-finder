@@ -33,6 +33,21 @@ export interface DayBrowserPaneState {
   phase: BrowserTransition["phase"] | null;
 }
 
+interface CompletedTransitionState {
+  activeDateKey: string;
+  transition: BrowserTransition | null;
+}
+
+interface HomepageDayTransitionCleanupFrames {
+  firstFrame: number | null;
+  secondFrame: number | null;
+}
+
+interface HomepageDayTransitionCleanupScheduler {
+  cancelAnimationFrame: (handle: number) => void;
+  requestAnimationFrame: (callback: FrameRequestCallback) => number;
+}
+
 interface UseHomepageDayNavigationOptions {
   availableDateKeys: string[];
   closeCalendar: () => void;
@@ -93,6 +108,80 @@ export function buildHomepageDayTransitionPanes(
   ];
 }
 
+export function completeHomepageDayTransition(
+  activeDateKey: string,
+  transition: BrowserTransition | null,
+  dateKey: string
+): CompletedTransitionState {
+  if (!transition || transition.toDateKey !== dateKey) {
+    return {
+      activeDateKey,
+      transition
+    };
+  }
+
+  return {
+    activeDateKey: dateKey,
+    transition
+  };
+}
+
+export function clearCompletedHomepageDayTransition(
+  transition: BrowserTransition | null,
+  dateKey: string
+): BrowserTransition | null {
+  return transition?.toDateKey === dateKey ? null : transition;
+}
+
+export function completeHomepageDayTransitionImmediately(
+  dateKey: string
+): CompletedTransitionState {
+  return {
+    activeDateKey: dateKey,
+    transition: null
+  };
+}
+
+export function scheduleHomepageDayTransitionCleanup({
+  onCleanup,
+  requestAnimationFrame
+}: Pick<HomepageDayTransitionCleanupScheduler, "requestAnimationFrame"> & {
+  onCleanup: () => void;
+}): HomepageDayTransitionCleanupFrames {
+  const frames: HomepageDayTransitionCleanupFrames = {
+    firstFrame: null,
+    secondFrame: null
+  };
+
+  frames.firstFrame = requestAnimationFrame(() => {
+    frames.firstFrame = null;
+    frames.secondFrame = requestAnimationFrame(() => {
+      frames.secondFrame = null;
+      onCleanup();
+    });
+  });
+
+  return frames;
+}
+
+export function cancelHomepageDayTransitionCleanup({
+  cancelAnimationFrame,
+  frames
+}: Pick<HomepageDayTransitionCleanupScheduler, "cancelAnimationFrame"> & {
+  frames: HomepageDayTransitionCleanupFrames;
+}) {
+  if (frames.firstFrame !== null) {
+    cancelAnimationFrame(frames.firstFrame);
+  }
+
+  if (frames.secondFrame !== null) {
+    cancelAnimationFrame(frames.secondFrame);
+  }
+
+  frames.firstFrame = null;
+  frames.secondFrame = null;
+}
+
 export function buildHomepageHeadingTrackStyle(): CSSProperties {
   return {
     "--day-browser-heading-duration": `${HEADING_TRANSITION_DURATION_MS}ms`,
@@ -125,6 +214,10 @@ export function useHomepageDayNavigation({
   syncCalendarMonthForDate
 }: UseHomepageDayNavigationOptions) {
   const pathname = usePathname();
+  const transitionCleanupFrameRefs = useRef<HomepageDayTransitionCleanupFrames>({
+    firstFrame: null,
+    secondFrame: null
+  });
   const transitionFrameRef = useRef<number | null>(null);
   const transitionTimeoutRef = useRef<number | null>(null);
   const [activeDateKey, setActiveDateKey] = useState(initialActiveDateKey);
@@ -168,12 +261,28 @@ export function useHomepageDayNavigation({
     syncCalendarMonthForDate
   );
 
+  function cancelTransitionCleanupFrames() {
+    if (typeof window === "undefined") {
+      transitionCleanupFrameRefs.current = {
+        firstFrame: null,
+        secondFrame: null
+      };
+      return;
+    }
+
+    cancelHomepageDayTransitionCleanup({
+      cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+      frames: transitionCleanupFrameRefs.current
+    });
+  }
+
   useEffect(() => {
     setActiveDateKey(initialActiveDateKey);
     syncCalendarMonthForDateFromEffect(initialActiveDateKey);
     closeCalendarFromEffect();
     closeOpenGigFromEffect();
     setTransition(null);
+    cancelTransitionCleanupFrames();
     resetAdjacentImagePreloadsFromEffect();
   }, [availableDateKeys, initialActiveDateKey, initialDays]);
 
@@ -255,6 +364,7 @@ export function useHomepageDayNavigation({
     }
 
     transitionFrameRef.current = window.requestAnimationFrame(() => {
+      transitionFrameRef.current = null;
       setTransition((current) =>
         current && current.phase === "preparing"
           ? { ...current, phase: "animating" }
@@ -280,6 +390,7 @@ export function useHomepageDayNavigation({
       TRANSITION_COMMIT_BUFFER_MS;
 
     transitionTimeoutRef.current = window.setTimeout(() => {
+      transitionTimeoutRef.current = null;
       finishTransition(transition.toDateKey);
     }, transitionCommitDelay);
 
@@ -293,6 +404,8 @@ export function useHomepageDayNavigation({
 
   useEffect(() => {
     return () => {
+      cancelTransitionCleanupFrames();
+
       if (transitionFrameRef.current !== null) {
         window.cancelAnimationFrame(transitionFrameRef.current);
       }
@@ -309,10 +422,25 @@ export function useHomepageDayNavigation({
   }
 
   function finishTransition(dateKey: string) {
-    commitActiveDate(dateKey);
-    setTransition((current) =>
-      current?.toDateKey === dateKey ? null : current
-    );
+    setActiveDateKey((currentActiveDateKey) => {
+      const completion = completeHomepageDayTransition(
+        currentActiveDateKey,
+        transition,
+        dateKey
+      );
+
+      return completion.activeDateKey;
+    });
+    syncCalendarMonthForDate(dateKey);
+    cancelTransitionCleanupFrames();
+    transitionCleanupFrameRefs.current = scheduleHomepageDayTransitionCleanup({
+      onCleanup: () => {
+        setTransition((current) =>
+          clearCompletedHomepageDayTransition(current, dateKey)
+        );
+      },
+      requestAnimationFrame: window.requestAnimationFrame.bind(window)
+    });
   }
 
   async function requestDateChange(
@@ -357,8 +485,11 @@ export function useHomepageDayNavigation({
     }
 
     if (prefersReducedMotion) {
-      setTransition(null);
-      commitActiveDate(nextDateKey);
+      const completion = completeHomepageDayTransitionImmediately(nextDateKey);
+
+      cancelTransitionCleanupFrames();
+      setTransition(completion.transition);
+      commitActiveDate(completion.activeDateKey);
 
       return true;
     }
@@ -368,12 +499,16 @@ export function useHomepageDayNavigation({
       getRequestedDayTransition(availableDateKeys, activeDateKey, nextDateKey);
 
     if (!requestedTransition) {
-      setTransition(null);
-      commitActiveDate(nextDateKey);
+      const completion = completeHomepageDayTransitionImmediately(nextDateKey);
+
+      cancelTransitionCleanupFrames();
+      setTransition(completion.transition);
+      commitActiveDate(completion.activeDateKey);
 
       return true;
     }
 
+    cancelTransitionCleanupFrames();
     setTransition({
       ...requestedTransition,
       phase: "preparing"

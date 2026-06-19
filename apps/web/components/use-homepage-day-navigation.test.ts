@@ -4,6 +4,11 @@ import {
   buildHomepageContentViewportStyle,
   buildHomepageDayTransitionPanes,
   buildHomepageHeadingTrackStyle,
+  cancelHomepageDayTransitionCleanup,
+  clearCompletedHomepageDayTransition,
+  completeHomepageDayTransition,
+  completeHomepageDayTransitionImmediately,
+  scheduleHomepageDayTransitionCleanup,
   type BrowserTransition
 } from "./use-homepage-day-navigation";
 
@@ -38,6 +43,122 @@ describe("buildHomepageDayTransitionPanes", () => {
         phase: "animating"
       }
     ]);
+  });
+
+  it("keeps completed transition panes mounted after the active date commits", () => {
+    const transition: BrowserTransition = {
+      direction: "next",
+      fromDateKey: "2026-04-29",
+      phase: "animating",
+      toDateKey: "2026-04-30"
+    };
+    const completion = completeHomepageDayTransition(
+      "2026-04-29",
+      transition,
+      "2026-04-30"
+    );
+
+    expect(completion).toEqual({
+      activeDateKey: "2026-04-30",
+      transition
+    });
+    expect(
+      buildHomepageDayTransitionPanes(
+        completion.activeDateKey,
+        completion.transition
+      )
+    ).toEqual([
+      {
+        dateKey: "2026-04-29",
+        motionRole: "from",
+        phase: "animating"
+      },
+      {
+        dateKey: "2026-04-30",
+        motionRole: "to",
+        phase: "animating"
+      }
+    ]);
+  });
+
+  it("clears completed transition only after the second animation frame", () => {
+    const callbacks = new Map<number, FrameRequestCallback>();
+    let nextFrameId = 0;
+    let didCleanup = false;
+    const frames = scheduleHomepageDayTransitionCleanup({
+      onCleanup: () => {
+        didCleanup = true;
+      },
+      requestAnimationFrame: (callback) => {
+        nextFrameId += 1;
+        callbacks.set(nextFrameId, callback);
+        return nextFrameId;
+      }
+    });
+
+    expect(frames).toEqual({
+      firstFrame: 1,
+      secondFrame: null
+    });
+    expect(didCleanup).toBe(false);
+
+    callbacks.get(1)?.(16);
+    expect(frames).toEqual({
+      firstFrame: null,
+      secondFrame: 2
+    });
+    expect(didCleanup).toBe(false);
+
+    callbacks.get(2)?.(32);
+    expect(frames).toEqual({
+      firstFrame: null,
+      secondFrame: null
+    });
+    expect(didCleanup).toBe(true);
+  });
+
+  it("cancels both pending transition cleanup frames", () => {
+    const frames = {
+      firstFrame: 1,
+      secondFrame: 2
+    };
+    const cancelledFrames: number[] = [];
+
+    cancelHomepageDayTransitionCleanup({
+      cancelAnimationFrame: (handle) => {
+        cancelledFrames.push(handle);
+      },
+      frames
+    });
+
+    expect(cancelledFrames).toEqual([1, 2]);
+    expect(frames).toEqual({
+      firstFrame: null,
+      secondFrame: null
+    });
+  });
+
+  it("clears only the matching completed transition", () => {
+    const transition: BrowserTransition = {
+      direction: "next",
+      fromDateKey: "2026-04-29",
+      phase: "animating",
+      toDateKey: "2026-04-30"
+    };
+
+    expect(clearCompletedHomepageDayTransition(transition, "2026-04-30")).toBe(
+      null
+    );
+    expect(clearCompletedHomepageDayTransition(transition, "2026-05-01")).toBe(
+      transition
+    );
+  });
+
+  it("keeps reduced-motion completion immediate", () => {
+    expect(completeHomepageDayTransitionImmediately("2026-04-30")).toEqual({
+      activeDateKey: "2026-04-30",
+      transition: null
+    });
   });
 });
 
