@@ -15,11 +15,29 @@ import {
   getNextHomepageDayScrollIntent,
   getNextHomepageDayScrollDebtReserve,
   isHomepageDayScrollIntentFresh,
+  isDebugSkipStickyRestoreEnabled,
   shouldPlanHomepageDayScrollReserve,
   shouldRestoreHomepageDayScroll
 } from "./use-homepage-day-scroll-restoration";
 
 describe("homepage day scroll restoration helpers", () => {
+  it("enables the sticky restore diagnostic only for the explicit URL flag", () => {
+    expect(isDebugSkipStickyRestoreEnabled("?debugSkipStickyRestore=1")).toBe(
+      true
+    );
+    expect(
+      isDebugSkipStickyRestoreEnabled("?date=2026-06-20&debugSkipStickyRestore=1")
+    ).toBe(true);
+  });
+
+  it("keeps the sticky restore diagnostic disabled by default", () => {
+    expect(isDebugSkipStickyRestoreEnabled()).toBe(false);
+    expect(isDebugSkipStickyRestoreEnabled("?debugSkipStickyRestore=0")).toBe(
+      false
+    );
+    expect(isDebugSkipStickyRestoreEnabled("?date=2026-06-20")).toBe(false);
+  });
+
   it("creates sticky scroll intent for sticky date changes", () => {
     expect(
       getHomepageDayScrollIntent({

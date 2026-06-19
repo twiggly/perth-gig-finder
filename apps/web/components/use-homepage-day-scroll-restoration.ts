@@ -109,6 +109,19 @@ const EMPTY_CARRYOVER_RESERVE: HomepageDayScrollCarryoverReserve = {
   height: 0
 };
 
+export function isDebugSkipStickyRestoreEnabled(search?: string): boolean {
+  const searchParams =
+    search ?? (typeof window === "undefined" ? null : window.location.search);
+
+  if (!searchParams) {
+    return false;
+  }
+
+  return (
+    new URLSearchParams(searchParams).get("debugSkipStickyRestore") === "1"
+  );
+}
+
 export function getHomepageDayScrollIntent({
   isDateHeaderStuck,
   scrollTop = 0,
@@ -915,10 +928,14 @@ export function useHomepageDayScrollRestoration(
     if (!currentHold.hasScrolled) {
       setPendingScrollIntent(null);
       clearCarryoverReserve();
-      window.scrollTo({
-        behavior: "auto",
-        top: scrollTarget
-      });
+
+      if (!isDebugSkipStickyRestoreEnabled()) {
+        window.scrollTo({
+          behavior: "auto",
+          top: scrollTarget
+        });
+      }
+
       setStickyRestorationHold({
         hasScrolled: true,
         retryCount: 0,
