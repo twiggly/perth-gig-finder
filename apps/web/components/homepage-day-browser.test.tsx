@@ -108,6 +108,7 @@ describe("HomepageDayBrowser", () => {
 
     expect(html).toContain("Choose date, currently Wed, Apr 29th");
     expect(html).toContain('aria-haspopup="dialog"');
+    expect(html).toContain("day-browser__header-shell");
     expect(html).toContain("day-browser__heading-button");
     expect(html).toContain("Wed, Apr 29th");
   });

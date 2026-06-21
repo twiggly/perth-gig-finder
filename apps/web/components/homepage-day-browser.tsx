@@ -350,94 +350,98 @@ export function HomepageDayBrowser({
         className="day-browser__sticky-sentinel"
         ref={stickySentinelRef}
       />
-      <Box
-        className="day-browser__header"
-        data-sticky-restoring={
-          isStickyScrollRestorationVisualHoldActive ? "true" : undefined
-        }
-        data-stuck={isDateHeaderRenderedStuck ? "true" : undefined}
-        ref={dateHeaderRef}
-      >
-        <ActionIcon
-          aria-label="Previous date"
-          className="day-browser__arrow"
-          disabled={!previousDateKey || isNavigationLocked}
-          onClick={() => handleNavigateDate("previous")}
-          type="button"
-          variant="subtle"
+      <Box className="day-browser__header-shell">
+        <Box
+          className="day-browser__header"
+          data-sticky-restoring={
+            isStickyScrollRestorationVisualHoldActive ? "true" : undefined
+          }
+          data-stuck={isDateHeaderRenderedStuck ? "true" : undefined}
+          ref={dateHeaderRef}
         >
-          <span aria-hidden="true">&lt;</span>
-        </ActionIcon>
-        <Popover
-          middlewares={{ flip: true, shift: true }}
-          onChange={setIsCalendarOpen}
-          opened={isCalendarOpen}
-          position="bottom"
-          shadow="xl"
-          width="auto"
-          withArrow
-        >
-          <Popover.Target>
-            <UnstyledButton
-              aria-expanded={isCalendarOpen}
-              aria-haspopup="dialog"
-              aria-label={`Choose date, currently ${activeDay.heading}`}
-              className="day-browser__heading-button"
-              disabled={isNavigationLocked || !calendarMonth}
-              onClick={() => setIsCalendarOpen((current) => !current)}
-              type="button"
-            >
-              <span className="sr-only">{activeDay.heading}</span>
-              <Box className="day-browser__heading-viewport">
-                <Box
-                  className="day-browser__heading-track"
-                  data-direction={transition?.direction}
-                  style={headingTrackStyle}
-                >
-                  {renderedHeadingPanes.map(({ dateKey, motionRole, phase }) => (
-                    <Box
-                      className="day-browser__heading-pane"
-                      data-motion-role={motionRole}
-                      data-phase={phase ?? undefined}
-                      key={`heading-${dateKey}`}
-                    >
-                      <span className="day-browser__heading-title">
-                        {loadedDayMap.get(dateKey)?.heading ??
-                          availableDayMap.get(dateKey)?.heading ??
-                          activeDay.heading}
-                      </span>
-                    </Box>
-                  ))}
+          <ActionIcon
+            aria-label="Previous date"
+            className="day-browser__arrow"
+            disabled={!previousDateKey || isNavigationLocked}
+            onClick={() => handleNavigateDate("previous")}
+            type="button"
+            variant="subtle"
+          >
+            <span aria-hidden="true">&lt;</span>
+          </ActionIcon>
+          <Popover
+            middlewares={{ flip: true, shift: true }}
+            onChange={setIsCalendarOpen}
+            opened={isCalendarOpen}
+            position="bottom"
+            shadow="xl"
+            width="auto"
+            withArrow
+          >
+            <Popover.Target>
+              <UnstyledButton
+                aria-expanded={isCalendarOpen}
+                aria-haspopup="dialog"
+                aria-label={`Choose date, currently ${activeDay.heading}`}
+                className="day-browser__heading-button"
+                disabled={isNavigationLocked || !calendarMonth}
+                onClick={() => setIsCalendarOpen((current) => !current)}
+                type="button"
+              >
+                <span className="sr-only">{activeDay.heading}</span>
+                <Box className="day-browser__heading-viewport">
+                  <Box
+                    className="day-browser__heading-track"
+                    data-direction={transition?.direction}
+                    style={headingTrackStyle}
+                  >
+                    {renderedHeadingPanes.map(
+                      ({ dateKey, motionRole, phase }) => (
+                        <Box
+                          className="day-browser__heading-pane"
+                          data-motion-role={motionRole}
+                          data-phase={phase ?? undefined}
+                          key={`heading-${dateKey}`}
+                        >
+                          <span className="day-browser__heading-title">
+                            {loadedDayMap.get(dateKey)?.heading ??
+                              availableDayMap.get(dateKey)?.heading ??
+                              activeDay.heading}
+                          </span>
+                        </Box>
+                      )
+                    )}
+                  </Box>
                 </Box>
-              </Box>
-            </UnstyledButton>
-          </Popover.Target>
-          <HomepageDayCalendarDropdown
-            calendarGestureHandlers={calendarGestureHandlers}
-            calendarMonth={calendarMonth}
-            onNextMonth={() => {
-              if (calendarMonth?.nextMonthKey) {
-                setCalendarMonthKey(calendarMonth.nextMonthKey);
-              }
-            }}
-            onPreviousMonth={() => {
-              if (calendarMonth?.previousMonthKey) {
-                setCalendarMonthKey(calendarMonth.previousMonthKey);
-              }
-            }}
-            onSelectDate={handleCalendarDateSelect}
-          />
-        </Popover>
-        <ActionIcon
-          aria-label="Next date"
-          className="day-browser__arrow"
-          disabled={!nextDateKey || isNavigationLocked}
-          onClick={() => handleNavigateDate("next")}
-          type="button"
-          variant="subtle"
-        >
-          <span aria-hidden="true">&gt;</span>
-        </ActionIcon>
+              </UnstyledButton>
+            </Popover.Target>
+            <HomepageDayCalendarDropdown
+              calendarGestureHandlers={calendarGestureHandlers}
+              calendarMonth={calendarMonth}
+              onNextMonth={() => {
+                if (calendarMonth?.nextMonthKey) {
+                  setCalendarMonthKey(calendarMonth.nextMonthKey);
+                }
+              }}
+              onPreviousMonth={() => {
+                if (calendarMonth?.previousMonthKey) {
+                  setCalendarMonthKey(calendarMonth.previousMonthKey);
+                }
+              }}
+              onSelectDate={handleCalendarDateSelect}
+            />
+          </Popover>
+          <ActionIcon
+            aria-label="Next date"
+            className="day-browser__arrow"
+            disabled={!nextDateKey || isNavigationLocked}
+            onClick={() => handleNavigateDate("next")}
+            type="button"
+            variant="subtle"
+          >
+            <span aria-hidden="true">&gt;</span>
+          </ActionIcon>
+        </Box>
       </Box>
       {isLoadingDay ? (
         <span className="sr-only" role="status">
