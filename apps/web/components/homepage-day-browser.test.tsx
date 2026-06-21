@@ -131,7 +131,6 @@ describe("HomepageDayBrowser", () => {
   it("keeps the date header visually stuck during sticky-start transition handoff", () => {
     expect(
       shouldRenderHomepageDateHeaderStuck({
-        hasActiveDateScrollReserve: false,
         isDateHeaderVisuallyStuck: false,
         isStickyScrollRestorationVisualHoldActive: false,
         isStickyStartedTransitionActive: true
@@ -142,7 +141,6 @@ describe("HomepageDayBrowser", () => {
   it("does not force stuck styling when no sticky hold source is active", () => {
     expect(
       shouldRenderHomepageDateHeaderStuck({
-        hasActiveDateScrollReserve: false,
         isDateHeaderVisuallyStuck: false,
         isStickyScrollRestorationVisualHoldActive: false,
         isStickyStartedTransitionActive: false

@@ -8,7 +8,6 @@ import {
   getHomepageDayScrollCarryoverReserve,
   getHomepageDayScrollDebt,
   getHomepageDayStickyScrollRestorationHoldRelease,
-  getHomepageDayStickyVisualHoldDateKey,
   getHomepageDayTargetDocumentHeight,
   getHomepageDayScrollIntent,
   getHomepageDayScrollTarget,
@@ -175,17 +174,6 @@ describe("homepage day scroll restoration helpers", () => {
     ).toBe(false);
   });
 
-  it("keeps a visual sticky hold for sticky-started target dates", () => {
-    expect(
-      getHomepageDayStickyVisualHoldDateKey({
-        capturedScrollTop: 480,
-        mode: "sticky",
-        targetDateKey: "2026-06-22",
-        timestamp: 1000
-      })
-    ).toBe("2026-06-22");
-  });
-
   it("computes outgoing compensation only when sticky pre-scroll moves upward", () => {
     expect(
       getHomepageDayOutgoingCompensationOffset({
@@ -207,19 +195,6 @@ describe("homepage day scroll restoration helpers", () => {
         scrollTarget: null
       })
     ).toBe(0);
-  });
-
-  it("does not create a visual sticky hold for preserve-scroll changes", () => {
-    expect(
-      getHomepageDayStickyVisualHoldDateKey({
-        capturedScrollTop: 140,
-        mode: "preserve-scroll",
-        targetDateKey: "2026-06-22",
-        timestamp: 1000
-      })
-    ).toBeNull();
-
-    expect(getHomepageDayStickyVisualHoldDateKey(null)).toBeNull();
   });
 
   it("keeps sticky restoration hold until the final scroll has run", () => {
@@ -249,11 +224,27 @@ describe("homepage day scroll restoration helpers", () => {
   it("clears sticky restoration hold once post-scroll geometry confirms stuck", () => {
     expect(
       getHomepageDayStickyScrollRestorationHoldRelease({
+        currentScrollTop: 360,
         hasScrolled: true,
         isHoldActive: true,
         maxRetryCount: 3,
         retryCount: 1,
+        scrollTarget: 360,
         stickySentinelTop: -12
+      })
+    ).toBe("clear");
+  });
+
+  it("clears sticky restoration hold once the user scrolls above the restoration target", () => {
+    expect(
+      getHomepageDayStickyScrollRestorationHoldRelease({
+        currentScrollTop: 120,
+        hasScrolled: true,
+        isHoldActive: true,
+        maxRetryCount: 3,
+        retryCount: 0,
+        scrollTarget: 240,
+        stickySentinelTop: 80
       })
     ).toBe("clear");
   });
@@ -261,10 +252,12 @@ describe("homepage day scroll restoration helpers", () => {
   it("retries sticky restoration hold while post-scroll geometry is unsettled", () => {
     expect(
       getHomepageDayStickyScrollRestorationHoldRelease({
+        currentScrollTop: 360,
         hasScrolled: true,
         isHoldActive: true,
         maxRetryCount: 3,
         retryCount: 1,
+        scrollTarget: 360,
         stickySentinelTop: 4
       })
     ).toBe("retry");
@@ -273,10 +266,12 @@ describe("homepage day scroll restoration helpers", () => {
   it("eventually releases sticky restoration hold with a bounded fallback", () => {
     expect(
       getHomepageDayStickyScrollRestorationHoldRelease({
+        currentScrollTop: 360,
         hasScrolled: true,
         isHoldActive: true,
         maxRetryCount: 3,
         retryCount: 3,
+        scrollTarget: 360,
         stickySentinelTop: 4
       })
     ).toBe("fallback-clear");

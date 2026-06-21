@@ -43,12 +43,10 @@ const LOCAL_PREVIEW_ASSET_REVISION =
   process.env.NEXT_PUBLIC_LOCAL_PREVIEW_ASSET_REVISION ?? "0";
 
 export function shouldRenderHomepageDateHeaderStuck({
-  hasActiveDateScrollReserve,
   isDateHeaderVisuallyStuck,
   isStickyScrollRestorationVisualHoldActive,
   isStickyStartedTransitionActive
 }: {
-  hasActiveDateScrollReserve: boolean;
   isDateHeaderVisuallyStuck: boolean;
   isStickyScrollRestorationVisualHoldActive: boolean;
   isStickyStartedTransitionActive: boolean;
@@ -56,8 +54,7 @@ export function shouldRenderHomepageDateHeaderStuck({
   return (
     isDateHeaderVisuallyStuck ||
     isStickyScrollRestorationVisualHoldActive ||
-    isStickyStartedTransitionActive ||
-    hasActiveDateScrollReserve
+    isStickyStartedTransitionActive
   );
 }
 
@@ -222,12 +219,9 @@ export function HomepageDayBrowser({
       scrollReserveHeight
     ]
   );
-  const hasActiveDateScrollReserve =
-    scrollReserveHeight > 0 && scrollReserveTargetDateKey === activeDateKey;
   const isStickyStartedTransitionActive =
     transition?.startedWithStickyHeader === true;
   const isDateHeaderRenderedStuck = shouldRenderHomepageDateHeaderStuck({
-    hasActiveDateScrollReserve,
     isDateHeaderVisuallyStuck,
     isStickyScrollRestorationVisualHoldActive,
     isStickyStartedTransitionActive
