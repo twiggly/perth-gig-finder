@@ -893,10 +893,9 @@ body[data-filter-dropdown-open="true"] .date-pills {
   gap: 0.8rem;
   width: min(100%, 32rem);
   margin: 0 auto;
-  padding: 0.45rem 0;
+  padding: 0.45rem;
   border-radius: 999px;
   isolation: isolate;
-  transition: padding 180ms ease;
 }
 
 .day-browser__header::before {
@@ -908,17 +907,8 @@ body[data-filter-dropdown-open="true"] .date-pills {
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   content: "";
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 180ms ease;
-}
-
-.day-browser__header[data-stuck="true"] {
-  padding-inline: 0.45rem;
-}
-
-.day-browser__header[data-stuck="true"]::before {
   opacity: 1;
+  pointer-events: none;
 }
 
 .day-browser__header[data-sticky-restoring="true"],
