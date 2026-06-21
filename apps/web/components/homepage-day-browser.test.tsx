@@ -25,8 +25,6 @@ vi.mock("./use-homepage-day-scroll-restoration", () => ({
     scrollAlignmentOffset: 0,
     scrollCarryoverDateKey: null,
     scrollCarryoverReserve: 0,
-    scrollOutgoingCompensationDateKey: null,
-    scrollOutgoingCompensationOffset: 0,
     scrollReserveHeight: 0,
     scrollReserveTargetDateKey: null
   })

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   getHomepageDayNaturalMaxScrollTop,
-  getHomepageDayOutgoingCompensationOffset,
   getHomepageDayPreservedScrollTarget,
+  getHomepageDayReserveScrollTop,
   getHomepageDayScrollAlignmentOffset,
   getHomepageDayScrollCarryoverReserve,
   getHomepageDayScrollDebt,
@@ -18,7 +18,8 @@ import {
   getNextHomepageDayScrollDebtReserve,
   isHomepageDayScrollIntentFresh,
   shouldPlanHomepageDayScrollReserve,
-  shouldRestoreHomepageDayScroll
+  shouldRestoreHomepageDayScroll,
+  shouldSkipHomepageDayStickyScrollRestore
 } from "./use-homepage-day-scroll-restoration";
 
 describe("homepage day scroll restoration helpers", () => {
@@ -176,27 +177,56 @@ describe("homepage day scroll restoration helpers", () => {
     ).toBe("2026-06-22");
   });
 
-  it("computes outgoing compensation only when sticky pre-scroll moves upward", () => {
+  it("skips sticky restoration when it would force a deep alignment reset", () => {
     expect(
-      getHomepageDayOutgoingCompensationOffset({
+      shouldSkipHomepageDayStickyScrollRestore({
+        alignmentOffset: 320,
+        mode: "sticky"
+      })
+    ).toBe(true);
+
+    expect(
+      shouldSkipHomepageDayStickyScrollRestore({
+        alignmentOffset: 0,
+        mode: "sticky"
+      })
+    ).toBe(false);
+
+    expect(
+      shouldSkipHomepageDayStickyScrollRestore({
+        alignmentOffset: 320,
+        mode: "preserve-scroll"
+      })
+    ).toBe(false);
+  });
+
+  it("uses captured scroll as reserve debt for skipped deep sticky restoration", () => {
+    expect(
+      getHomepageDayReserveScrollTop({
+        alignmentOffset: 320,
         capturedScrollTop: 480,
+        mode: "sticky",
         scrollTarget: 160
       })
-    ).toBe(-320);
+    ).toBe(480);
 
     expect(
-      getHomepageDayOutgoingCompensationOffset({
-        capturedScrollTop: 160,
-        scrollTarget: 480
+      getHomepageDayReserveScrollTop({
+        alignmentOffset: 0,
+        capturedScrollTop: 480,
+        mode: "sticky",
+        scrollTarget: 160
       })
-    ).toBe(0);
+    ).toBe(160);
 
     expect(
-      getHomepageDayOutgoingCompensationOffset({
-        capturedScrollTop: 160,
-        scrollTarget: null
+      getHomepageDayReserveScrollTop({
+        alignmentOffset: 320,
+        capturedScrollTop: 480,
+        mode: "preserve-scroll",
+        scrollTarget: 160
       })
-    ).toBe(0);
+    ).toBe(480);
   });
 
   it("does not create a visual sticky hold for preserve-scroll changes", () => {

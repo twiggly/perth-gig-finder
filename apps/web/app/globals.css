@@ -1187,10 +1187,6 @@ body[data-filter-dropdown-open="true"] .date-pills {
   transform: translate3d(0, 0, 0);
 }
 
-.day-browser__content-align[data-scroll-compensate-outgoing="true"] {
-  transform: translate3d(0, var(--day-browser-scroll-outgoing-y, 0px), 0);
-}
-
 .day-browser__content-align[data-scroll-align-target="true"] {
   transform: translate3d(0, var(--day-browser-scroll-align-y, 0px), 0);
 }

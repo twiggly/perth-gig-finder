@@ -29,7 +29,6 @@ interface HomepageDayStickyScrollTargetInput
 interface UseHomepageDayScrollRestorationOptions {
   activeDateKey: string;
   isContentAnimating: boolean;
-  isDateTransitionPreparing: boolean;
   isDateTransitioning: boolean;
   isDateTransitionSettling: boolean;
   isDateHeaderStuck: boolean;
@@ -46,8 +45,6 @@ interface HomepageDayScrollRestoration {
   scrollAlignmentOffset: number;
   scrollCarryoverDateKey: string | null;
   scrollCarryoverReserve: number;
-  scrollOutgoingCompensationDateKey: string | null;
-  scrollOutgoingCompensationOffset: number;
   scrollReserveHeight: number;
   scrollReserveTargetDateKey: string | null;
 }
@@ -74,14 +71,6 @@ interface HomepageDayScrollReservePlan {
 interface HomepageDayScrollCarryoverReserve {
   dateKey: string | null;
   height: number;
-}
-
-interface HomepageDayOutgoingScrollCompensation {
-  dateKey: string | null;
-  hasScrolled: boolean;
-  offset: number;
-  scrollTarget: number | null;
-  targetDateKey: string | null;
 }
 
 interface HomepageDayStickyScrollRestorationHold {
@@ -119,13 +108,6 @@ const EMPTY_RESERVE_PLAN: HomepageDayScrollReservePlan = {
 const EMPTY_CARRYOVER_RESERVE: HomepageDayScrollCarryoverReserve = {
   dateKey: null,
   height: 0
-};
-const EMPTY_OUTGOING_COMPENSATION: HomepageDayOutgoingScrollCompensation = {
-  dateKey: null,
-  hasScrolled: false,
-  offset: 0,
-  scrollTarget: null,
-  targetDateKey: null
 };
 
 export function getHomepageDayScrollIntent({
@@ -270,18 +252,37 @@ export function getHomepageDayScrollAlignmentOffset({
   return Math.max(0, currentScrollTop - scrollTarget);
 }
 
-export function getHomepageDayOutgoingCompensationOffset({
+export function shouldSkipHomepageDayStickyScrollRestore({
+  alignmentOffset,
+  mode
+}: {
+  alignmentOffset: number;
+  mode: HomepageDayScrollIntentMode | null;
+}): boolean {
+  return mode === "sticky" && alignmentOffset > 0;
+}
+
+export function getHomepageDayReserveScrollTop({
+  alignmentOffset,
   capturedScrollTop,
+  mode,
   scrollTarget
 }: {
+  alignmentOffset: number;
   capturedScrollTop: number;
+  mode: HomepageDayScrollIntentMode;
   scrollTarget: number | null;
 }): number {
-  if (scrollTarget === null || scrollTarget >= capturedScrollTop) {
-    return 0;
+  if (mode === "preserve-scroll") {
+    return capturedScrollTop;
   }
 
-  return scrollTarget - capturedScrollTop;
+  return shouldSkipHomepageDayStickyScrollRestore({
+    alignmentOffset,
+    mode
+  })
+    ? capturedScrollTop
+    : scrollTarget ?? capturedScrollTop;
 }
 
 export function getHomepageDayNaturalMaxScrollTop({
@@ -535,7 +536,6 @@ export function useHomepageDayScrollRestoration(
   const {
     activeDateKey,
     isContentAnimating,
-    isDateTransitionPreparing,
     isDateTransitioning,
     isDateTransitionSettling,
     isDateHeaderStuck,
@@ -552,10 +552,6 @@ export function useHomepageDayScrollRestoration(
     useRef<HomepageDayStickyScrollRestorationHold | null>(null);
   const carryoverReserveRef =
     useRef<HomepageDayScrollCarryoverReserve>(EMPTY_CARRYOVER_RESERVE);
-  const outgoingCompensationRef =
-    useRef<HomepageDayOutgoingScrollCompensation>(
-      EMPTY_OUTGOING_COMPENSATION
-    );
   const reservePlanRef =
     useRef<HomepageDayScrollReservePlan>(EMPTY_RESERVE_PLAN);
   const scrollRestoreFrameRef = useRef<number | null>(null);
@@ -563,10 +559,6 @@ export function useHomepageDayScrollRestoration(
     useState<HomepageDayScrollReservePlan>(EMPTY_RESERVE_PLAN);
   const [carryoverReserve, setCarryoverReserve] =
     useState<HomepageDayScrollCarryoverReserve>(EMPTY_CARRYOVER_RESERVE);
-  const [outgoingCompensation, setOutgoingCompensationState] =
-    useState<HomepageDayOutgoingScrollCompensation>(
-      EMPTY_OUTGOING_COMPENSATION
-    );
   const [pendingScrollIntent, setPendingScrollIntentState] =
     useState<HomepageDayScrollIntent | null>(null);
   const [pendingScrollTarget, setPendingScrollTargetState] =
@@ -642,13 +634,6 @@ export function useHomepageDayScrollRestoration(
   ) {
     carryoverReserveRef.current = nextCarryoverReserve;
     setCarryoverReserve(nextCarryoverReserve);
-  }
-
-  function updateOutgoingCompensation(
-    nextCompensation: HomepageDayOutgoingScrollCompensation
-  ) {
-    outgoingCompensationRef.current = nextCompensation;
-    setOutgoingCompensationState(nextCompensation);
   }
 
   function getStickySentinelTop() {
@@ -730,16 +715,6 @@ export function useHomepageDayScrollRestoration(
     return getStickyScrollTargetForContent(scrollTargetContentRef.current);
   }
 
-  function getCurrentActiveStickyScrollTarget(): number | null {
-    if (typeof document === "undefined") {
-      return null;
-    }
-
-    return getStickyScrollTargetForContent(
-      document.querySelector<HTMLElement>(".gig-grid[data-active-date='true']")
-    );
-  }
-
   function shrinkScrollDebtReserve() {
     if (typeof window === "undefined") {
       return;
@@ -805,15 +780,6 @@ export function useHomepageDayScrollRestoration(
         targetDateKey
       })
     });
-    const preScrollTarget =
-      nextIntent?.mode === "sticky" ? getCurrentActiveStickyScrollTarget() : null;
-    const outgoingCompensationOffset =
-      nextIntent?.mode === "sticky"
-        ? getHomepageDayOutgoingCompensationOffset({
-            capturedScrollTop: window.scrollY,
-            scrollTarget: preScrollTarget
-          })
-        : 0;
     const provisionalReserveHeight = nextIntent ? window.innerHeight : 0;
 
     setPendingScrollIntent(nextIntent);
@@ -826,17 +792,6 @@ export function useHomepageDayScrollRestoration(
         reserveDateKey: currentReservePlan.dateKey,
         reserveHeight: currentReservePlan.height
       })
-    );
-    updateOutgoingCompensation(
-      nextIntent?.mode === "sticky" && outgoingCompensationOffset < 0
-        ? {
-            dateKey: activeDateKey,
-            hasScrolled: false,
-            offset: outgoingCompensationOffset,
-            scrollTarget: preScrollTarget,
-            targetDateKey: nextIntent.targetDateKey
-          }
-        : EMPTY_OUTGOING_COMPENSATION
     );
     updateReservePlan(
       getInitialHomepageDayScrollReservePlan(
@@ -878,7 +833,6 @@ export function useHomepageDayScrollRestoration(
     clearStickyRestorationHold();
     setStickyVisualHoldDateKey(null);
     clearCarryoverReserve();
-    updateOutgoingCompensation(EMPTY_OUTGOING_COMPENSATION);
     clearReservePlan();
   }
 
@@ -935,10 +889,17 @@ export function useHomepageDayScrollRestoration(
       effectiveIntent.mode === "sticky"
         ? getCurrentStickyScrollTarget()
         : null;
-    const effectiveScrollTop =
-      effectiveIntent.mode === "sticky"
-        ? scrollTarget ?? window.scrollY
-        : effectiveIntent.capturedScrollTop;
+    const alignmentOffset = getHomepageDayScrollAlignmentOffset({
+      currentScrollTop: window.scrollY,
+      mode: effectiveIntent.mode,
+      scrollTarget
+    });
+    const effectiveScrollTop = getHomepageDayReserveScrollTop({
+      alignmentOffset,
+      capturedScrollTop: effectiveIntent.capturedScrollTop,
+      mode: effectiveIntent.mode,
+      scrollTarget
+    });
     const scrollReserveHeight =
       naturalMaxScrollTop === null
         ? 0
@@ -946,11 +907,6 @@ export function useHomepageDayScrollRestoration(
             naturalMaxScrollTop,
             scrollTop: effectiveScrollTop
           });
-    const alignmentOffset = getHomepageDayScrollAlignmentOffset({
-      currentScrollTop: window.scrollY,
-      mode: effectiveIntent.mode,
-      scrollTarget
-    });
 
     updateReservePlan({
       alignmentOffset,
@@ -977,43 +933,6 @@ export function useHomepageDayScrollRestoration(
   ]);
 
   useLayoutEffect(() => {
-    if (
-      typeof window === "undefined" ||
-      !isDateTransitionPreparing ||
-      outgoingCompensation.hasScrolled ||
-      outgoingCompensation.offset >= 0 ||
-      outgoingCompensation.scrollTarget === null
-    ) {
-      return undefined;
-    }
-
-    const compensationTarget = document.querySelector(
-      ".day-browser__content-align[data-scroll-compensate-outgoing='true']"
-    );
-
-    if (!compensationTarget) {
-      return undefined;
-    }
-
-    window.scrollTo({
-      behavior: "auto",
-      top: outgoingCompensation.scrollTarget
-    });
-    updateOutgoingCompensation({
-      ...outgoingCompensation,
-      hasScrolled: true
-    });
-
-    return undefined;
-  }, [
-    isDateTransitionPreparing,
-    outgoingCompensation.dateKey,
-    outgoingCompensation.hasScrolled,
-    outgoingCompensation.offset,
-    outgoingCompensation.scrollTarget
-  ]);
-
-  useLayoutEffect(() => {
     const effectiveIntent = getEffectiveScrollIntent();
 
     if (
@@ -1031,11 +950,17 @@ export function useHomepageDayScrollRestoration(
     }
 
     if (
-      outgoingCompensation.hasScrolled &&
-      outgoingCompensation.targetDateKey === activeDateKey
+      shouldSkipHomepageDayStickyScrollRestore({
+        alignmentOffset: reservePlan.alignmentOffset,
+        mode: reservePlan.mode
+      })
     ) {
       setPendingScrollIntent(null);
+      setStickyVisualHoldDateKey(null);
       clearCarryoverReserve();
+      if (reservePlan.height <= 0) {
+        clearReservePlan();
+      }
       return undefined;
     }
 
@@ -1267,13 +1192,13 @@ export function useHomepageDayScrollRestoration(
     }
   }, [activeDateKey, reservePlan.dateKey]);
 
-  useLayoutEffect(() => {
-    if (!isDateTransitioning && outgoingCompensation.dateKey !== null) {
-      updateOutgoingCompensation(EMPTY_OUTGOING_COMPENSATION);
-    }
-  }, [isDateTransitioning, outgoingCompensation.dateKey]);
-
-  const hasOutgoingCompensation = outgoingCompensation.dateKey !== null;
+  const shouldUseScrollAlignment =
+    reservePlan.mode === "sticky" &&
+    reservePlan.isPlanned &&
+    !shouldSkipHomepageDayStickyScrollRestore({
+      alignmentOffset: reservePlan.alignmentOffset,
+      mode: reservePlan.mode
+    });
 
   return {
     captureDateChangeLayout,
@@ -1283,23 +1208,15 @@ export function useHomepageDayScrollRestoration(
       stickyVisualHoldDateKey === activeDateKey ||
       (reservePlan.mode === "sticky" &&
         reservePlan.dateKey === activeDateKey &&
-        reservePlan.isPlanned),
+        reservePlan.isPlanned &&
+        reservePlan.height > 0),
     scrollAlignmentDateKey:
-      reservePlan.mode === "sticky" &&
-      reservePlan.isPlanned &&
-      !hasOutgoingCompensation
-        ? reservePlan.dateKey
-        : null,
-    scrollAlignmentOffset:
-      reservePlan.mode === "sticky" &&
-      reservePlan.isPlanned &&
-      !hasOutgoingCompensation
-        ? reservePlan.alignmentOffset
-        : 0,
+      shouldUseScrollAlignment ? reservePlan.dateKey : null,
+    scrollAlignmentOffset: shouldUseScrollAlignment
+      ? reservePlan.alignmentOffset
+      : 0,
     scrollCarryoverDateKey: carryoverReserve.dateKey,
     scrollCarryoverReserve: carryoverReserve.height,
-    scrollOutgoingCompensationDateKey: outgoingCompensation.dateKey,
-    scrollOutgoingCompensationOffset: outgoingCompensation.offset,
     scrollReserveHeight: reservePlan.height,
     scrollReserveTargetDateKey: reservePlan.dateKey
   };
