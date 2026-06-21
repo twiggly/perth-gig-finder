@@ -668,6 +668,11 @@ export function useHomepageDayScrollRestoration(
   }
 
   function isDateHeaderStuckNow() {
+    if (typeof window !== "undefined" && window.scrollY <= 0) {
+      lastKnownStickyRef.current = false;
+      return false;
+    }
+
     const nextIsStuck =
       isDateHeaderStuck ||
       lastKnownStickyRef.current ||
@@ -1237,7 +1242,7 @@ export function useHomepageDayScrollRestoration(
     function updateLastKnownStickyState() {
       const sentinelTop = getStickySentinelTop();
 
-      lastKnownStickyRef.current = sentinelTop < 0;
+      lastKnownStickyRef.current = window.scrollY > 0 && sentinelTop < 0;
       shrinkScrollDebtReserve();
     }
 

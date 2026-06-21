@@ -903,6 +903,7 @@ body[data-filter-dropdown-open="true"] .date-pills {
   padding: 0.45rem 0;
   border-radius: 999px;
   isolation: isolate;
+  transition: padding 180ms ease;
 }
 
 .day-browser__header[data-stuck="true"] {
@@ -926,6 +927,7 @@ body[data-filter-dropdown-open="true"] .date-pills {
   content: "";
   opacity: 0;
   pointer-events: none;
+  transition: opacity 180ms ease;
 }
 
 .day-browser__header[data-stuck="true"]::before {

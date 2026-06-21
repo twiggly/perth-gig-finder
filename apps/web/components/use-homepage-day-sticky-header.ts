@@ -18,6 +18,7 @@ interface HomepageDateHeaderStuckHoldReleaseInput {
   isDateTransitioning: boolean;
   maxRetryCount: number;
   retryCount: number;
+  scrollTop?: number | null;
   stickySentinelTop?: number | null;
 }
 
@@ -38,8 +39,13 @@ export function getHomepageDateHeaderStuckHoldRelease({
   isDateTransitioning,
   maxRetryCount,
   retryCount,
+  scrollTop,
   stickySentinelTop
 }: HomepageDateHeaderStuckHoldReleaseInput): HomepageDateHeaderStuckHoldRelease {
+  if (typeof scrollTop === "number" && scrollTop <= 0) {
+    return isDateHeaderTransitionStuckHold ? "clear" : "keep";
+  }
+
   if (!isDateHeaderTransitionStuckHold || isDateTransitioning) {
     return "keep";
   }
@@ -88,7 +94,8 @@ export function useHomepageDayStickyHeader({
         return;
       }
 
-      const nextIsStuck = sentinel.getBoundingClientRect().top < 0;
+      const nextIsStuck =
+        window.scrollY > 0 && sentinel.getBoundingClientRect().top < 0;
 
       if (isDateHeaderStuckRef.current !== nextIsStuck) {
         isDateHeaderStuckRef.current = nextIsStuck;
@@ -97,6 +104,21 @@ export function useHomepageDayStickyHeader({
     }
 
     function scheduleDateHeaderStickinessMeasure() {
+      if (window.scrollY <= 0) {
+        if (stickyFrameRef.current !== null) {
+          window.cancelAnimationFrame(stickyFrameRef.current);
+          stickyFrameRef.current = null;
+        }
+
+        stuckHoldReleaseRetryCountRef.current = 0;
+        if (isDateHeaderStuckRef.current) {
+          isDateHeaderStuckRef.current = false;
+          setIsDateHeaderStuck(false);
+        }
+        setIsDateHeaderTransitionStuckHold(false);
+        return;
+      }
+
       if (stickyFrameRef.current !== null) {
         return;
       }
@@ -151,6 +173,7 @@ export function useHomepageDayStickyHeader({
       isDateTransitioning,
       maxRetryCount: DATE_HEADER_STUCK_HOLD_RELEASE_MAX_RETRIES,
       retryCount: stuckHoldReleaseRetryCountRef.current,
+      scrollTop: window.scrollY,
       stickySentinelTop
     });
 
@@ -164,7 +187,9 @@ export function useHomepageDayStickyHeader({
 
     if (release === "clear" || release === "fallback-clear") {
       const measuredIsStuck =
-        typeof stickySentinelTop === "number" && stickySentinelTop < 0;
+        window.scrollY > 0 &&
+        typeof stickySentinelTop === "number" &&
+        stickySentinelTop < 0;
 
       stuckHoldReleaseRetryCountRef.current = 0;
       if (isDateHeaderStuckRef.current !== measuredIsStuck) {
