@@ -907,13 +907,7 @@ body[data-filter-dropdown-open="true"] .date-pills {
 }
 
 .day-browser__header[data-stuck="true"] {
-  position: fixed;
-  top: 0;
-  right: 0;
-  left: 0;
-  width: min(calc(100vw - 2rem), 32rem);
   padding-inline: 0.45rem;
-  z-index: 16;
 }
 
 .day-browser__header::before {
@@ -1894,10 +1888,6 @@ body[data-filter-dropdown-open="true"] .date-pills {
     gap: 0.6rem;
   }
 
-  .day-browser__header[data-stuck="true"] {
-    width: min(calc(100vw - 2rem), 28rem);
-  }
-
   .gig-card {
     --gig-card-media-width: clamp(5.8rem, 28vw, 7.2rem);
     --gig-card-gap: 0.8rem;
@@ -1951,10 +1941,6 @@ body[data-filter-dropdown-open="true"] .date-pills {
   .day-browser__header {
     gap: 0.5rem;
     grid-template-columns: 2.85rem minmax(0, 1fr) 2.85rem;
-  }
-
-  .day-browser__header[data-stuck="true"] {
-    width: calc(100vw - 0.85rem);
   }
 
   .day-browser__heading-title {
