@@ -311,6 +311,10 @@ export function HomepageDayBrowser({
   }
 
   function isDateHeaderStuckAtTransitionStart() {
+    if (typeof window !== "undefined" && window.scrollY <= 0) {
+      return false;
+    }
+
     const stickySentinelTop =
       stickySentinelRef.current?.getBoundingClientRect().top ?? null;
 

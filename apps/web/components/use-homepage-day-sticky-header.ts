@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 interface HomepageDateHeaderStuckHoldInput {
   isDateHeaderStuck: boolean;
+  scrollTop?: number | null;
   stickySentinelTop?: number | null;
 }
 
@@ -26,8 +27,13 @@ const DATE_HEADER_STUCK_HOLD_RELEASE_MAX_RETRIES = 3;
 
 export function shouldHoldHomepageDateHeaderStuck({
   isDateHeaderStuck,
+  scrollTop,
   stickySentinelTop
 }: HomepageDateHeaderStuckHoldInput): boolean {
+  if (typeof scrollTop === "number" && scrollTop <= 0) {
+    return false;
+  }
+
   return (
     isDateHeaderStuck ||
     (typeof stickySentinelTop === "number" && stickySentinelTop < 0)
@@ -225,6 +231,7 @@ export function useHomepageDayStickyHeader({
     setIsDateHeaderTransitionStuckHold(
       shouldHoldHomepageDateHeaderStuck({
         isDateHeaderStuck,
+        scrollTop: typeof window === "undefined" ? null : window.scrollY,
         stickySentinelTop
       })
     );

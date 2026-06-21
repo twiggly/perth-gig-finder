@@ -139,7 +139,7 @@ export function getHomepageDayScrollIntent({
 
   const capturedScrollTop = Math.max(0, scrollTop);
 
-  if (!isDateHeaderStuck && capturedScrollTop <= 0) {
+  if (capturedScrollTop <= 0) {
     return null;
   }
 
@@ -887,6 +887,27 @@ export function useHomepageDayScrollRestoration(
     clearReservePlan();
   }
 
+  function clearDateChangeLayoutAtPageTop() {
+    lastKnownStickyRef.current = false;
+
+    const hasRestorationState =
+      Boolean(pendingScrollIntentRef.current) ||
+      pendingScrollTargetRef.current !== null ||
+      scrollRestoreFrameRef.current !== null ||
+      stickyRestorationHoldRef.current !== null ||
+      stickyVisualHoldDateKeyRef.current !== null ||
+      reservePlanRef.current.dateKey !== null ||
+      reservePlanRef.current.height > 0 ||
+      carryoverReserveRef.current.dateKey !== null ||
+      carryoverReserveRef.current.height > 0 ||
+      outgoingCompensationRef.current.dateKey !== null ||
+      outgoingCompensationRef.current.offset !== 0;
+
+    if (hasRestorationState) {
+      clearDateChangeLayout();
+    }
+  }
+
   useLayoutEffect(() => {
     const effectiveIntent = getEffectiveScrollIntent();
 
@@ -1240,9 +1261,14 @@ export function useHomepageDayScrollRestoration(
     }
 
     function updateLastKnownStickyState() {
+      if (window.scrollY <= 0) {
+        clearDateChangeLayoutAtPageTop();
+        return;
+      }
+
       const sentinelTop = getStickySentinelTop();
 
-      lastKnownStickyRef.current = window.scrollY > 0 && sentinelTop < 0;
+      lastKnownStickyRef.current = sentinelTop < 0;
       shrinkScrollDebtReserve();
     }
 

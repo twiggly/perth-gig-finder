@@ -64,6 +64,16 @@ describe("homepage day scroll restoration helpers", () => {
     ).toBeNull();
   });
 
+  it("creates no scroll intent at page top even if sticky state is stale", () => {
+    expect(
+      getHomepageDayScrollIntent({
+        isDateHeaderStuck: true,
+        scrollTop: 0,
+        targetDateKey: "2026-06-15"
+      })
+    ).toBeNull();
+  });
+
   it("keeps the larger captured preserve-scroll intent for the same target", () => {
     const currentIntent = {
       capturedScrollTop: 180,
