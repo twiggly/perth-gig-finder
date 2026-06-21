@@ -2,6 +2,11 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import {
+  isHomepageDayTransitionActive,
+  type HomepageDayTransitionLifecyclePhase
+} from "./homepage-day-transition-lifecycle";
+
 interface HomepageDateHeaderStuckHoldInput {
   isDateHeaderStuck: boolean;
   scrollTop?: number | null;
@@ -68,10 +73,12 @@ export function getHomepageDateHeaderStuckHoldRelease({
 }
 
 export function useHomepageDayStickyHeader({
-  isDateTransitioning
+  dateTransitionPhase
 }: {
-  isDateTransitioning: boolean;
+  dateTransitionPhase: HomepageDayTransitionLifecyclePhase;
 }) {
+  const isDateTransitioning =
+    isHomepageDayTransitionActive(dateTransitionPhase);
   const stickySentinelRef = useRef<HTMLSpanElement | null>(null);
   const stuckHoldReleaseFrameRef = useRef<number | null>(null);
   const stuckHoldReleaseRetryCountRef = useRef(0);

@@ -22,6 +22,11 @@ import {
   type DayTransition,
   type SwipeDirection
 } from "@/lib/homepage-dates";
+import {
+  getHomepageDayTransitionLifecyclePhase,
+  isHomepageDayTransitionAnimating,
+  type HomepageDayTransitionLifecyclePhase
+} from "./homepage-day-transition-lifecycle";
 
 export interface HomepageDayTransition extends DayTransition {
   startedWithStickyHeader: boolean;
@@ -422,9 +427,10 @@ export function useHomepageDayNavigation({
     "previous"
   );
   const nextDateKey = getAdjacentDateKey(availableDateKeys, activeDateKey, "next");
-  const isAnimating = transition !== null;
+  const transitionPhase = getHomepageDayTransitionLifecyclePhase(transition);
+  const isAnimating = transitionPhase !== "idle";
   const isNavigationLocked = isAnimating || isLoadingDay;
-  const isContentAnimating = transition?.phase === "animating";
+  const isContentAnimating = isHomepageDayTransitionAnimating(transitionPhase);
   const renderedHeadingPanes = buildHomepageDayTransitionPanes(
     activeDateKey,
     transition
@@ -796,6 +802,9 @@ export function useHomepageDayNavigation({
     renderedContentPanes,
     renderedHeadingPanes,
     requestDateChange,
-    transition
+    transition,
+    transitionPhase
   };
 }
+
+export type { HomepageDayTransitionLifecyclePhase };

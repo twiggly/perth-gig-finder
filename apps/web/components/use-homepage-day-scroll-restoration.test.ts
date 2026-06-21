@@ -144,21 +144,21 @@ describe("homepage day scroll restoration helpers", () => {
       timestamp: 1000
     };
 
+    expect(shouldRestoreHomepageDayScroll(intent, "2026-06-15", "idle")).toBe(
+      true
+    );
     expect(
-      shouldRestoreHomepageDayScroll(intent, "2026-06-15", false, false)
+      shouldRestoreHomepageDayScroll(intent, "2026-06-15", "preparing")
+    ).toBe(false);
+    expect(
+      shouldRestoreHomepageDayScroll(intent, "2026-06-15", "animating")
+    ).toBe(false);
+    expect(
+      shouldRestoreHomepageDayScroll(intent, "2026-06-15", "settling")
     ).toBe(true);
-    expect(
-      shouldRestoreHomepageDayScroll(intent, "2026-06-15", true, false)
-    ).toBe(false);
-    expect(
-      shouldRestoreHomepageDayScroll(intent, "2026-06-15", false, true)
-    ).toBe(false);
-    expect(
-      shouldRestoreHomepageDayScroll(intent, "2026-06-15", false, true, true)
-    ).toBe(true);
-    expect(
-      shouldRestoreHomepageDayScroll(intent, "2026-06-16", false, false)
-    ).toBe(false);
+    expect(shouldRestoreHomepageDayScroll(intent, "2026-06-16", "idle")).toBe(
+      false
+    );
   });
 
   it("never restores page scroll for preserve-scroll intent", () => {
@@ -169,9 +169,9 @@ describe("homepage day scroll restoration helpers", () => {
       timestamp: 1000
     };
 
-    expect(
-      shouldRestoreHomepageDayScroll(intent, "2026-06-15", false, false)
-    ).toBe(false);
+    expect(shouldRestoreHomepageDayScroll(intent, "2026-06-15", "idle")).toBe(
+      false
+    );
   });
 
   it("computes outgoing compensation only when sticky pre-scroll moves upward", () => {

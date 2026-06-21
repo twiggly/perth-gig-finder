@@ -133,9 +133,21 @@ describe("HomepageDayBrowser", () => {
       shouldRenderHomepageDateHeaderStuck({
         isDateHeaderVisuallyStuck: false,
         isStickyScrollRestorationVisualHoldActive: false,
-        isStickyStartedTransitionActive: true
+        startedWithStickyHeader: true,
+        transitionPhase: "animating"
       })
     ).toBe(true);
+  });
+
+  it("does not keep the date header visually stuck after sticky-start transition cleanup", () => {
+    expect(
+      shouldRenderHomepageDateHeaderStuck({
+        isDateHeaderVisuallyStuck: false,
+        isStickyScrollRestorationVisualHoldActive: false,
+        startedWithStickyHeader: true,
+        transitionPhase: "idle"
+      })
+    ).toBe(false);
   });
 
   it("does not force stuck styling when no sticky hold source is active", () => {
@@ -143,7 +155,8 @@ describe("HomepageDayBrowser", () => {
       shouldRenderHomepageDateHeaderStuck({
         isDateHeaderVisuallyStuck: false,
         isStickyScrollRestorationVisualHoldActive: false,
-        isStickyStartedTransitionActive: false
+        startedWithStickyHeader: false,
+        transitionPhase: "idle"
       })
     ).toBe(false);
   });

@@ -25,6 +25,10 @@ import {
 import { useHomepageAdjacentImagePreload } from "./use-homepage-adjacent-image-preload";
 import { HomepageDayCalendarDropdown } from "./homepage-day-calendar-dropdown";
 import { HomepageDayContent } from "./homepage-day-content";
+import {
+  isHomepageDayTransitionActive,
+  type HomepageDayTransitionLifecyclePhase
+} from "./homepage-day-transition-lifecycle";
 import { useHomepageDayCache } from "./use-homepage-day-cache";
 import { useHomepageDayGestures } from "./use-homepage-day-gestures";
 import { useHomepageDayNavigation } from "./use-homepage-day-navigation";
@@ -45,16 +49,18 @@ const LOCAL_PREVIEW_ASSET_REVISION =
 export function shouldRenderHomepageDateHeaderStuck({
   isDateHeaderVisuallyStuck,
   isStickyScrollRestorationVisualHoldActive,
-  isStickyStartedTransitionActive
+  startedWithStickyHeader,
+  transitionPhase
 }: {
   isDateHeaderVisuallyStuck: boolean;
   isStickyScrollRestorationVisualHoldActive: boolean;
-  isStickyStartedTransitionActive: boolean;
+  startedWithStickyHeader: boolean;
+  transitionPhase: HomepageDayTransitionLifecyclePhase;
 }) {
   return (
     isDateHeaderVisuallyStuck ||
     isStickyScrollRestorationVisualHoldActive ||
-    isStickyStartedTransitionActive
+    (startedWithStickyHeader && isHomepageDayTransitionActive(transitionPhase))
   );
 }
 
@@ -113,7 +119,8 @@ export function HomepageDayBrowser({
     renderedContentPanes,
     renderedHeadingPanes,
     requestDateChange,
-    transition
+    transition,
+    transitionPhase
   } = useHomepageDayNavigation({
     availableDateKeys,
     closeCalendar: () => setIsCalendarOpen(false),
@@ -168,7 +175,7 @@ export function HomepageDayBrowser({
     isDateHeaderVisuallyStuck,
     stickySentinelRef
   } = useHomepageDayStickyHeader({
-    isDateTransitioning: transition !== null
+    dateTransitionPhase: transitionPhase
   });
   const { resetAdjacentImagePreloads } = useHomepageAdjacentImagePreload({
     activeDateKey,
@@ -191,10 +198,7 @@ export function HomepageDayBrowser({
     scrollReserveTargetDateKey
   } = useHomepageDayScrollRestoration({
     activeDateKey,
-    isContentAnimating,
-    isDateTransitionPreparing: transition?.phase === "preparing",
-    isDateTransitioning: transition !== null,
-    isDateTransitionSettling: transition?.phase === "settling",
+    dateTransitionPhase: transitionPhase,
     isDateHeaderStuck,
     scrollTargetContentRef,
     stickyHeaderRef: dateHeaderRef,
@@ -219,12 +223,11 @@ export function HomepageDayBrowser({
       scrollReserveHeight
     ]
   );
-  const isStickyStartedTransitionActive =
-    transition?.startedWithStickyHeader === true;
   const isDateHeaderRenderedStuck = shouldRenderHomepageDateHeaderStuck({
     isDateHeaderVisuallyStuck,
     isStickyScrollRestorationVisualHoldActive,
-    isStickyStartedTransitionActive
+    startedWithStickyHeader: transition?.startedWithStickyHeader === true,
+    transitionPhase
   });
 
   useEffect(() => {

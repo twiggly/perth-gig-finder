@@ -8,6 +8,14 @@ import {
   type RefObject
 } from "react";
 
+import {
+  isHomepageDayTransitionActive,
+  isHomepageDayTransitionAnimating,
+  isHomepageDayTransitionPreparing,
+  isHomepageDayTransitionSettling,
+  type HomepageDayTransitionLifecyclePhase
+} from "./homepage-day-transition-lifecycle";
+
 interface HomepageDayScrollIntentInput {
   isDateHeaderStuck: boolean;
   scrollTop?: number;
@@ -28,10 +36,7 @@ interface HomepageDayStickyScrollTargetInput
 
 interface UseHomepageDayScrollRestorationOptions {
   activeDateKey: string;
-  isContentAnimating: boolean;
-  isDateTransitionPreparing: boolean;
-  isDateTransitioning: boolean;
-  isDateTransitionSettling: boolean;
+  dateTransitionPhase: HomepageDayTransitionLifecyclePhase;
   isDateHeaderStuck: boolean;
   scrollTargetContentRef: RefObject<HTMLElement | null>;
   stickyHeaderRef: RefObject<HTMLElement | null>;
@@ -185,15 +190,14 @@ export function getNextHomepageDayScrollIntent({
 export function shouldRestoreHomepageDayScroll(
   intent: HomepageDayScrollIntent | null,
   activeDateKey: string,
-  isContentAnimating: boolean,
-  isDateTransitioning: boolean,
-  isDateTransitionSettling = false
+  transitionPhase: HomepageDayTransitionLifecyclePhase
 ): boolean {
   return (
     intent?.mode === "sticky" &&
     intent?.targetDateKey === activeDateKey &&
-    !isContentAnimating &&
-    (!isDateTransitioning || isDateTransitionSettling)
+    !isHomepageDayTransitionAnimating(transitionPhase) &&
+    (!isHomepageDayTransitionActive(transitionPhase) ||
+      isHomepageDayTransitionSettling(transitionPhase))
   );
 }
 
@@ -540,15 +544,20 @@ export function useHomepageDayScrollRestoration(
 ): HomepageDayScrollRestoration {
   const {
     activeDateKey,
-    isContentAnimating,
-    isDateTransitionPreparing,
-    isDateTransitioning,
-    isDateTransitionSettling,
+    dateTransitionPhase,
     isDateHeaderStuck,
     scrollTargetContentRef,
     stickyHeaderRef,
     stickySentinelRef
   } = options;
+  const isDateTransitionPreparing =
+    isHomepageDayTransitionPreparing(dateTransitionPhase);
+  const isContentAnimating =
+    isHomepageDayTransitionAnimating(dateTransitionPhase);
+  const isDateTransitioning =
+    isHomepageDayTransitionActive(dateTransitionPhase);
+  const isDateTransitionSettling =
+    isHomepageDayTransitionSettling(dateTransitionPhase);
   const lastKnownStickyRef = useRef(false);
   const pendingScrollIntentRef = useRef<HomepageDayScrollIntent | null>(null);
   const pendingScrollTargetRef = useRef<number | null>(null);
@@ -1033,9 +1042,7 @@ export function useHomepageDayScrollRestoration(
       !shouldRestoreHomepageDayScroll(
         effectiveIntent,
         activeDateKey,
-        isContentAnimating,
-        isDateTransitioning,
-        isDateTransitionSettling
+        dateTransitionPhase
       ) ||
       reservePlan.scrollTarget === null
     ) {
