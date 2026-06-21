@@ -188,11 +188,14 @@ export function HomepageDayBrowser({
     scrollAlignmentOffset,
     scrollCarryoverDateKey,
     scrollCarryoverReserve,
+    scrollOutgoingCompensationDateKey,
+    scrollOutgoingCompensationOffset,
     scrollReserveHeight,
     scrollReserveTargetDateKey
   } = useHomepageDayScrollRestoration({
     activeDateKey,
     isContentAnimating,
+    isDateTransitionPreparing: transition?.phase === "preparing",
     isDateTransitioning: transition !== null,
     isDateTransitionSettling: transition?.phase === "settling",
     isDateHeaderStuck,
@@ -208,12 +211,14 @@ export function HomepageDayBrowser({
         ...contentViewportStyle,
         "--day-browser-scroll-align-y": `${scrollAlignmentOffset}px`,
         "--day-browser-scroll-carryover-reserve": `${scrollCarryoverReserve}px`,
+        "--day-browser-scroll-outgoing-y": `${scrollOutgoingCompensationOffset}px`,
         "--day-browser-scroll-reserve": `${scrollReserveHeight}px`
       }) as React.CSSProperties,
     [
       contentViewportStyle,
       scrollAlignmentOffset,
       scrollCarryoverReserve,
+      scrollOutgoingCompensationOffset,
       scrollReserveHeight
     ]
   );
@@ -460,6 +465,7 @@ export function HomepageDayBrowser({
         renderedContentPanes={renderedContentPanes}
         scrollAlignmentDateKey={scrollAlignmentDateKey}
         scrollCarryoverDateKey={scrollCarryoverDateKey}
+        scrollOutgoingCompensationDateKey={scrollOutgoingCompensationDateKey}
         scrollReserveTargetDateKey={scrollReserveTargetDateKey}
         scrollTargetContentRef={scrollTargetContentRef}
         transitionDirection={transition?.direction}

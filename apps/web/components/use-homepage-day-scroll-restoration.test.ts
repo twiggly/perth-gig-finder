@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   getHomepageDayNaturalMaxScrollTop,
+  getHomepageDayOutgoingCompensationOffset,
   getHomepageDayPreservedScrollTarget,
   getHomepageDayScrollAlignmentOffset,
   getHomepageDayScrollCarryoverReserve,
@@ -173,6 +174,29 @@ describe("homepage day scroll restoration helpers", () => {
         timestamp: 1000
       })
     ).toBe("2026-06-22");
+  });
+
+  it("computes outgoing compensation only when sticky pre-scroll moves upward", () => {
+    expect(
+      getHomepageDayOutgoingCompensationOffset({
+        capturedScrollTop: 480,
+        scrollTarget: 160
+      })
+    ).toBe(-320);
+
+    expect(
+      getHomepageDayOutgoingCompensationOffset({
+        capturedScrollTop: 160,
+        scrollTarget: 480
+      })
+    ).toBe(0);
+
+    expect(
+      getHomepageDayOutgoingCompensationOffset({
+        capturedScrollTop: 160,
+        scrollTarget: null
+      })
+    ).toBe(0);
   });
 
   it("does not create a visual sticky hold for preserve-scroll changes", () => {
