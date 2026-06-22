@@ -36,6 +36,7 @@ export interface ImageCleanupStore {
 
 export interface ImageCleanupOptions {
   execute?: boolean;
+  includeOrphans?: boolean;
   now?: Date;
   olderThanDays?: number;
 }
@@ -113,9 +114,10 @@ export async function cleanupGigImages(
   options: ImageCleanupOptions = {}
 ): Promise<ImageCleanupResult> {
   const cutoffIso = calculateImageCleanupCutoff(options);
+  const includeOrphans = options.includeOrphans ?? true;
   const [expired, orphaned] = await Promise.all([
     store.listExpiredMirroredImageReferences(cutoffIso),
-    store.listOrphanedMirroredImageObjects()
+    includeOrphans ? store.listOrphanedMirroredImageObjects() : []
   ]);
   const candidates = buildImageCleanupCandidates({ expired, orphaned });
   const expiredPathSet = new Set(expired.map((object) => object.path));
@@ -181,6 +183,7 @@ function printUsage(): void {
 Options:
   --execute              Delete eligible storage objects. Defaults to dry-run.
   --older-than-days <n>  Delete referenced images for gigs older than this many days. Default: ${DEFAULT_IMAGE_CLEANUP_RETENTION_DAYS}.
+  --skip-orphans         Skip orphaned object detection. Useful when full bucket listing is slow or timing out.
   --help                Show this help.
 `);
 }
@@ -196,6 +199,9 @@ function parseArgs(argv: string[]): ImageCleanupOptions & { help?: boolean } {
         break;
       case "--execute":
         options.execute = true;
+        break;
+      case "--skip-orphans":
+        options.includeOrphans = false;
         break;
       case "--help":
       case "-h":

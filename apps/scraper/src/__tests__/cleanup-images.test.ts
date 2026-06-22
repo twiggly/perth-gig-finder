@@ -12,6 +12,7 @@ import {
 class FakeImageCleanupStore implements ImageCleanupStore {
   readonly clearedPaths: string[][] = [];
   readonly deletedPaths: string[][] = [];
+  listOrphanedCallCount = 0;
 
   constructor(
     private readonly input: {
@@ -28,6 +29,7 @@ class FakeImageCleanupStore implements ImageCleanupStore {
   }
 
   async listOrphanedMirroredImageObjects(): Promise<ImageCleanupObject[]> {
+    this.listOrphanedCallCount += 1;
     return this.input.orphaned ?? [];
   }
 
@@ -128,6 +130,35 @@ describe("image cleanup", () => {
     });
     expect(store.deletedPaths).toEqual([]);
     expect(store.clearedPaths).toEqual([]);
+  });
+
+  it("can skip orphaned object detection for fast referenced cleanup", async () => {
+    const store = new FakeImageCleanupStore({
+      expired: [
+        {
+          path: "oztix-wa/old/poster.png",
+          sizeBytes: 0
+        }
+      ],
+      orphaned: [
+        {
+          path: "moshtix-wa/orphan/poster.jpg",
+          sizeBytes: 300
+        }
+      ]
+    });
+
+    const result = await cleanupGigImages(store, {
+      includeOrphans: false,
+      now: new Date("2026-06-22T12:00:00.000Z")
+    });
+
+    expect(store.listOrphanedCallCount).toBe(0);
+    expect(result).toMatchObject({
+      expiredObjectCount: 1,
+      orphanedObjectCount: 0,
+      selectedObjectCount: 1
+    });
   });
 
   it("deletes selected objects and clears only successfully deleted expired paths", async () => {
