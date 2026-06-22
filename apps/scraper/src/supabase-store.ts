@@ -16,14 +16,20 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import {
   ensureImageBucket,
+  IMAGE_MIRROR_BUCKET,
   mirrorSourceImage,
-  shouldMirrorImage
+  shouldMirrorImageForGig
 } from "./image-mirror";
 import {
   normalizeArtistNames,
   selectCanonicalArtistNames
 } from "./artist-utils";
 import { retryTransientSupabaseOperation } from "./supabase-retry";
+import type {
+  ImageCleanupDeleteFailure,
+  ImageCleanupDeleteResult,
+  ImageCleanupObject
+} from "./cleanup-images";
 import type {
   GigRecord,
   GigStore,
@@ -98,6 +104,43 @@ interface SourceGigRow {
   image_mirrored_at: string | null;
   mirrored_image_width: number | null;
   mirrored_image_height: number | null;
+}
+
+interface SourceGigMirrorRow extends SourceGigRow {
+  external_id: string | null;
+  checksum: string;
+  source_url: string;
+  gigs:
+    | {
+        starts_at: string;
+        status: GigStatus;
+      }
+    | Array<{
+        starts_at: string;
+        status: GigStatus;
+      }>
+    | null;
+}
+
+interface MirroredImageReferenceRow {
+  mirrored_image_path: string | null;
+}
+
+interface ExpiredMirroredImageReferenceRow extends MirroredImageReferenceRow {
+  gigs:
+    | {
+        starts_at: string;
+      }
+    | Array<{
+        starts_at: string;
+      }>
+    | null;
+}
+
+interface StorageObjectRow {
+  id: string | null;
+  metadata: { size?: number | string } | null;
+  name: string;
 }
 
 interface GigAttachmentRow {
@@ -235,6 +278,7 @@ function isReadyMirroredSourceGig(row: SourceGigRow): boolean {
 const PERTH_UTC_OFFSET_MS = 8 * 60 * 60 * 1000;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const QUERY_CHUNK_SIZE = 100;
+const STORAGE_PATH_MUTATION_CHUNK_SIZE = 20;
 
 function getPerthDayBounds(startsAt: string): { startsAtGte: string; startsAtLt: string } {
   const utcDate = new Date(startsAt);
@@ -260,6 +304,29 @@ function chunkValues<T>(values: T[], size: number): T[][] {
   }
 
   return chunks;
+}
+
+function getSingleRelation<T>(value: T | T[] | null): T | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value;
+}
+
+function getStorageObjectSize(row: StorageObjectRow): number {
+  const rawSize = row.metadata?.size;
+  const size = typeof rawSize === "number" ? rawSize : Number(rawSize ?? 0);
+
+  return Number.isFinite(size) && size > 0 ? size : 0;
+}
+
+function joinStoragePath(prefix: string, name: string): string {
+  return prefix ? `${prefix}/${name}` : name;
+}
+
+function uniqueNonEmptyValues(values: Array<string | null | undefined>): string[] {
+  return [...new Set(values.filter((value): value is string => Boolean(value)))];
 }
 
 function chooseCanonicalTextField(
@@ -397,6 +464,253 @@ export class SupabaseGigStore implements GigStore {
 
   async ensureImageBucket(): Promise<void> {
     await ensureImageBucket(this.client);
+  }
+
+  private async listAllStorageImageObjects(): Promise<ImageCleanupObject[]> {
+    const objects: ImageCleanupObject[] = [];
+    const pendingPrefixes = [""];
+
+    while (pendingPrefixes.length > 0) {
+      const prefix = pendingPrefixes.pop() ?? "";
+
+      for (let offset = 0; ; offset += QUERY_CHUNK_SIZE) {
+        const { data, error } = await this.client.storage
+          .from(IMAGE_MIRROR_BUCKET)
+          .list(prefix, {
+            limit: QUERY_CHUNK_SIZE,
+            offset,
+            sortBy: {
+              column: "name",
+              order: "asc"
+            }
+          });
+
+        if (error) {
+          throw new Error(`Unable to list mirrored image objects: ${error.message}`);
+        }
+
+        const rows = (data as StorageObjectRow[] | null) ?? [];
+
+        for (const row of rows) {
+          const path = joinStoragePath(prefix, row.name);
+
+          if (row.id === null) {
+            pendingPrefixes.push(path);
+            continue;
+          }
+
+          objects.push({
+            path,
+            sizeBytes: getStorageObjectSize(row)
+          });
+        }
+
+        if (rows.length < QUERY_CHUNK_SIZE) {
+          break;
+        }
+      }
+    }
+
+    return objects.sort((left, right) => left.path.localeCompare(right.path));
+  }
+
+  private async listReferencedMirroredImagePaths(): Promise<Set<string>> {
+    const paths = new Set<string>();
+
+    for (let offset = 0; ; offset += QUERY_CHUNK_SIZE) {
+      const { data, error } = await this.client
+        .from("source_gigs")
+        .select("mirrored_image_path")
+        .not("mirrored_image_path", "is", null)
+        .order("id", { ascending: true })
+        .range(offset, offset + QUERY_CHUNK_SIZE - 1);
+
+      if (error) {
+        throw new Error(
+          `Unable to list referenced mirrored image paths: ${error.message}`
+        );
+      }
+
+      const rows = (data as MirroredImageReferenceRow[] | null) ?? [];
+
+      for (const path of uniqueNonEmptyValues(
+        rows.map((row) => row.mirrored_image_path)
+      )) {
+        paths.add(path);
+      }
+
+      if (rows.length < QUERY_CHUNK_SIZE) {
+        return paths;
+      }
+    }
+  }
+
+  async listExpiredMirroredImageReferences(
+    cutoffIso: string
+  ): Promise<ImageCleanupObject[]> {
+    const paths = new Set<string>();
+
+    for (let offset = 0; ; offset += QUERY_CHUNK_SIZE) {
+      const { data, error } = await this.client
+        .from("source_gigs")
+        .select("mirrored_image_path, gigs!inner(starts_at)")
+        .not("mirrored_image_path", "is", null)
+        .lt("gigs.starts_at", cutoffIso)
+        .order("id", { ascending: true })
+        .range(offset, offset + QUERY_CHUNK_SIZE - 1);
+
+      if (error) {
+        throw new Error(
+          `Unable to list expired mirrored image references: ${error.message}`
+        );
+      }
+
+      const rows = (data as ExpiredMirroredImageReferenceRow[] | null) ?? [];
+
+      for (const row of rows) {
+        if (getSingleRelation(row.gigs)?.starts_at && row.mirrored_image_path) {
+          paths.add(row.mirrored_image_path);
+        }
+      }
+
+      if (rows.length < QUERY_CHUNK_SIZE) {
+        break;
+      }
+    }
+
+    if (paths.size === 0) {
+      return [];
+    }
+
+    const protectedPaths = await this.listProtectedMirroredImagePaths(cutoffIso);
+    const expiredOnlyPaths = [...paths].filter(
+      (path) => !protectedPaths.has(path)
+    );
+
+    if (expiredOnlyPaths.length === 0) {
+      return [];
+    }
+
+    const sizeByPath = new Map(
+      (await this.listAllStorageImageObjects()).map((object) => [
+        object.path,
+        object.sizeBytes
+      ])
+    );
+
+    return expiredOnlyPaths
+      .sort((left, right) => left.localeCompare(right))
+      .map((path) => ({
+        path,
+        sizeBytes: sizeByPath.get(path) ?? 0
+      }));
+  }
+
+  private async listProtectedMirroredImagePaths(
+    cutoffIso: string
+  ): Promise<Set<string>> {
+    const paths = new Set<string>();
+
+    for (let offset = 0; ; offset += QUERY_CHUNK_SIZE) {
+      const { data, error } = await this.client
+        .from("source_gigs")
+        .select("mirrored_image_path, gigs!inner(starts_at)")
+        .not("mirrored_image_path", "is", null)
+        .gte("gigs.starts_at", cutoffIso)
+        .order("id", { ascending: true })
+        .range(offset, offset + QUERY_CHUNK_SIZE - 1);
+
+      if (error) {
+        throw new Error(
+          `Unable to list protected mirrored image references: ${error.message}`
+        );
+      }
+
+      const rows = (data as ExpiredMirroredImageReferenceRow[] | null) ?? [];
+
+      for (const path of uniqueNonEmptyValues(
+        rows.map((row) => row.mirrored_image_path)
+      )) {
+        paths.add(path);
+      }
+
+      if (rows.length < QUERY_CHUNK_SIZE) {
+        return paths;
+      }
+    }
+  }
+
+  async listOrphanedMirroredImageObjects(): Promise<ImageCleanupObject[]> {
+    const [objects, referencedPaths] = await Promise.all([
+      this.listAllStorageImageObjects(),
+      this.listReferencedMirroredImagePaths()
+    ]);
+
+    return objects
+      .filter((object) => !referencedPaths.has(object.path))
+      .sort((left, right) => left.path.localeCompare(right.path));
+  }
+
+  async deleteMirroredImageObjects(
+    paths: string[]
+  ): Promise<ImageCleanupDeleteResult> {
+    const deletedPaths: string[] = [];
+    const failures: ImageCleanupDeleteFailure[] = [];
+
+    for (const pathChunk of chunkValues(
+      [...new Set(paths)],
+      STORAGE_PATH_MUTATION_CHUNK_SIZE
+    )) {
+      const { error } = await this.client.storage
+        .from(IMAGE_MIRROR_BUCKET)
+        .remove(pathChunk);
+
+      if (error) {
+        failures.push(
+          ...pathChunk.map((path) => ({
+            message: error.message,
+            path
+          }))
+        );
+        continue;
+      }
+
+      deletedPaths.push(...pathChunk);
+    }
+
+    return { deletedPaths, failures };
+  }
+
+  async clearExpiredMirroredImageReferences(paths: string[]): Promise<number> {
+    let clearedCount = 0;
+
+    for (const pathChunk of chunkValues(
+      [...new Set(paths)],
+      STORAGE_PATH_MUTATION_CHUNK_SIZE
+    )) {
+      const { data, error } = await this.client
+        .from("source_gigs")
+        .update({
+          image_mirror_error: null,
+          image_mirror_status: "pending",
+          image_mirrored_at: null,
+          mirrored_image_height: null,
+          mirrored_image_path: null,
+          mirrored_image_width: null
+        })
+        .in("mirrored_image_path", pathChunk)
+        .select("id");
+
+      if (error) {
+        throw new Error(
+          `Unable to clear expired mirrored image references: ${error.message}`
+        );
+      }
+
+      clearedCount += data?.length ?? 0;
+    }
+
+    return clearedCount;
   }
 
   async ensureSource(input: {
@@ -1612,19 +1926,33 @@ export class SupabaseGigStore implements GigStore {
   }
 
   async listSourceGigsNeedingImageMirror(force = false): Promise<SourceGigRecord[]> {
-    const { data, error } = await this.client
-      .from("source_gigs")
-      .select(
-        "id, source_id, gig_id, identity_key, starts_at_precision, artist_names, artist_extraction_kind, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height, external_id, checksum, source_url"
-      )
-      .not("source_image_url", "is", null)
-      .order("last_seen_at", { ascending: false });
+    const rows: SourceGigMirrorRow[] = [];
+    const nowIsoValue = new Date().toISOString();
 
-    if (error) {
-      throw new Error(`Unable to list source gigs needing image mirror: ${error.message}`);
+    for (let offset = 0; ; offset += QUERY_CHUNK_SIZE) {
+      const { data, error } = await this.client
+        .from("source_gigs")
+        .select(
+          "id, source_id, gig_id, identity_key, starts_at_precision, artist_names, artist_extraction_kind, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height, external_id, checksum, source_url, gigs!inner(status, starts_at)"
+        )
+        .not("source_image_url", "is", null)
+        .eq("gigs.status", "active")
+        .gte("gigs.starts_at", nowIsoValue)
+        .order("last_seen_at", { ascending: false })
+        .range(offset, offset + QUERY_CHUNK_SIZE - 1);
+
+      if (error) {
+        throw new Error(`Unable to list source gigs needing image mirror: ${error.message}`);
+      }
+
+      const pageRows = (data as SourceGigMirrorRow[] | null) ?? [];
+      rows.push(...pageRows);
+
+      if (pageRows.length < QUERY_CHUNK_SIZE) {
+        break;
+      }
     }
 
-    const rows = (data as SourceGigRow[] | null) ?? [];
     const sourceIds = [...new Set(rows.map((row) => row.source_id))];
 
     if (sourceIds.length === 0) {
@@ -1651,7 +1979,24 @@ export class SupabaseGigStore implements GigStore {
       toSourceGigRecord(row, sourceSlugById.get(row.source_id) ?? "unknown-source")
     );
 
-    return force ? sourceGigs : sourceGigs.filter(shouldMirrorImage);
+    return rows.flatMap((row, index) => {
+      const gig = getSingleRelation(row.gigs);
+
+      if (!gig) {
+        return [];
+      }
+
+      const sourceGig = sourceGigs[index];
+
+      return shouldMirrorImageForGig({
+        force,
+        gigStartsAt: gig.starts_at,
+        gigStatus: gig.status,
+        sourceGig
+      })
+        ? [sourceGig]
+        : [];
+    });
   }
 
   private async writeGigArtists(gigId: string, artists: string[]): Promise<void> {

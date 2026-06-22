@@ -25,12 +25,17 @@ vi.mock("./use-homepage-day-scroll-restoration", () => ({
     scrollAlignmentOffset: 0,
     scrollCarryoverDateKey: null,
     scrollCarryoverReserve: 0,
+    scrollOutgoingCompensationDateKey: null,
+    scrollOutgoingCompensationOffset: 0,
     scrollReserveHeight: 0,
     scrollReserveTargetDateKey: null
   })
 }));
 
-import { HomepageDayBrowser } from "./homepage-day-browser";
+import {
+  HomepageDayBrowser,
+  shouldRenderHomepageDateHeaderStuck
+} from "./homepage-day-browser";
 
 function createGig(
   overrides: Partial<GigCardRecord> = {}
@@ -103,6 +108,7 @@ describe("HomepageDayBrowser", () => {
 
     expect(html).toContain("Choose date, currently Wed, Apr 29th");
     expect(html).toContain('aria-haspopup="dialog"');
+    expect(html).toContain("day-browser__header-shell");
     expect(html).toContain("day-browser__heading-button");
     expect(html).toContain("Wed, Apr 29th");
   });
@@ -120,6 +126,39 @@ describe("HomepageDayBrowser", () => {
 
     expect(html).toContain('data-sticky-restoring="true"');
     expect(html).toContain('data-stuck="true"');
+  });
+
+  it("keeps the date header visually stuck during sticky-start transition handoff", () => {
+    expect(
+      shouldRenderHomepageDateHeaderStuck({
+        isDateHeaderVisuallyStuck: false,
+        isStickyScrollRestorationVisualHoldActive: false,
+        startedWithStickyHeader: true,
+        transitionPhase: "animating"
+      })
+    ).toBe(true);
+  });
+
+  it("does not keep the date header visually stuck after sticky-start transition cleanup", () => {
+    expect(
+      shouldRenderHomepageDateHeaderStuck({
+        isDateHeaderVisuallyStuck: false,
+        isStickyScrollRestorationVisualHoldActive: false,
+        startedWithStickyHeader: true,
+        transitionPhase: "idle"
+      })
+    ).toBe(false);
+  });
+
+  it("does not force stuck styling when no sticky hold source is active", () => {
+    expect(
+      shouldRenderHomepageDateHeaderStuck({
+        isDateHeaderVisuallyStuck: false,
+        isStickyScrollRestorationVisualHoldActive: false,
+        startedWithStickyHeader: false,
+        transitionPhase: "idle"
+      })
+    ).toBe(false);
   });
 
   it("renders only the active day even when adjacent days are seeded", () => {

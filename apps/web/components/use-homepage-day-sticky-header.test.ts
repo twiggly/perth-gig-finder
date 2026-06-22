@@ -39,6 +39,16 @@ describe("homepage day sticky header helpers", () => {
     ).toBe(false);
   });
 
+  it("does not hold stale stuck geometry at the top of the page", () => {
+    expect(
+      shouldHoldHomepageDateHeaderStuck({
+        isDateHeaderStuck: true,
+        scrollTop: 0,
+        stickySentinelTop: -1
+      })
+    ).toBe(false);
+  });
+
   it("does not release the stuck hold merely because a transition settled", () => {
     expect(
       getHomepageDateHeaderStuckHoldRelease({
@@ -61,6 +71,19 @@ describe("homepage day sticky header helpers", () => {
         stickySentinelTop: -1
       })
     ).toBe("keep");
+  });
+
+  it("releases the stuck hold immediately at the top of the page", () => {
+    expect(
+      getHomepageDateHeaderStuckHoldRelease({
+        isDateHeaderTransitionStuckHold: true,
+        isDateTransitioning: true,
+        maxRetryCount: 3,
+        retryCount: 0,
+        scrollTop: 0,
+        stickySentinelTop: -1
+      })
+    ).toBe("clear");
   });
 
   it("does not clear a stuck date header hold when no hold is active", () => {

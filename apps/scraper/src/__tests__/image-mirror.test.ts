@@ -6,7 +6,8 @@ import {
   IMAGE_MIRROR_MAX_BYTES,
   IMAGE_MIRROR_SOURCE_MAX_BYTES,
   mirrorSourceImage,
-  prepareMirroredImageForUpload
+  prepareMirroredImageForUpload,
+  shouldMirrorImageForGig
 } from "../image-mirror";
 import type { SourceGigRecord } from "../types";
 
@@ -167,6 +168,66 @@ describe("image mirroring", () => {
         contentType: "image/png"
       })
     ).toBe("oztix-wa/doctor-jazz/5943d2e0e12f27d05a36af1afca56326645f0dfe.png");
+  });
+
+  it("mirrors upcoming active gigs with incomplete image state", () => {
+    expect(
+      shouldMirrorImageForGig({
+        gigStartsAt: "2026-06-24T10:00:00.000Z",
+        gigStatus: "active",
+        now: new Date("2026-06-22T10:00:00.000Z"),
+        sourceGig: createSourceGig({
+          imageMirrorStatus: "failed"
+        })
+      })
+    ).toBe(true);
+  });
+
+  it("does not mirror past gigs", () => {
+    expect(
+      shouldMirrorImageForGig({
+        gigStartsAt: "2026-06-21T10:00:00.000Z",
+        gigStatus: "active",
+        now: new Date("2026-06-22T10:00:00.000Z"),
+        sourceGig: createSourceGig({
+          imageMirrorStatus: "failed"
+        })
+      })
+    ).toBe(false);
+  });
+
+  it("does not force-remirror past gigs", () => {
+    expect(
+      shouldMirrorImageForGig({
+        force: true,
+        gigStartsAt: "2026-06-21T10:00:00.000Z",
+        gigStatus: "active",
+        now: new Date("2026-06-22T10:00:00.000Z"),
+        sourceGig: createSourceGig({
+          imageMirrorStatus: "ready",
+          mirroredImageHeight: 900,
+          mirroredImagePath: "oztix-wa/doctor-jazz/mirrored.png",
+          mirroredImageWidth: 1200
+        })
+      })
+    ).toBe(false);
+  });
+
+  it("force-remirrors upcoming active gigs with ready image state", () => {
+    expect(
+      shouldMirrorImageForGig({
+        force: true,
+        gigStartsAt: "2026-06-24T10:00:00.000Z",
+        gigStatus: "active",
+        now: new Date("2026-06-22T10:00:00.000Z"),
+        sourceGig: createSourceGig({
+          imageMirrorStatus: "ready",
+          mirroredImageHeight: 900,
+          mirroredImagePath: "oztix-wa/doctor-jazz/mirrored.png",
+          mirroredImageWidth: 1200
+        })
+      })
+    ).toBe(true);
   });
 
   it("rejects unsupported content types without uploading", async () => {

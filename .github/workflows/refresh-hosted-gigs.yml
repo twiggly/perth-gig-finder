@@ -56,6 +56,12 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: pnpm mirror-images
 
+      - name: Clean up old mirrored images
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: pnpm cleanup-images -- --execute --older-than-days 14
+
       - name: Audit hosted public gig cards
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

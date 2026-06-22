@@ -8,6 +8,7 @@
   "scripts": {
     "build": "node scripts/check-node-version.mjs && pnpm --filter @perth-gig-finder/shared build && pnpm --filter @perth-gig-finder/scraper build && pnpm --filter @perth-gig-finder/web build",
     "audit:gigs": "node scripts/check-node-version.mjs && node scripts/audit-gigs.mjs",
+    "cleanup-images": "pnpm --filter @perth-gig-finder/scraper cleanup-images",
     "dev": "node scripts/check-node-version.mjs && pnpm web:dev",
     "local:bootstrap": "pnpm supabase:start && pnpm supabase:reset && pnpm scrape",
     "local:repair": "node scripts/check-node-version.mjs && node scripts/local-repair.mjs",

@@ -565,3 +565,31 @@ export function shouldMirrorImage(sourceGig: SourceGigRecord): boolean {
         !sourceGig.mirroredImageHeight)
   );
 }
+
+export function shouldMirrorImageForGig(input: {
+  force?: boolean;
+  gigStartsAt: string;
+  gigStatus: string;
+  now?: Date;
+  sourceGig: SourceGigRecord;
+}): boolean {
+  if (!input.sourceGig.sourceImageUrl) {
+    return false;
+  }
+
+  if (input.gigStatus !== "active") {
+    return false;
+  }
+
+  const startsAtMs = new Date(input.gigStartsAt).getTime();
+
+  if (!Number.isFinite(startsAtMs)) {
+    return false;
+  }
+
+  if (startsAtMs < (input.now ?? new Date()).getTime()) {
+    return false;
+  }
+
+  return input.force ? true : shouldMirrorImage(input.sourceGig);
+}

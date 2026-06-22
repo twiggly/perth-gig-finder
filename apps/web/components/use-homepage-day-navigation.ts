@@ -22,9 +22,18 @@ import {
   type DayTransition,
   type SwipeDirection
 } from "@/lib/homepage-dates";
+import {
+  getHomepageDayTransitionLifecyclePhase,
+  isHomepageDayTransitionAnimating,
+  type HomepageDayTransitionLifecyclePhase
+} from "./homepage-day-transition-lifecycle";
 
-export interface BrowserTransition extends DayTransition {
-  phase: "preparing" | "animating";
+export interface HomepageDayTransition extends DayTransition {
+  startedWithStickyHeader: boolean;
+}
+
+export interface BrowserTransition extends HomepageDayTransition {
+  phase: "preparing" | "animating" | "settling";
 }
 
 export interface DayBrowserPaneState {
@@ -48,6 +57,16 @@ interface HomepageDayTransitionCleanupScheduler {
   requestAnimationFrame: (callback: FrameRequestCallback) => number;
 }
 
+type HomepageDayNavigationWindow = Window &
+  typeof globalThis & {
+    __gigRadarHomepagePendingClientDateKey?: string | null;
+    __gigRadarHomepagePendingClientTransition?: HomepageDayPendingClientTransition | null;
+  };
+
+interface HomepageDayPendingClientTransition extends HomepageDayTransition {
+  timestamp: number;
+}
+
 interface UseHomepageDayNavigationOptions {
   availableDateKeys: string[];
   closeCalendar: () => void;
@@ -57,7 +76,7 @@ interface UseHomepageDayNavigationOptions {
   initialDays: HomepageDayPayload[];
   isLoadingDay: boolean;
   onDateChangeCancel?: () => void;
-  onDateChangeStart?: (nextDateKey: string) => void;
+  onDateChangeStart?: (nextDateKey: string) => boolean | void;
   resetAdjacentImagePreloads: () => void;
   resetDayLoadError: () => void;
   resetDayWheelGesture: () => void;
@@ -79,6 +98,125 @@ const CONTENT_TRANSITION_DURATION_MS = HEADING_TRANSITION_DURATION_MS;
 const CONTENT_TRANSITION_EASING = HEADING_TRANSITION_EASING;
 const CONTENT_TRANSITION_DISTANCE_PX = HEADING_TRANSITION_DISTANCE_PX;
 const TRANSITION_COMMIT_BUFFER_MS = 20;
+const PENDING_CLIENT_TRANSITION_TTL_MS = 30000;
+const PENDING_CLIENT_TRANSITION_STORAGE_KEY =
+  "gig-radar:homepage-pending-client-transition";
+
+function readPendingHomepageClientDateKey(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return (
+    (window as HomepageDayNavigationWindow)
+      .__gigRadarHomepagePendingClientDateKey ?? null
+  );
+}
+
+function writePendingHomepageClientDateKey(dateKey: string | null) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  (window as HomepageDayNavigationWindow)
+    .__gigRadarHomepagePendingClientDateKey = dateKey;
+}
+
+function readPendingHomepageClientTransition(): HomepageDayTransition | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const pendingTransition =
+    (window as HomepageDayNavigationWindow)
+      .__gigRadarHomepagePendingClientTransition ?? null;
+  const storedPendingTransition =
+    pendingTransition ?? readStoredPendingHomepageClientTransition();
+
+  if (
+    !storedPendingTransition ||
+    Date.now() - storedPendingTransition.timestamp < 0 ||
+    Date.now() - storedPendingTransition.timestamp >
+      PENDING_CLIENT_TRANSITION_TTL_MS
+  ) {
+    return null;
+  }
+
+  return {
+    direction: storedPendingTransition.direction,
+    fromDateKey: storedPendingTransition.fromDateKey,
+    startedWithStickyHeader:
+      storedPendingTransition.startedWithStickyHeader === true,
+    toDateKey: storedPendingTransition.toDateKey
+  };
+}
+
+function readStoredPendingHomepageClientTransition():
+  | HomepageDayPendingClientTransition
+  | null {
+  try {
+    const rawTransition = window.sessionStorage.getItem(
+      PENDING_CLIENT_TRANSITION_STORAGE_KEY
+    );
+
+    if (!rawTransition) {
+      return null;
+    }
+
+    const maybeTransition = JSON.parse(rawTransition) as Partial<HomepageDayPendingClientTransition>;
+
+    return maybeTransition.direction === "next" ||
+      maybeTransition.direction === "previous"
+      ? typeof maybeTransition.fromDateKey === "string" &&
+        typeof maybeTransition.toDateKey === "string" &&
+        typeof maybeTransition.timestamp === "number"
+        ? {
+            direction: maybeTransition.direction,
+            fromDateKey: maybeTransition.fromDateKey,
+            startedWithStickyHeader:
+              maybeTransition.startedWithStickyHeader === true,
+            timestamp: maybeTransition.timestamp,
+            toDateKey: maybeTransition.toDateKey
+          }
+        : null
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePendingHomepageClientTransition(
+  transition: HomepageDayTransition | null
+) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  (window as HomepageDayNavigationWindow)
+    .__gigRadarHomepagePendingClientTransition = transition
+      ? {
+          ...transition,
+          timestamp: Date.now()
+        }
+      : null;
+
+  try {
+    if (!transition) {
+      window.sessionStorage.removeItem(PENDING_CLIENT_TRANSITION_STORAGE_KEY);
+      return;
+    }
+
+    window.sessionStorage.setItem(
+      PENDING_CLIENT_TRANSITION_STORAGE_KEY,
+      JSON.stringify({
+        ...transition,
+        timestamp: Date.now()
+      })
+    );
+  } catch {
+    // Storage can be unavailable in privacy modes; the window marker still covers SPA handoffs.
+  }
+}
 
 export function buildHomepageDayTransitionPanes(
   activeDateKey: string,
@@ -122,7 +260,10 @@ export function completeHomepageDayTransition(
 
   return {
     activeDateKey: dateKey,
-    transition
+    transition: {
+      ...transition,
+      phase: "settling"
+    }
   };
 }
 
@@ -140,6 +281,44 @@ export function completeHomepageDayTransitionImmediately(
     activeDateKey: dateKey,
     transition: null
   };
+}
+
+export function getInitialHomepageDayNavigationState({
+  initialActiveDateKey,
+  pendingTransition,
+  prefersReducedMotion
+}: {
+  initialActiveDateKey: string;
+  pendingTransition: HomepageDayTransition | null;
+  prefersReducedMotion: boolean;
+}): CompletedTransitionState {
+  if (
+    !prefersReducedMotion &&
+    pendingTransition?.toDateKey === initialActiveDateKey
+  ) {
+    return {
+      activeDateKey: pendingTransition.fromDateKey,
+      transition: {
+        ...pendingTransition,
+        phase: "preparing"
+      }
+    };
+  }
+
+  return {
+    activeDateKey: initialActiveDateKey,
+    transition: null
+  };
+}
+
+export function shouldIgnoreHomepageInitialDateSync({
+  initialActiveDateKey,
+  pendingClientDateKey
+}: {
+  initialActiveDateKey: string;
+  pendingClientDateKey: string | null;
+}): boolean {
+  return pendingClientDateKey === initialActiveDateKey;
 }
 
 export function scheduleHomepageDayTransitionCleanup({
@@ -214,17 +393,33 @@ export function useHomepageDayNavigation({
   syncCalendarMonthForDate
 }: UseHomepageDayNavigationOptions) {
   const pathname = usePathname();
+  const initialPrefersReducedMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const initialNavigationState = getInitialHomepageDayNavigationState({
+    initialActiveDateKey,
+    pendingTransition: readPendingHomepageClientTransition(),
+    prefersReducedMotion: initialPrefersReducedMotion
+  });
+  const pendingClientDateKeyRef = useRef<string | null>(
+    readPendingHomepageClientDateKey() ??
+      initialNavigationState.transition?.toDateKey ??
+      null
+  );
   const transitionCleanupFrameRefs = useRef<HomepageDayTransitionCleanupFrames>({
     firstFrame: null,
     secondFrame: null
   });
   const transitionFrameRef = useRef<number | null>(null);
   const transitionTimeoutRef = useRef<number | null>(null);
-  const [activeDateKey, setActiveDateKey] = useState(initialActiveDateKey);
-  const [transition, setTransition] = useState<BrowserTransition | null>(null);
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(() =>
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  const [activeDateKey, setActiveDateKey] = useState(
+    initialNavigationState.activeDateKey
+  );
+  const [transition, setTransition] = useState<BrowserTransition | null>(
+    initialNavigationState.transition
+  );
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(
+    initialPrefersReducedMotion
   );
   const previousDateKey = getAdjacentDateKey(
     availableDateKeys,
@@ -232,9 +427,10 @@ export function useHomepageDayNavigation({
     "previous"
   );
   const nextDateKey = getAdjacentDateKey(availableDateKeys, activeDateKey, "next");
-  const isAnimating = transition !== null;
+  const transitionPhase = getHomepageDayTransitionLifecyclePhase(transition);
+  const isAnimating = transitionPhase !== "idle";
   const isNavigationLocked = isAnimating || isLoadingDay;
-  const isContentAnimating = transition?.phase === "animating";
+  const isContentAnimating = isHomepageDayTransitionAnimating(transitionPhase);
   const renderedHeadingPanes = buildHomepageDayTransitionPanes(
     activeDateKey,
     transition
@@ -276,7 +472,30 @@ export function useHomepageDayNavigation({
     });
   }
 
+  function setPendingClientDateKey(dateKey: string | null) {
+    pendingClientDateKeyRef.current = dateKey;
+    writePendingHomepageClientDateKey(dateKey);
+  }
+
+  function setPendingClientTransition(transition: HomepageDayTransition | null) {
+    writePendingHomepageClientTransition(transition);
+  }
+
   useEffect(() => {
+    const pendingClientDateKey =
+      pendingClientDateKeyRef.current ?? readPendingHomepageClientDateKey();
+
+    if (
+      shouldIgnoreHomepageInitialDateSync({
+        initialActiveDateKey,
+        pendingClientDateKey
+      })
+    ) {
+      pendingClientDateKeyRef.current = pendingClientDateKey;
+      return;
+    }
+
+    setPendingClientDateKey(null);
     setActiveDateKey(initialActiveDateKey);
     syncCalendarMonthForDateFromEffect(initialActiveDateKey);
     closeCalendarFromEffect();
@@ -431,6 +650,14 @@ export function useHomepageDayNavigation({
 
       return completion.activeDateKey;
     });
+    setTransition((currentTransition) =>
+      currentTransition?.toDateKey === dateKey
+        ? {
+            ...currentTransition,
+            phase: "settling"
+          }
+        : currentTransition
+    );
     syncCalendarMonthForDate(dateKey);
     cancelTransitionCleanupFrames();
     transitionCleanupFrameRefs.current = scheduleHomepageDayTransitionCleanup({
@@ -438,6 +665,8 @@ export function useHomepageDayNavigation({
         setTransition((current) =>
           clearCompletedHomepageDayTransition(current, dateKey)
         );
+        setPendingClientDateKey(null);
+        setPendingClientTransition(null);
       },
       requestAnimationFrame: window.requestAnimationFrame.bind(window)
     });
@@ -451,9 +680,10 @@ export function useHomepageDayNavigation({
       return false;
     }
 
-    if (nextDateKey !== activeDateKey) {
-      onDateChangeStart?.(nextDateKey);
-    }
+    const startedWithStickyHeader =
+      nextDateKey !== activeDateKey
+        ? onDateChangeStart?.(nextDateKey) === true
+        : false;
 
     closeOpenGig();
     closeCalendar();
@@ -476,8 +706,27 @@ export function useHomepageDayNavigation({
       return false;
     }
 
+    const requestedTransition =
+      options.transition ??
+      getRequestedDayTransition(availableDateKeys, activeDateKey, nextDateKey);
+    const requestedBrowserTransition = requestedTransition
+      ? {
+          ...requestedTransition,
+          startedWithStickyHeader
+        }
+      : null;
+
     if (options.replaceUrl) {
+      setPendingClientDateKey(nextDateKey);
+      setPendingClientTransition(
+        prefersReducedMotion ? null : requestedBrowserTransition
+      );
       replaceHomepageDateInUrl(pathname, nextDateKey);
+    } else if (options.urlAlreadyUpdated) {
+      setPendingClientDateKey(nextDateKey);
+      setPendingClientTransition(
+        prefersReducedMotion ? null : requestedBrowserTransition
+      );
     }
 
     if (options.announce) {
@@ -490,27 +739,27 @@ export function useHomepageDayNavigation({
       cancelTransitionCleanupFrames();
       setTransition(completion.transition);
       commitActiveDate(completion.activeDateKey);
+      setPendingClientDateKey(null);
+      setPendingClientTransition(null);
 
       return true;
     }
 
-    const requestedTransition =
-      options.transition ??
-      getRequestedDayTransition(availableDateKeys, activeDateKey, nextDateKey);
-
-    if (!requestedTransition) {
+    if (!requestedBrowserTransition) {
       const completion = completeHomepageDayTransitionImmediately(nextDateKey);
 
       cancelTransitionCleanupFrames();
       setTransition(completion.transition);
       commitActiveDate(completion.activeDateKey);
+      setPendingClientDateKey(null);
+      setPendingClientTransition(null);
 
       return true;
     }
 
     cancelTransitionCleanupFrames();
     setTransition({
-      ...requestedTransition,
+      ...requestedBrowserTransition,
       phase: "preparing"
     });
 
@@ -553,6 +802,9 @@ export function useHomepageDayNavigation({
     renderedContentPanes,
     renderedHeadingPanes,
     requestDateChange,
-    transition
+    transition,
+    transitionPhase
   };
 }
+
+export type { HomepageDayTransitionLifecyclePhase };

@@ -70,12 +70,19 @@ function VenueLine({
 
 interface GigCardProps {
   gig: GigCardRecord;
+  isLikelyLcpImage?: boolean;
   isOpen: boolean;
   onClose: () => void;
   onToggle: () => void;
 }
 
-export function GigCard({ gig, isOpen, onClose, onToggle }: GigCardProps) {
+export function GigCard({
+  gig,
+  isLikelyLcpImage = false,
+  isOpen,
+  onClose,
+  onToggle
+}: GigCardProps) {
   const articleRef = useRef<HTMLElement>(null);
   const actions = getGigActions(gig);
   const isActionable = actions.length > 0;
@@ -147,6 +154,7 @@ export function GigCard({ gig, isOpen, onClose, onToggle }: GigCardProps) {
         alt={`${gig.title} poster`}
         className="gig-card__media-image"
         height={imageHeight}
+        loading={isLikelyLcpImage ? "eager" : undefined}
         quality={GIG_CARD_IMAGE_QUALITY}
         sizes={GIG_CARD_IMAGE_SIZES}
         src={imageUrl}

@@ -4,6 +4,10 @@ import React, { type CSSProperties } from "react";
 import { Box } from "@mantine/core";
 
 import { GigCard } from "@/components/gig-card";
+import {
+  getRenderableGigImageUrl,
+  hasRenderableGigImage
+} from "@/lib/gigs";
 import type { HomepageDayPayload } from "@/lib/homepage-day-loading";
 import type { SwipeDirection } from "@/lib/homepage-dates";
 import type { DayBrowserPaneState } from "./use-homepage-day-navigation";
@@ -19,6 +23,7 @@ interface HomepageDayContentProps {
   renderedContentPanes: DayBrowserPaneState[];
   scrollAlignmentDateKey: string | null;
   scrollCarryoverDateKey: string | null;
+  scrollOutgoingCompensationDateKey: string | null;
   scrollReserveTargetDateKey: string | null;
   scrollTargetContentRef: React.Ref<HTMLDivElement>;
   transitionDirection?: SwipeDirection;
@@ -35,6 +40,7 @@ export function HomepageDayContent({
   renderedContentPanes,
   scrollAlignmentDateKey,
   scrollCarryoverDateKey,
+  scrollOutgoingCompensationDateKey,
   scrollReserveTargetDateKey,
   scrollTargetContentRef,
   transitionDirection
@@ -60,11 +66,24 @@ export function HomepageDayContent({
           const isScrollReserveCarryover =
             dateKey === scrollCarryoverDateKey && !isScrollReserveTarget;
           const isScrollAlignTarget =
-            dateKey === scrollAlignmentDateKey && motionRole === "to";
+            dateKey === scrollAlignmentDateKey &&
+            motionRole === "to" &&
+            phase !== "settling";
+          const isScrollOutgoingCompensationTarget =
+            dateKey === scrollOutgoingCompensationDateKey &&
+            motionRole === "from";
 
           if (!day) {
             return null;
           }
+
+          const likelyLcpGigId = isActivePane
+            ? day.items.find(
+                (gig) =>
+                  hasRenderableGigImage(gig) &&
+                  Boolean(getRenderableGigImageUrl(gig))
+              )?.id ?? null
+            : null;
 
           return (
             <Box
@@ -82,6 +101,9 @@ export function HomepageDayContent({
             >
               <Box
                 className="day-browser__content-align"
+                data-scroll-compensate-outgoing={
+                  isScrollOutgoingCompensationTarget ? "true" : undefined
+                }
                 data-scroll-align-target={
                   isScrollAlignTarget ? "true" : undefined
                 }
@@ -97,6 +119,7 @@ export function HomepageDayContent({
                   {day.items.map((gig) => (
                     <GigCard
                       gig={gig}
+                      isLikelyLcpImage={gig.id === likelyLcpGigId}
                       isOpen={openGigId === gig.id}
                       key={gig.id}
                       onClose={() => onCloseGig(gig.id)}

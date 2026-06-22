@@ -2,8 +2,14 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import {
+  isHomepageDayTransitionActive,
+  type HomepageDayTransitionLifecyclePhase
+} from "./homepage-day-transition-lifecycle";
+
 interface HomepageDateHeaderStuckHoldInput {
   isDateHeaderStuck: boolean;
+  scrollTop?: number | null;
   stickySentinelTop?: number | null;
 }
 
@@ -18,6 +24,7 @@ interface HomepageDateHeaderStuckHoldReleaseInput {
   isDateTransitioning: boolean;
   maxRetryCount: number;
   retryCount: number;
+  scrollTop?: number | null;
   stickySentinelTop?: number | null;
 }
 
@@ -25,8 +32,13 @@ const DATE_HEADER_STUCK_HOLD_RELEASE_MAX_RETRIES = 3;
 
 export function shouldHoldHomepageDateHeaderStuck({
   isDateHeaderStuck,
+  scrollTop,
   stickySentinelTop
 }: HomepageDateHeaderStuckHoldInput): boolean {
+  if (typeof scrollTop === "number" && scrollTop <= 0) {
+    return false;
+  }
+
   return (
     isDateHeaderStuck ||
     (typeof stickySentinelTop === "number" && stickySentinelTop < 0)
@@ -38,8 +50,13 @@ export function getHomepageDateHeaderStuckHoldRelease({
   isDateTransitioning,
   maxRetryCount,
   retryCount,
+  scrollTop,
   stickySentinelTop
 }: HomepageDateHeaderStuckHoldReleaseInput): HomepageDateHeaderStuckHoldRelease {
+  if (typeof scrollTop === "number" && scrollTop <= 0) {
+    return isDateHeaderTransitionStuckHold ? "clear" : "keep";
+  }
+
   if (!isDateHeaderTransitionStuckHold || isDateTransitioning) {
     return "keep";
   }
@@ -56,10 +73,12 @@ export function getHomepageDateHeaderStuckHoldRelease({
 }
 
 export function useHomepageDayStickyHeader({
-  isDateTransitioning
+  dateTransitionPhase
 }: {
-  isDateTransitioning: boolean;
+  dateTransitionPhase: HomepageDayTransitionLifecyclePhase;
 }) {
+  const isDateTransitioning =
+    isHomepageDayTransitionActive(dateTransitionPhase);
   const stickySentinelRef = useRef<HTMLSpanElement | null>(null);
   const stuckHoldReleaseFrameRef = useRef<number | null>(null);
   const stuckHoldReleaseRetryCountRef = useRef(0);
@@ -88,7 +107,8 @@ export function useHomepageDayStickyHeader({
         return;
       }
 
-      const nextIsStuck = sentinel.getBoundingClientRect().top < 0;
+      const nextIsStuck =
+        window.scrollY > 0 && sentinel.getBoundingClientRect().top < 0;
 
       if (isDateHeaderStuckRef.current !== nextIsStuck) {
         isDateHeaderStuckRef.current = nextIsStuck;
@@ -97,6 +117,21 @@ export function useHomepageDayStickyHeader({
     }
 
     function scheduleDateHeaderStickinessMeasure() {
+      if (window.scrollY <= 0) {
+        if (stickyFrameRef.current !== null) {
+          window.cancelAnimationFrame(stickyFrameRef.current);
+          stickyFrameRef.current = null;
+        }
+
+        stuckHoldReleaseRetryCountRef.current = 0;
+        if (isDateHeaderStuckRef.current) {
+          isDateHeaderStuckRef.current = false;
+          setIsDateHeaderStuck(false);
+        }
+        setIsDateHeaderTransitionStuckHold(false);
+        return;
+      }
+
       if (stickyFrameRef.current !== null) {
         return;
       }
@@ -151,6 +186,7 @@ export function useHomepageDayStickyHeader({
       isDateTransitioning,
       maxRetryCount: DATE_HEADER_STUCK_HOLD_RELEASE_MAX_RETRIES,
       retryCount: stuckHoldReleaseRetryCountRef.current,
+      scrollTop: window.scrollY,
       stickySentinelTop
     });
 
@@ -164,7 +200,9 @@ export function useHomepageDayStickyHeader({
 
     if (release === "clear" || release === "fallback-clear") {
       const measuredIsStuck =
-        typeof stickySentinelTop === "number" && stickySentinelTop < 0;
+        window.scrollY > 0 &&
+        typeof stickySentinelTop === "number" &&
+        stickySentinelTop < 0;
 
       stuckHoldReleaseRetryCountRef.current = 0;
       if (isDateHeaderStuckRef.current !== measuredIsStuck) {
@@ -200,6 +238,7 @@ export function useHomepageDayStickyHeader({
     setIsDateHeaderTransitionStuckHold(
       shouldHoldHomepageDateHeaderStuck({
         isDateHeaderStuck,
+        scrollTop: typeof window === "undefined" ? null : window.scrollY,
         stickySentinelTop
       })
     );

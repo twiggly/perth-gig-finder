@@ -8,7 +8,9 @@ import {
   clearCompletedHomepageDayTransition,
   completeHomepageDayTransition,
   completeHomepageDayTransitionImmediately,
+  getInitialHomepageDayNavigationState,
   scheduleHomepageDayTransitionCleanup,
+  shouldIgnoreHomepageInitialDateSync,
   type BrowserTransition
 } from "./use-homepage-day-navigation";
 
@@ -28,6 +30,7 @@ describe("buildHomepageDayTransitionPanes", () => {
       direction: "next",
       fromDateKey: "2026-04-29",
       phase: "animating",
+      startedWithStickyHeader: false,
       toDateKey: "2026-04-30"
     };
 
@@ -50,6 +53,7 @@ describe("buildHomepageDayTransitionPanes", () => {
       direction: "next",
       fromDateKey: "2026-04-29",
       phase: "animating",
+      startedWithStickyHeader: true,
       toDateKey: "2026-04-30"
     };
     const completion = completeHomepageDayTransition(
@@ -60,7 +64,10 @@ describe("buildHomepageDayTransitionPanes", () => {
 
     expect(completion).toEqual({
       activeDateKey: "2026-04-30",
-      transition
+      transition: {
+        ...transition,
+        phase: "settling"
+      }
     });
     expect(
       buildHomepageDayTransitionPanes(
@@ -71,12 +78,12 @@ describe("buildHomepageDayTransitionPanes", () => {
       {
         dateKey: "2026-04-29",
         motionRole: "from",
-        phase: "animating"
+        phase: "settling"
       },
       {
         dateKey: "2026-04-30",
         motionRole: "to",
-        phase: "animating"
+        phase: "settling"
       }
     ]);
   });
@@ -143,6 +150,7 @@ describe("buildHomepageDayTransitionPanes", () => {
       direction: "next",
       fromDateKey: "2026-04-29",
       phase: "animating",
+      startedWithStickyHeader: false,
       toDateKey: "2026-04-30"
     };
 
@@ -159,6 +167,71 @@ describe("buildHomepageDayTransitionPanes", () => {
       activeDateKey: "2026-04-30",
       transition: null
     });
+  });
+
+  it("restores a pending client-owned transition across URL handoff", () => {
+    expect(
+      getInitialHomepageDayNavigationState({
+        initialActiveDateKey: "2026-04-30",
+        pendingTransition: {
+          direction: "next",
+          fromDateKey: "2026-04-29",
+          startedWithStickyHeader: true,
+          toDateKey: "2026-04-30"
+        },
+        prefersReducedMotion: false
+      })
+    ).toEqual({
+      activeDateKey: "2026-04-29",
+        transition: {
+          direction: "next",
+          fromDateKey: "2026-04-29",
+          phase: "preparing",
+          startedWithStickyHeader: true,
+          toDateKey: "2026-04-30"
+        }
+    });
+  });
+
+  it("does not restore pending transitions in reduced-motion mode", () => {
+    expect(
+      getInitialHomepageDayNavigationState({
+        initialActiveDateKey: "2026-04-30",
+        pendingTransition: {
+          direction: "next",
+          fromDateKey: "2026-04-29",
+          startedWithStickyHeader: true,
+          toDateKey: "2026-04-30"
+        },
+        prefersReducedMotion: true
+      })
+    ).toEqual({
+      activeDateKey: "2026-04-30",
+      transition: null
+    });
+  });
+
+  it("ignores initial active date echoes from client-owned URL updates", () => {
+    expect(
+      shouldIgnoreHomepageInitialDateSync({
+        initialActiveDateKey: "2026-04-30",
+        pendingClientDateKey: "2026-04-30"
+      })
+    ).toBe(true);
+
+    expect(
+      shouldIgnoreHomepageInitialDateSync({
+        initialActiveDateKey: "2026-05-01",
+        pendingClientDateKey: "2026-04-30"
+      })
+    ).toBe(false);
+
+    expect(
+      shouldIgnoreHomepageInitialDateSync({
+        initialActiveDateKey: "2026-04-30",
+        pendingClientDateKey: null
+      })
+    ).toBe(false);
   });
 });
 
