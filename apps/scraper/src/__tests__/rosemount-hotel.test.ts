@@ -129,6 +129,22 @@ describe("rosemount hotel source adapter", () => {
     ]);
   });
 
+  it("drops Rosemount placeholder artist names from Oztix payloads", () => {
+    const normalized = normalizeRosemountHit(
+      createRosemountHit({
+        EventGuid: "fingersfest",
+        EventName: "FINGERSFEST",
+        SpecialGuests: "Competition winner TBA",
+        Categories: ["Rock"],
+        Bands: [],
+        Performances: []
+      })
+    );
+
+    expect(normalized.artists).toEqual([]);
+    expect(normalized.artistExtractionKind).toBe("unknown");
+  });
+
   it("skips non-music, past, and off-venue rows while counting malformed music rows", () => {
     const parsed = parseRosemountHits([
       createRosemountHit({

@@ -56,6 +56,10 @@ describe("normalization helpers", () => {
     expect(
       normalizeCanonicalTitleForMatch("THE BIRD SWEET 16th CARPARK BIRTHDAY PARTY")
     ).toBe("the-bird-sweet-16-carpark-party");
+    expect(normalizeCanonicalTitleForMatch("Cosmic Jive! SOLD OUT")).toBe(
+      "cosmic-jive"
+    );
+    expect(normalizeCanonicalTitleForMatch("BLOOM FESTIVAL 2026")).toBe("bloom");
   });
 
   it("matches conservative canonical title variants without collapsing distinct events", () => {
@@ -74,6 +78,10 @@ describe("normalization helpers", () => {
         "Sweet 16 Carpark Party"
       )
     ).toBe(true);
+    expect(areCanonicalTitlesCompatible("Cosmic Jive! SOLD OUT", "Cosmic Jive!")).toBe(
+      true
+    );
+    expect(areCanonicalTitlesCompatible("BLOOM FESTIVAL 2026", "BLOOM")).toBe(true);
     expect(areCanonicalTitlesCompatible("Late Show", "Rosemount Late Show")).toBe(
       false
     );

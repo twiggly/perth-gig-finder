@@ -680,6 +680,20 @@ describe("oztix wa source adapter", () => {
     expect(normalized.artistExtractionKind).toBe("unknown");
   });
 
+  it("drops local guest placeholders from Oztix artist extraction", () => {
+    expect(
+      extractOztixArtists({
+        EventName: "TO THE GRAVE 'NAIL AUSTRALIA TO THE WALLS' with NO CURE (USA)",
+        SpecialGuests: "local guests TBC",
+        Bands: [],
+        Performances: []
+      })
+    ).toEqual({
+      artists: [],
+      artistExtractionKind: "unknown"
+    });
+  });
+
   it("parses WA hits into normalized gigs, skips non-gig events, and counts failures", () => {
     const fixture = JSON.parse(
       readFileSync(resolve(FIXTURE_DIR, "oztix-wa-hits.json"), "utf8")
