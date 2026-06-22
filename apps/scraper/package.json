@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
+    "cleanup-images": "tsx src/cleanup-images.ts",
     "mirror-images": "tsx src/mirror-images.ts",
     "repair-artists": "tsx src/repair-artists.ts",
     "scrape": "tsx src/index.ts",

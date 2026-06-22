@@ -79,23 +79,29 @@ describe("the bird source adapter", () => {
   });
 
   it("normalizes blank and free ticket links to null", () => {
-    const free = normalizeTheBirdRow({
-      Date: "03/05/2026",
-      Day: "SUNDAY",
-      "Event Title": "Class of Orb : Reunion",
-      Info: "",
-      "Ticket Link": "Free"
-    });
-    const blank = normalizeTheBirdRow({
-      Date: "17/05/2026",
-      Day: "SUNDAY",
-      "Event Title": "TOMMYS",
-      Info: "",
-      "Ticket Link": ""
-    });
+    freezeTheBirdFixtureClock();
 
-    expect(free?.ticketUrl).toBeNull();
-    expect(blank?.ticketUrl).toBeNull();
+    try {
+      const free = normalizeTheBirdRow({
+        Date: "03/05/2026",
+        Day: "SUNDAY",
+        "Event Title": "Class of Orb : Reunion",
+        Info: "",
+        "Ticket Link": "Free"
+      });
+      const blank = normalizeTheBirdRow({
+        Date: "17/05/2026",
+        Day: "SUNDAY",
+        "Event Title": "TOMMYS",
+        Info: "",
+        "Ticket Link": ""
+      });
+
+      expect(free?.ticketUrl).toBeNull();
+      expect(blank?.ticketUrl).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("normalizes a weekly Thursday row with the featured lineup", () => {
@@ -165,55 +171,67 @@ describe("the bird source adapter", () => {
   });
 
   it("falls back to date precision when no clear time exists", () => {
-    const normalized = normalizeTheBirdRow({
-      Date: "15/05/2026",
-      Day: "FRIDAY",
-      "Event Title": "WEST ENVY - No Breaks Single Launch",
-      Info: "Catch WEST ENVY'S first headline show at The Bird in Northbridge May 15th.",
-      "Ticket Link":
-        "https://tickets.oztix.com.au/outlet/event/026a5d47-c2ba-4f4b-a293-fb4a90bf9eaa"
-    });
+    freezeTheBirdFixtureClock();
 
-    expect(normalized?.startsAt).toBe("2026-05-15T04:00:00.000Z");
-    expect(normalized?.startsAtPrecision).toBe("date");
+    try {
+      const normalized = normalizeTheBirdRow({
+        Date: "15/05/2026",
+        Day: "FRIDAY",
+        "Event Title": "WEST ENVY - No Breaks Single Launch",
+        Info: "Catch WEST ENVY'S first headline show at The Bird in Northbridge May 15th.",
+        "Ticket Link":
+          "https://tickets.oztix.com.au/outlet/event/026a5d47-c2ba-4f4b-a293-fb4a90bf9eaa"
+      });
+
+      expect(normalized?.startsAt).toBe("2026-05-15T04:00:00.000Z");
+      expect(normalized?.startsAtPrecision).toBe("date");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("skips placeholder rows and counts malformed rows as failures", () => {
-    const parsed = parseTheBirdFeedRows([
-      {
-        Date: "26/05/2025",
-        Day: "MONDAY",
-        "Event Title": "Past event",
-        Info: "placeholder",
-        "Ticket Link": ""
-      },
-      {
-        Date: "",
-        Day: "",
-        "Event Title": "",
-        Info: "",
-        "Ticket Link": ""
-      },
-      {
-        Date: "31/02/2026",
-        Day: "TUESDAY",
-        "Event Title": "Broken row",
-        Info: "Doors 8pm",
-        "Ticket Link": ""
-      },
-      {
-        Date: "24/05/2026",
-        Day: "SUNDAY",
-        "Event Title": "Bass @ The Bird",
-        Info: "Running from 3pm – 10pm",
-        "Ticket Link":
-          "https://tickets.oztix.com.au/outlet/event/d9c7ae29-347c-43cb-ad74-8db5439fb0cf"
-      }
-    ]);
+    freezeTheBirdFixtureClock();
 
-    expect(parsed.gigs).toHaveLength(1);
-    expect(parsed.failedCount).toBe(1);
-    expect(parsed.gigs[0]?.title).toBe("Bass @ The Bird");
+    try {
+      const parsed = parseTheBirdFeedRows([
+        {
+          Date: "26/05/2025",
+          Day: "MONDAY",
+          "Event Title": "Past event",
+          Info: "placeholder",
+          "Ticket Link": ""
+        },
+        {
+          Date: "",
+          Day: "",
+          "Event Title": "",
+          Info: "",
+          "Ticket Link": ""
+        },
+        {
+          Date: "31/02/2026",
+          Day: "TUESDAY",
+          "Event Title": "Broken row",
+          Info: "Doors 8pm",
+          "Ticket Link": ""
+        },
+        {
+          Date: "24/05/2026",
+          Day: "SUNDAY",
+          "Event Title": "Bass @ The Bird",
+          Info: "Running from 3pm – 10pm",
+          "Ticket Link":
+            "https://tickets.oztix.com.au/outlet/event/d9c7ae29-347c-43cb-ad74-8db5439fb0cf"
+        }
+      ]);
+
+      expect(parsed.gigs).toHaveLength(1);
+      expect(parsed.failedCount).toBe(1);
+      expect(parsed.gigs[0]?.title).toBe("Bass @ The Bird");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects obvious non-music rows from the weekly feed", () => {
@@ -256,6 +274,8 @@ describe("the bird source adapter", () => {
   });
 
   it("fetches the official JSON feed without browser automation", async () => {
+    freezeTheBirdFixtureClock();
+
     const rows: TheBirdFeedRow[] = [
       {
         Date: "09/05/2026",
@@ -286,14 +306,20 @@ describe("the bird source adapter", () => {
       throw new Error(`Unexpected fetch URL: ${url}`);
     });
 
-    const result = await theBirdSource.fetchListings(fetchMock);
+    try {
+      const result = await theBirdSource.fetchListings(fetchMock);
 
-    expect(result.gigs).toHaveLength(1);
-    expect(result.failedCount).toBe(0);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(result.gigs).toHaveLength(1);
+      expect(result.failedCount).toBe(0);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("enriches Bird gigs with posters from linked Humanitix event pages", async () => {
+    freezeTheBirdFixtureClock();
+
     const rows: TheBirdFeedRow[] = [
       {
         Date: "03/05/2026",
@@ -332,16 +358,21 @@ describe("the bird source adapter", () => {
       throw new Error(`Unexpected fetch URL: ${url}`);
     });
 
-    const result = await theBirdSource.fetchListings(fetchMock);
+    try {
+      const result = await theBirdSource.fetchListings(fetchMock);
 
-    expect(result.failedCount).toBe(0);
-    expect(result.gigs).toHaveLength(1);
-    expect(result.gigs[0]).toMatchObject({
-      title: "Class of Orb : Reunion",
-      imageUrl: "https://images.humanitix.com/i/ece78d93-d240-44ae-ba00-ada24312a1cb.jpg@seo-500.jpg",
-      ticketUrl: "https://events.humanitix.com/class-of-orb-reunion/tickets"
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(result.failedCount).toBe(0);
+      expect(result.gigs).toHaveLength(1);
+      expect(result.gigs[0]).toMatchObject({
+        title: "Class of Orb : Reunion",
+        imageUrl:
+          "https://images.humanitix.com/i/ece78d93-d240-44ae-ba00-ada24312a1cb.jpg@seo-500.jpg",
+        ticketUrl: "https://events.humanitix.com/class-of-orb-reunion/tickets"
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("merges weekly rows into matching coming-up rows before returning gigs", async () => {
