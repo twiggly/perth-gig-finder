@@ -50,7 +50,7 @@ jobs:
 
       - name: Scrape gig sources
         env:
-          SCRAPER_EXCLUDE_SOURCE_SLUGS: ticketmaster-au
+          SCRAPER_EXCLUDE_SOURCE_SLUGS: ticketmaster-au,moshtix-wa
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: pnpm --filter @perth-gig-finder/scraper scrape
