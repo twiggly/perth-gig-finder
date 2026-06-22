@@ -51,6 +51,7 @@ This file is for coding agents working in this repository. Keep it short, practi
 - Hosted data refresh runs through [/.github/workflows/refresh-hosted-gigs.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-hosted-gigs.yml).
 - Hosted artist provenance repairs run through [/.github/workflows/repair-hosted-artists.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/repair-hosted-artists.yml).
 - `ticketmaster-au` refresh runs through [/.github/workflows/refresh-ticketmaster-self-hosted.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-ticketmaster-self-hosted.yml) on a self-hosted runner labeled `perth-gig-finder` and `ticketmaster`.
+- `moshtix-wa` refresh runs through [/.github/workflows/refresh-moshtix-self-hosted.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-moshtix-self-hosted.yml) on the same self-hosted runner path, because Moshtix blocks GitHub-hosted runners with `403` responses.
 - Runner health is monitored through [/.github/workflows/check-ticketmaster-runner.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/check-ticketmaster-runner.yml).
 - The runner health workflow depends on the `RUNNER_MONITOR_TOKEN` repository secret so it can read the GitHub runners API.
 - The hosted workflow:
