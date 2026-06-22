@@ -647,6 +647,18 @@ class MemoryGigStore implements GigStore {
       affectedGigIds.add(sourceGig.gigId);
     }
 
+    for (const gigId of [...affectedGigIds]) {
+      const hasRemainingSourceGig = [...this.sourceGigs.values()].some(
+        (sourceGig) => sourceGig.gigId === gigId
+      );
+
+      if (!hasRemainingSourceGig) {
+        this.gigs.delete(gigId);
+        this.gigArtists.delete(gigId);
+        affectedGigIds.delete(gigId);
+      }
+    }
+
     if (affectedGigIds.size > 0) {
       await this.syncGigArtistsFromSourceGigs([...affectedGigIds]);
     }
@@ -1919,11 +1931,13 @@ describe("executeSourceRun", () => {
 
     await executeSourceRun(store, source);
     expect(store.sourceGigs.size).toBe(2);
+    expect(store.gigs.size).toBe(2);
 
     gigs = [gigs[0]];
     await executeSourceRun(store, source);
 
     expect(store.sourceGigs.size).toBe(1);
+    expect(store.gigs.size).toBe(1);
     expect([...store.sourceGigs.values()].map((sourceGig) => sourceGig.identityKey)).toEqual([
       "doctor-jazz"
     ]);
