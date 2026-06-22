@@ -108,6 +108,80 @@ describe("milk bar source adapter", () => {
     });
   });
 
+  it("dedupes ticket-status title variants for the same event day", () => {
+    const baseHit = {
+      SpecialGuests: "",
+      EventDescription: "A tribute to our Starman.",
+      DateStart: "2026-07-19T11:30:00",
+      EventUrl: "https://tickets.avclive.com.au/outlet/event/cosmic-jive",
+      Bands: ["A Tribute To Our Starman"],
+      Performances: [],
+      Venue: {
+        Name: "Milk Bar",
+        Address: "981 Beaufort Street",
+        Locality: "Inglewood",
+        WebsiteUrl: "milkbarperth.com.au"
+      }
+    };
+
+    const parsed = parseMilkBarHits([
+      {
+        ...baseHit,
+        EventGuid: "cosmic-jive-sold-out",
+        EventName: "Cosmic Jive! SOLD OUT"
+      },
+      {
+        ...baseHit,
+        EventGuid: "cosmic-jive",
+        EventName: "Cosmic Jive!"
+      }
+    ] as never[]);
+
+    expect(parsed.failedCount).toBe(0);
+    expect(parsed.gigs).toHaveLength(1);
+    expect(parsed.gigs[0]).toMatchObject({
+      externalId: "cosmic-jive",
+      title: "Cosmic Jive!",
+      artists: ["A Tribute To Our Starman"]
+    });
+  });
+
+  it("keeps unrelated same-day Milk Bar events separate", () => {
+    const baseHit = {
+      SpecialGuests: "",
+      EventDescription: "",
+      DateStart: "2026-07-19T11:30:00",
+      EventUrl: "https://tickets.avclive.com.au/outlet/event/milk-bar",
+      Bands: [],
+      Performances: [],
+      Venue: {
+        Name: "Milk Bar",
+        Address: "981 Beaufort Street",
+        Locality: "Inglewood",
+        WebsiteUrl: "milkbarperth.com.au"
+      }
+    };
+
+    const parsed = parseMilkBarHits([
+      {
+        ...baseHit,
+        EventGuid: "cosmic-jive",
+        EventName: "Cosmic Jive!"
+      },
+      {
+        ...baseHit,
+        EventGuid: "jazz-party",
+        EventName: "Jazz Party"
+      }
+    ] as never[]);
+
+    expect(parsed.failedCount).toBe(0);
+    expect(parsed.gigs.map((gig) => gig.title)).toEqual([
+      "Cosmic Jive!",
+      "Jazz Party"
+    ]);
+  });
+
   it("fetches the page and the event API without requiring a browser", async () => {
     const html = readFileSync(resolve(FIXTURE_DIR, "milk-bar-page.html"), "utf8");
     const responseBody = readFileSync(

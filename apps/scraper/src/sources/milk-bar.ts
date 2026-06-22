@@ -2,6 +2,7 @@ import * as cheerio from "cheerio";
 
 import {
   buildGigChecksum,
+  normalizeCanonicalTitleForMatch,
   normalizeWhitespace,
   slugify,
   type GigStatus,
@@ -18,6 +19,8 @@ const SOURCE_URL = "https://milkbarperth.com.au/gigs/";
 const MILK_BAR_ARTIST_SEPARATOR_PATTERN = /\s*(?:,|\+|;|•)\s*/u;
 const MILK_BAR_FEATURE_PREFIX_PATTERN = /^(?:ft\.?|feat\.?|featuring)\s+/i;
 const MILK_BAR_NON_ARTIST_TOKEN_PATTERN = /^(?:friday fright night)$/i;
+const MILK_BAR_STATUS_SUFFIX_PATTERN =
+  /\s*[-–—:]?\s*\b(?:sold\s*out|waitlist(?:ed)?|selling\s*fast)\b[!.]?\s*$/i;
 
 interface MilkBarSearchConfig {
   appId: string;
@@ -227,6 +230,84 @@ export function normalizeMilkBarHit(hit: MilkBarHit): NormalizedGig {
   };
 }
 
+function getPerthDateKey(value: string): string {
+  const date = new Date(value);
+  const parts = new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Perth",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  })
+    .formatToParts(date)
+    .reduce<Record<string, string>>((accumulator, part) => {
+      accumulator[part.type] = part.value;
+      return accumulator;
+    }, {});
+
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function hasTicketStatusSuffix(title: string): boolean {
+  return MILK_BAR_STATUS_SUFFIX_PATTERN.test(title);
+}
+
+function isPreferredMilkBarStatusDuplicate(
+  candidate: NormalizedGig,
+  current: NormalizedGig
+): boolean {
+  const candidateHasStatusSuffix = hasTicketStatusSuffix(candidate.title);
+  const currentHasStatusSuffix = hasTicketStatusSuffix(current.title);
+
+  if (candidateHasStatusSuffix !== currentHasStatusSuffix) {
+    return !candidateHasStatusSuffix;
+  }
+
+  if (candidate.artists.length !== current.artists.length) {
+    return candidate.artists.length > current.artists.length;
+  }
+
+  return candidate.title.length < current.title.length;
+}
+
+function dedupeMilkBarStatusTitleVariants(gigs: NormalizedGig[]): NormalizedGig[] {
+  const deduped: NormalizedGig[] = [];
+  const indexByKey = new Map<string, number>();
+
+  for (const gig of gigs) {
+    const canonicalTitle = normalizeCanonicalTitleForMatch(gig.title);
+
+    if (!canonicalTitle) {
+      deduped.push(gig);
+      continue;
+    }
+
+    const key = `${gig.venue.slug}|${getPerthDateKey(gig.startsAt)}|${canonicalTitle}`;
+    const existingIndex = indexByKey.get(key);
+
+    if (existingIndex === undefined) {
+      indexByKey.set(key, deduped.length);
+      deduped.push(gig);
+      continue;
+    }
+
+    const existingGig = deduped[existingIndex];
+
+    if (
+      existingGig &&
+      (hasTicketStatusSuffix(existingGig.title) || hasTicketStatusSuffix(gig.title))
+    ) {
+      deduped[existingIndex] = isPreferredMilkBarStatusDuplicate(gig, existingGig)
+        ? gig
+        : existingGig;
+      continue;
+    }
+
+    deduped.push(gig);
+  }
+
+  return deduped;
+}
+
 export function parseMilkBarHits(hits: MilkBarHit[]): SourceAdapterResult {
   const gigs: NormalizedGig[] = [];
   let failedCount = 0;
@@ -239,7 +320,7 @@ export function parseMilkBarHits(hits: MilkBarHit[]): SourceAdapterResult {
     }
   }
 
-  return { gigs, failedCount };
+  return { gigs: dedupeMilkBarStatusTitleVariants(gigs), failedCount };
 }
 
 async function fetchMilkBarHits(

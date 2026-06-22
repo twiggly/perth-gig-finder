@@ -1256,6 +1256,29 @@ export class SupabaseGigStore implements GigStore {
     }
   }
 
+  private async listGigIdsWithSourceGigs(gigIds: string[]): Promise<Set<string>> {
+    const attachedGigIds = new Set<string>();
+
+    for (const gigIdChunk of chunkValues(gigIds, QUERY_CHUNK_SIZE)) {
+      const { data, error } = await this.client
+        .from("source_gigs")
+        .select("gig_id")
+        .in("gig_id", gigIdChunk);
+
+      if (error) {
+        throw new Error(
+          `Unable to load remaining source gigs for pruning: ${error.message ?? "unknown error"}`
+        );
+      }
+
+      for (const row of (data as Array<{ gig_id: string }> | null) ?? []) {
+        attachedGigIds.add(row.gig_id);
+      }
+    }
+
+    return attachedGigIds;
+  }
+
   async findCanonicalGig(
     input: {
       venueId: string;
@@ -1850,11 +1873,17 @@ export class SupabaseGigStore implements GigStore {
         !retainedIdentityKeys.has(row.identity_key)
     );
     const staleSourceGigIds = staleSourceGigRows.map((row) => row.id);
+    const staleGigIds = [...new Set(staleSourceGigRows.map((row) => row.gig_id))];
 
     await this.deleteSourceGigsById(staleSourceGigIds);
-    await this.syncGigArtistsFromSourceGigs(
-      [...new Set(staleSourceGigRows.map((row) => row.gig_id))]
-    );
+
+    const attachedGigIds = await this.listGigIdsWithSourceGigs(staleGigIds);
+    const orphanedGigIds = staleGigIds.filter((gigId) => !attachedGigIds.has(gigId));
+
+    await this.deleteGigsById(orphanedGigIds);
+
+    const remainingGigIds = staleGigIds.filter((gigId) => attachedGigIds.has(gigId));
+    await this.syncGigArtistsFromSourceGigs(remainingGigIds);
   }
 
   async mirrorSourceGigImage(
