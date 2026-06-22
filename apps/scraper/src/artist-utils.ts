@@ -25,6 +25,8 @@ const ARTIST_EXTRACTION_KIND_RANK: Record<ArtistExtractionKind, number> = {
 
 const LEADING_ARTIST_DECORATION = /^[`"'“”‘’•·●▪▫◆◇★☆*~_=|:;,./\\-]+/u;
 const TRAILING_ARTIST_DECORATION = /[`"'“”‘’•·●▪▫◆◇★☆*~_=|:;,./\\-]+$/u;
+const PLACEHOLDER_ARTIST_PATTERN =
+  /^(?:competition\s+winners?\s*(?:tba|tbc|to be announced)?|(?:(?:local|more|additional|special)\s+)*(?:guests?|supports?|support acts?|acts?|artists?)\s*(?:to be announced|tba|tbc)?|(?:secret|mystery)\s+(?:act|artist|guest|set)s?[!.]?|(?:more|more\s+(?:acts?|artists?|guests?))|(?:tba|tbc|to be announced|more\s+(?:tba|tbc|to be announced)|more to be announced))$/i;
 
 function cleanArtistName(artist: string): string {
   let normalizedArtist = normalizeWhitespace(artist);
@@ -55,6 +57,10 @@ export function normalizeArtistNames(artists: string[]): string[] {
     const normalizedArtist = cleanArtistName(artist);
 
     if (!normalizedArtist) {
+      continue;
+    }
+
+    if (PLACEHOLDER_ARTIST_PATTERN.test(normalizedArtist)) {
       continue;
     }
 

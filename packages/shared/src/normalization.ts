@@ -3,10 +3,12 @@ import { createHash } from "node:crypto";
 const NON_ALPHANUMERIC = /[^a-z0-9]+/g;
 const APOSTROPHES = /['’]/g;
 const STATUS_PREFIX = /^(cancelled|postponed)\s*[-:]\s*/i;
+const STATUS_SUFFIX = /\s*[-–—:]?\s*\b(?:sold\s*out|waitlist(?:ed)?|selling\s*fast)\b[!.]?\s*$/i;
 const ORDINAL_SUFFIX = /\b(\d+)(st|nd|rd|th)\b/gi;
 const CANONICAL_TITLE_NOISE_PATTERNS = [
   /\balbum launch\b/gi,
   /\bbirthday\b/gi,
+  /\bfestival(?:\s+20\d{2})?\b$/gi,
   /\bin concert\b/gi,
   /\blive\b/gi,
   /\btour\b/gi,
@@ -118,6 +120,7 @@ export function normalizeTitleForMatch(value: string): string {
 export function normalizeCanonicalTitleForMatch(value: string): string {
   let normalized = normalizeWhitespace(value)
     .replace(STATUS_PREFIX, "")
+    .replace(STATUS_SUFFIX, "")
     .replace(ORDINAL_SUFFIX, "$1");
 
   for (const pattern of CANONICAL_TITLE_NOISE_PATTERNS) {

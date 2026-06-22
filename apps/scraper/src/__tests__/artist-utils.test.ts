@@ -41,6 +41,16 @@ describe("artist utils", () => {
     ]);
   });
 
+  it("drops placeholder artist names before public artist sync", () => {
+    expect(
+      normalizeArtistNames([
+        "Competition winner TBA",
+        "local guests TBC",
+        "Actual Artist"
+      ])
+    ).toEqual(["Actual Artist"]);
+  });
+
   it("returns unknown when extraction produces no usable artists", () => {
     expect(createArtistExtraction(["", "   "], "structured")).toEqual(
       unknownArtistExtraction()

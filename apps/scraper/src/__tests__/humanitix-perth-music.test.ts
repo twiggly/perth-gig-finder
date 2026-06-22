@@ -211,6 +211,37 @@ describe("humanitix perth music source adapter", () => {
     });
   });
 
+  it("ignores malformed Humanitix placeholder image URLs", () => {
+    const gigs = normalizeHumanitixDetailPage({
+      eventUrl: "https://events.humanitix.com/seasonal-brewtality-vol-v",
+      html: buildEventPage({
+        title: "Seasonal Brewtality Vol. V",
+        canonicalUrl: "https://events.humanitix.com/seasonal-brewtality-vol-v",
+        ogDescription: "Live heavy music at The Seasonal Brewing Co.",
+        imageUrl: "https://images.humanitix.com/i/@seo-500.jpg",
+        twitterLocation: "The Seasonal Brewing Co, Maylands WA 6051, Australia",
+        twitterDate: "Friday 26th June 2026",
+        structuredEvents: buildStructuredEvent({
+          title: "Seasonal Brewtality Vol. V",
+          url: "https://events.humanitix.com/seasonal-brewtality-vol-v",
+          startDate: "2026-06-26T19:00:00+0800",
+          venueName: "The Seasonal Brewing Co",
+          streetAddress: "175 Guildford Rd, Maylands WA 6051, Australia",
+          locality: "Maylands",
+          postalCode: "6051",
+          description: "Live heavy music at The Seasonal Brewing Co.",
+          imageUrl: "https://images.humanitix.com/i/@seo-500.jpg",
+          performers: [{ name: "Brewtality Band" }]
+        }),
+        paragraphs: ["Live music, bands, metal, and heavy riffs."],
+        listItems: ["live", "music", "bands"]
+      })
+    });
+
+    expect(gigs).toHaveLength(1);
+    expect(gigs[0]?.imageUrl).toBeNull();
+  });
+
   it("falls back to date precision when Humanitix only exposes a calendar day", () => {
     const gigs = normalizeHumanitixDetailPage({
       eventUrl: "https://events.humanitix.com/date-only-festival",

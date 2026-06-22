@@ -826,6 +826,160 @@ function createGigForSource(input: {
   };
 }
 
+function seedDuplicateReattachmentFixture(input: {
+  canonicalTitle: string;
+  duplicateTitle: string;
+  sourceSlug: string;
+  sourceName: string;
+  sourceBaseUrl: string;
+  venueName: string;
+  startsAt: string;
+}): {
+  store: MemoryGigStore;
+  source: SourceAdapter;
+  existingGigId: string;
+} {
+  const store = new MemoryGigStore();
+  const venue = {
+    id: randomUUID(),
+    slug: slugifyVenueName(input.venueName),
+    name: input.venueName
+  };
+  store.venues.set(venue.slug, venue);
+
+  const canonicalSource = {
+    id: randomUUID(),
+    slug: "canonical-source",
+    name: "Canonical Source",
+    baseUrl: "https://example.com/canonical",
+    priority: 100,
+    isPublicListingSource: true
+  } satisfies SourceRecord;
+  const duplicateSource = {
+    id: randomUUID(),
+    slug: input.sourceSlug,
+    name: input.sourceName,
+    baseUrl: input.sourceBaseUrl,
+    priority: 50,
+    isPublicListingSource: true
+  } satisfies SourceRecord;
+  store.sources.set(canonicalSource.slug, canonicalSource);
+  store.sources.set(duplicateSource.slug, duplicateSource);
+
+  const existingGigId = randomUUID();
+  const duplicateGigId = randomUUID();
+  store.gigs.set(existingGigId, {
+    id: existingGigId,
+    slug: buildGigSlug({
+      venueSlug: venue.slug,
+      startsAt: input.startsAt,
+      title: input.canonicalTitle
+    }),
+    title: input.canonicalTitle,
+    venueId: venue.id,
+    startsAt: input.startsAt,
+    startsAtPrecision: "exact",
+    status: "active",
+    normalizedTitle: normalizeTitleForMatch(input.canonicalTitle),
+    canonicalTitle: normalizeCanonicalTitleForMatch(input.canonicalTitle),
+    sourceUrl: `${canonicalSource.baseUrl}/event`,
+    description: null,
+    ticketUrl: `${canonicalSource.baseUrl}/event`
+  });
+  store.gigs.set(duplicateGigId, {
+    id: duplicateGigId,
+    slug: buildGigSlug({
+      venueSlug: venue.slug,
+      startsAt: input.startsAt,
+      title: input.duplicateTitle
+    }),
+    title: input.duplicateTitle,
+    venueId: venue.id,
+    startsAt: input.startsAt,
+    startsAtPrecision: "exact",
+    status: "active",
+    normalizedTitle: normalizeTitleForMatch(input.duplicateTitle),
+    canonicalTitle: normalizeCanonicalTitleForMatch(input.duplicateTitle),
+    sourceUrl: `${duplicateSource.baseUrl}/event`,
+    description: null,
+    ticketUrl: `${duplicateSource.baseUrl}/event`
+  });
+
+  const existingSourceGigId = randomUUID();
+  store.sourceGigs.set(existingSourceGigId, {
+    id: existingSourceGigId,
+    gigId: existingGigId,
+    sourceSlug: canonicalSource.slug,
+    sourceId: canonicalSource.id,
+    identityKey: `${input.canonicalTitle}-canonical`,
+    externalId: `${input.canonicalTitle}-canonical`,
+    checksum: `${input.canonicalTitle}-canonical-checksum`,
+    sourceUrl: `${canonicalSource.baseUrl}/event`,
+    startsAtPrecision: "exact",
+    artistNames: [],
+    artistExtractionKind: "unknown",
+    sourceImageUrl: null,
+    mirroredImagePath: null,
+    imageMirrorStatus: "missing",
+    imageMirroredAt: null,
+    mirroredImageWidth: null,
+    mirroredImageHeight: null,
+    lastSeenAt: new Date().toISOString()
+  });
+
+  const duplicateSourceGigId = randomUUID();
+  const duplicateExternalId = `${input.duplicateTitle}-duplicate`;
+  const duplicateChecksum = `${input.duplicateTitle}-duplicate-checksum`;
+  store.sourceGigs.set(duplicateSourceGigId, {
+    id: duplicateSourceGigId,
+    gigId: duplicateGigId,
+    sourceSlug: duplicateSource.slug,
+    sourceId: duplicateSource.id,
+    identityKey: duplicateExternalId,
+    externalId: duplicateExternalId,
+    checksum: duplicateChecksum,
+    sourceUrl: `${duplicateSource.baseUrl}/event`,
+    startsAtPrecision: "exact",
+    artistNames: [],
+    artistExtractionKind: "unknown",
+    sourceImageUrl: null,
+    mirroredImagePath: null,
+    imageMirrorStatus: "missing",
+    imageMirroredAt: null,
+    mirroredImageWidth: null,
+    mirroredImageHeight: null,
+    lastSeenAt: new Date().toISOString()
+  });
+
+  return {
+    store,
+    source: {
+      slug: duplicateSource.slug,
+      name: duplicateSource.name,
+      baseUrl: duplicateSource.baseUrl,
+      priority: duplicateSource.priority,
+      isPublicListingSource: true,
+      async fetchListings() {
+        return {
+          gigs: [
+            createGigForSource({
+              sourceSlug: duplicateSource.slug,
+              externalId: duplicateExternalId,
+              sourceUrl: `${duplicateSource.baseUrl}/event`,
+              title: input.duplicateTitle,
+              status: "active",
+              startsAt: input.startsAt,
+              venueName: input.venueName
+            })
+          ],
+          failedCount: 0
+        };
+      }
+    },
+    existingGigId
+  };
+}
+
 describe("executeSourceRun", () => {
   it("does not duplicate canonical gigs or source gigs on rerun", async () => {
     const store = new MemoryGigStore();
@@ -1679,6 +1833,49 @@ describe("executeSourceRun", () => {
     expect(
       [...store.sourceGigs.values()].map((sourceGig) => sourceGig.sourceSlug).sort()
     ).toEqual(["oztix-wa", "the-bird"]);
+  });
+
+  it("reattaches stale duplicates with ticket-status and festival title noise", async () => {
+    const cases = [
+      {
+        canonicalTitle: "Cosmic Jive!",
+        duplicateTitle: "Cosmic Jive! SOLD OUT",
+        sourceSlug: "milk-bar",
+        sourceName: "Milk Bar",
+        sourceBaseUrl: "https://milkbarperth.com.au/gigs/",
+        venueName: "Milk Bar",
+        startsAt: "2026-07-19T05:30:00.000Z"
+      },
+      {
+        canonicalTitle: "BLOOM",
+        duplicateTitle: "BLOOM FESTIVAL 2026",
+        sourceSlug: "the-bird",
+        sourceName: "The Bird",
+        sourceBaseUrl: "https://www.williamstreetbird.com/comingup",
+        venueName: "The Bird",
+        startsAt: "2026-06-27T10:00:00.000Z"
+      }
+    ];
+
+    for (const testCase of cases) {
+      const { store, source, existingGigId } = seedDuplicateReattachmentFixture(testCase);
+
+      expect(
+        areCanonicalTitlesCompatible(testCase.canonicalTitle, testCase.duplicateTitle)
+      ).toBe(true);
+
+      await executeSourceRun(store, source);
+
+      const attachedGigIds = new Set(
+        [...store.sourceGigs.values()].map((sourceGig) => sourceGig.gigId)
+      );
+
+      expect(attachedGigIds).toEqual(new Set([existingGigId]));
+      expect(store.gigs.size).toBe(1);
+      expect(
+        [...store.sourceGigs.values()].map((sourceGig) => sourceGig.sourceSlug).sort()
+      ).toEqual(["canonical-source", testCase.sourceSlug].sort());
+    }
   });
 
   it("prunes stale upcoming source attachments after a clean rerun", async () => {

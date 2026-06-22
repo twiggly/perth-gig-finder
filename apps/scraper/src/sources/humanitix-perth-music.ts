@@ -1248,12 +1248,25 @@ function selectImageUrl(...values: Array<string | string[] | null | undefined>):
   for (const candidate of flattened) {
     const normalized = normalizeUrl(candidate);
 
-    if (normalized) {
+    if (normalized && !isInvalidHumanitixImageUrl(normalized)) {
       return normalized;
     }
   }
 
   return null;
+}
+
+function isInvalidHumanitixImageUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+
+    return (
+      url.hostname === "images.humanitix.com" &&
+      /^\/i\/@(?:seo|small|medium|large|original)(?:-|\.|$)/i.test(url.pathname)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function getTicketUrl(structuredEvent: HumanitixStructuredEvent, sourceUrl: string): string {
