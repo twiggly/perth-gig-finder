@@ -591,18 +591,11 @@ export class SupabaseGigStore implements GigStore {
       return [];
     }
 
-    const sizeByPath = new Map(
-      (await this.listAllStorageImageObjects()).map((object) => [
-        object.path,
-        object.sizeBytes
-      ])
-    );
-
     return expiredOnlyPaths
       .sort((left, right) => left.localeCompare(right))
       .map((path) => ({
         path,
-        sizeBytes: sizeByPath.get(path) ?? 0
+        sizeBytes: 0
       }));
   }
 
