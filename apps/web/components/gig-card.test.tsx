@@ -1,12 +1,34 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MantineProvider } from "@mantine/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { theme } from "@/app/theme";
 import type { GigCardRecord } from "@/lib/gigs";
 
 import { GigCard } from "./gig-card";
+
+vi.mock("next/image", async () => {
+  const React = await import("react");
+
+  return {
+    default: function MockImage({
+      alt,
+      quality: _quality,
+      src,
+      ...props
+    }: React.ImgHTMLAttributes<HTMLImageElement> & {
+      quality?: number;
+      src: string;
+    }) {
+      return React.createElement("img", {
+        ...props,
+        alt,
+        src
+      });
+    }
+  };
+});
 
 function createGig(
   overrides: Partial<GigCardRecord> = {}
@@ -143,6 +165,47 @@ describe("GigCard", () => {
     expect(venueIndex).toBeGreaterThan(contentIndex);
     expect(popoverIndex).toBeGreaterThan(venueIndex);
     expect(firstActionIndex).toBeGreaterThan(popoverIndex);
+  });
+
+  it("marks a renderable poster as eager when it is the likely LCP image", () => {
+    const html = renderToStaticMarkup(
+      <MantineProvider defaultColorScheme="dark" theme={theme}>
+        <GigCard
+          gig={createGig({
+            image_height: 900,
+            image_width: 600,
+            source_image_url: "https://assets.oztix.com.au/poster.jpg"
+          })}
+          isLikelyLcpImage
+          isOpen={false}
+          onClose={() => {}}
+          onToggle={() => {}}
+        />
+      </MantineProvider>
+    );
+
+    expect(html).toContain("gig-card__media-image");
+    expect(html).toContain('loading="eager"');
+  });
+
+  it("does not eagerly load a normal renderable poster", () => {
+    const html = renderToStaticMarkup(
+      <MantineProvider defaultColorScheme="dark" theme={theme}>
+        <GigCard
+          gig={createGig({
+            image_height: 900,
+            image_width: 600,
+            source_image_url: "https://assets.oztix.com.au/poster.jpg"
+          })}
+          isOpen={false}
+          onClose={() => {}}
+          onToggle={() => {}}
+        />
+      </MantineProvider>
+    );
+
+    expect(html).toContain("gig-card__media-image");
+    expect(html).not.toContain('loading="eager"');
   });
 
   it("exposes the action count for one-action cards", () => {

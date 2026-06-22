@@ -1,7 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MantineProvider } from "@mantine/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { theme } from "@/app/theme";
 import type { HomepageDayPayload } from "@/lib/homepage-day-loading";
@@ -9,6 +9,28 @@ import type { GigCardRecord } from "@/lib/gigs";
 import type { DayBrowserPaneState } from "./use-homepage-day-navigation";
 
 import { HomepageDayContent } from "./homepage-day-content";
+
+vi.mock("next/image", async () => {
+  const React = await import("react");
+
+  return {
+    default: function MockImage({
+      alt,
+      quality: _quality,
+      src,
+      ...props
+    }: React.ImgHTMLAttributes<HTMLImageElement> & {
+      quality?: number;
+      src: string;
+    }) {
+      return React.createElement("img", {
+        ...props,
+        alt,
+        src
+      });
+    }
+  };
+});
 
 function createGig(
   overrides: Partial<GigCardRecord> = {}
@@ -36,6 +58,17 @@ function createGig(
     status: "active",
     ...overrides
   };
+}
+
+function createGigWithImage(
+  overrides: Partial<GigCardRecord> = {}
+): GigCardRecord {
+  return createGig({
+    image_height: 900,
+    image_width: 600,
+    source_image_url: "https://assets.oztix.com.au/poster.jpg",
+    ...overrides
+  });
 }
 
 function createDay(
@@ -116,6 +149,101 @@ describe("HomepageDayContent", () => {
     expect(html).not.toContain('data-scroll-reserve-target="true"');
     expect(html).not.toContain("day-browser__scroll-inset");
     expect(html).toContain("ALT//THURSDAYS");
+  });
+
+  it("eagerly loads only the first renderable poster in the active pane", () => {
+    const html = renderContent({
+      days: [
+        createDay({
+          items: [
+            createGigWithImage({
+              id: "gig-1",
+              title: "First Poster"
+            }),
+            createGigWithImage({
+              id: "gig-2",
+              title: "Second Poster",
+              source_image_url: "https://assets.oztix.com.au/poster-2.jpg"
+            })
+          ]
+        })
+      ]
+    });
+
+    expect(html.match(/loading="eager"/g)).toHaveLength(1);
+    expect(html).toMatch(
+      /<img(?=[^>]*alt="First Poster poster")(?=[^>]*loading="eager")[^>]*>/
+    );
+    expect(html).not.toMatch(
+      /<img(?=[^>]*alt="Second Poster poster")(?=[^>]*loading="eager")[^>]*>/
+    );
+  });
+
+  it("does not eagerly load posters in transition panes", () => {
+    const today = createDay({
+      items: [
+        createGigWithImage({
+          id: "gig-1",
+          title: "Today Poster"
+        })
+      ]
+    });
+    const tomorrow = createDay({
+      dateKey: "2026-04-30",
+      heading: "Thu, Apr 30th",
+      items: [
+        createGigWithImage({
+          id: "gig-2",
+          title: "Tomorrow Poster",
+          source_image_url: "https://assets.oztix.com.au/poster-2.jpg"
+        })
+      ]
+    });
+    const html = renderContent({
+      days: [today, tomorrow],
+      renderedContentPanes: [
+        {
+          dateKey: "2026-04-29",
+          motionRole: "from",
+          phase: "animating"
+        },
+        {
+          dateKey: "2026-04-30",
+          motionRole: "to",
+          phase: "animating"
+        }
+      ],
+      transitionDirection: "next"
+    });
+
+    expect(html).toContain("Today Poster");
+    expect(html).toContain("Tomorrow Poster");
+    expect(html).not.toContain('loading="eager"');
+  });
+
+  it("eagerly loads the first later renderable poster when the first gig has no image", () => {
+    const html = renderContent({
+      days: [
+        createDay({
+          items: [
+            createGig({
+              id: "gig-1",
+              title: "No Poster"
+            }),
+            createGigWithImage({
+              id: "gig-2",
+              title: "Later Poster"
+            })
+          ]
+        })
+      ]
+    });
+
+    expect(html.match(/loading="eager"/g)).toHaveLength(1);
+    expect(html).toMatch(
+      /<img(?=[^>]*alt="Later Poster poster")(?=[^>]*loading="eager")[^>]*>/
+    );
+    expect(html).not.toMatch(/alt="No Poster poster"/);
   });
 
   it("renders an active empty grid for days with no gigs", () => {

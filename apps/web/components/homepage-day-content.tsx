@@ -4,6 +4,10 @@ import React, { type CSSProperties } from "react";
 import { Box } from "@mantine/core";
 
 import { GigCard } from "@/components/gig-card";
+import {
+  getRenderableGigImageUrl,
+  hasRenderableGigImage
+} from "@/lib/gigs";
 import type { HomepageDayPayload } from "@/lib/homepage-day-loading";
 import type { SwipeDirection } from "@/lib/homepage-dates";
 import type { DayBrowserPaneState } from "./use-homepage-day-navigation";
@@ -73,6 +77,14 @@ export function HomepageDayContent({
             return null;
           }
 
+          const likelyLcpGigId = isActivePane
+            ? day.items.find(
+                (gig) =>
+                  hasRenderableGigImage(gig) &&
+                  Boolean(getRenderableGigImageUrl(gig))
+              )?.id ?? null
+            : null;
+
           return (
             <Box
               aria-hidden={motionRole === "from"}
@@ -107,6 +119,7 @@ export function HomepageDayContent({
                   {day.items.map((gig) => (
                     <GigCard
                       gig={gig}
+                      isLikelyLcpImage={gig.id === likelyLcpGigId}
                       isOpen={openGigId === gig.id}
                       key={gig.id}
                       onClose={() => onCloseGig(gig.id)}
