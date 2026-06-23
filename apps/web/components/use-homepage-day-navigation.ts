@@ -28,9 +28,7 @@ import {
   type HomepageDayTransitionLifecyclePhase
 } from "./homepage-day-transition-lifecycle";
 
-export interface HomepageDayTransition extends DayTransition {
-  startedWithStickyHeader: boolean;
-}
+export type HomepageDayTransition = DayTransition;
 
 export interface BrowserTransition extends HomepageDayTransition {
   phase: "preparing" | "animating" | "settling";
@@ -76,7 +74,7 @@ interface UseHomepageDayNavigationOptions {
   initialDays: HomepageDayPayload[];
   isLoadingDay: boolean;
   onDateChangeCancel?: () => void;
-  onDateChangeStart?: (nextDateKey: string) => boolean | void;
+  onDateChangeStart?: (nextDateKey: string) => void;
   resetAdjacentImagePreloads: () => void;
   resetDayLoadError: () => void;
   resetDayWheelGesture: () => void;
@@ -145,8 +143,6 @@ function readPendingHomepageClientTransition(): HomepageDayTransition | null {
   return {
     direction: storedPendingTransition.direction,
     fromDateKey: storedPendingTransition.fromDateKey,
-    startedWithStickyHeader:
-      storedPendingTransition.startedWithStickyHeader === true,
     toDateKey: storedPendingTransition.toDateKey
   };
 }
@@ -173,8 +169,6 @@ function readStoredPendingHomepageClientTransition():
         ? {
             direction: maybeTransition.direction,
             fromDateKey: maybeTransition.fromDateKey,
-            startedWithStickyHeader:
-              maybeTransition.startedWithStickyHeader === true,
             timestamp: maybeTransition.timestamp,
             toDateKey: maybeTransition.toDateKey
           }
@@ -680,10 +674,9 @@ export function useHomepageDayNavigation({
       return false;
     }
 
-    const startedWithStickyHeader =
-      nextDateKey !== activeDateKey
-        ? onDateChangeStart?.(nextDateKey) === true
-        : false;
+    if (nextDateKey !== activeDateKey) {
+      onDateChangeStart?.(nextDateKey);
+    }
 
     closeOpenGig();
     closeCalendar();
@@ -709,12 +702,7 @@ export function useHomepageDayNavigation({
     const requestedTransition =
       options.transition ??
       getRequestedDayTransition(availableDateKeys, activeDateKey, nextDateKey);
-    const requestedBrowserTransition = requestedTransition
-      ? {
-          ...requestedTransition,
-          startedWithStickyHeader
-        }
-      : null;
+    const requestedBrowserTransition = requestedTransition;
 
     if (options.replaceUrl) {
       setPendingClientDateKey(nextDateKey);

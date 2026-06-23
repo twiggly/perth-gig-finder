@@ -25,10 +25,6 @@ import {
 import { useHomepageAdjacentImagePreload } from "./use-homepage-adjacent-image-preload";
 import { HomepageDayCalendarDropdown } from "./homepage-day-calendar-dropdown";
 import { HomepageDayContent } from "./homepage-day-content";
-import {
-  isHomepageDayTransitionActive,
-  type HomepageDayTransitionLifecyclePhase
-} from "./homepage-day-transition-lifecycle";
 import { useHomepageDayCache } from "./use-homepage-day-cache";
 import { useHomepageDayGestures } from "./use-homepage-day-gestures";
 import { useHomepageDayNavigation } from "./use-homepage-day-navigation";
@@ -45,24 +41,6 @@ interface HomepageDayBrowserProps {
 
 const LOCAL_PREVIEW_ASSET_REVISION =
   process.env.NEXT_PUBLIC_LOCAL_PREVIEW_ASSET_REVISION ?? "0";
-
-export function shouldRenderHomepageDateHeaderStuck({
-  isDateHeaderVisuallyStuck,
-  isStickyScrollRestorationVisualHoldActive,
-  startedWithStickyHeader,
-  transitionPhase
-}: {
-  isDateHeaderVisuallyStuck: boolean;
-  isStickyScrollRestorationVisualHoldActive: boolean;
-  startedWithStickyHeader: boolean;
-  transitionPhase: HomepageDayTransitionLifecyclePhase;
-}) {
-  return (
-    isDateHeaderVisuallyStuck ||
-    isStickyScrollRestorationVisualHoldActive ||
-    (startedWithStickyHeader && isHomepageDayTransitionActive(transitionPhase))
-  );
-}
 
 export function HomepageDayBrowser({
   availableDays,
@@ -131,7 +109,6 @@ export function HomepageDayBrowser({
     isLoadingDay,
     onDateChangeCancel: () => {
       clearDateChangeLayoutRef.current();
-      clearDateHeaderTransitionStuckHold();
     },
     onDateChangeStart: (nextDateKey) =>
       captureDateChangeLayoutSynchronously(nextDateKey),
@@ -168,15 +145,8 @@ export function HomepageDayBrowser({
     onNavigateDate: handleNavigateDate
   });
   resetDayWheelGestureRef.current = resetDayWheelGesture;
-  const {
-    captureDateHeaderTransitionStuckHold,
-    clearDateHeaderTransitionStuckHold,
-    isDateHeaderStuck,
-    isDateHeaderVisuallyStuck,
-    stickySentinelRef
-  } = useHomepageDayStickyHeader({
-    dateTransitionPhase: transitionPhase
-  });
+  const { isDateHeaderStuck, stickySentinelRef } =
+    useHomepageDayStickyHeader();
   const { resetAdjacentImagePreloads } = useHomepageAdjacentImagePreload({
     activeDateKey,
     loadedDayMap,
@@ -187,7 +157,6 @@ export function HomepageDayBrowser({
   const {
     captureDateChangeLayout,
     clearDateChangeLayout,
-    isStickyScrollRestorationVisualHoldActive,
     scrollAlignmentDateKey,
     scrollAlignmentOffset,
     scrollCarryoverDateKey,
@@ -223,12 +192,6 @@ export function HomepageDayBrowser({
       scrollReserveHeight
     ]
   );
-  const isDateHeaderRenderedStuck = shouldRenderHomepageDateHeaderStuck({
-    isDateHeaderVisuallyStuck,
-    isStickyScrollRestorationVisualHoldActive,
-    startedWithStickyHeader: transition?.startedWithStickyHeader === true,
-    transitionPhase
-  });
 
   useEffect(() => {
     if (typeof window === "undefined" || !activeDateKey) {
@@ -301,36 +264,15 @@ export function HomepageDayBrowser({
 
     if (!didNavigate) {
       clearDateChangeLayout();
-      clearDateHeaderTransitionStuckHold();
     }
 
     return didNavigate;
   }
 
-  function isDateHeaderStuckAtTransitionStart() {
-    if (typeof window !== "undefined" && window.scrollY <= 0) {
-      return false;
-    }
-
-    const stickySentinelTop =
-      stickySentinelRef.current?.getBoundingClientRect().top ?? null;
-
-    return (
-      isDateHeaderStuck ||
-      (typeof stickySentinelTop === "number" && stickySentinelTop < 0)
-    );
-  }
-
   function captureDateChangeLayoutSynchronously(targetDateKey?: string) {
-    let startedWithStickyHeader = false;
-
     flushSync(() => {
-      startedWithStickyHeader = isDateHeaderStuckAtTransitionStart();
-      captureDateHeaderTransitionStuckHold();
       captureDateChangeLayoutRef.current(targetDateKey);
     });
-
-    return startedWithStickyHeader;
   }
 
   if (!activeDay) {
@@ -351,98 +293,91 @@ export function HomepageDayBrowser({
         className="day-browser__sticky-sentinel"
         ref={stickySentinelRef}
       />
-      <Box className="day-browser__header-shell">
-        <Box
-          className="day-browser__header"
-          data-sticky-restoring={
-            isStickyScrollRestorationVisualHoldActive ? "true" : undefined
-          }
-          data-stuck={isDateHeaderRenderedStuck ? "true" : undefined}
-          ref={dateHeaderRef}
+      <Box
+        className="day-browser__header"
+        data-stuck={isDateHeaderStuck ? "true" : undefined}
+        ref={dateHeaderRef}
+      >
+        <ActionIcon
+          aria-label="Previous date"
+          className="day-browser__arrow"
+          disabled={!previousDateKey || isNavigationLocked}
+          onClick={() => handleNavigateDate("previous")}
+          type="button"
+          variant="subtle"
         >
-          <ActionIcon
-            aria-label="Previous date"
-            className="day-browser__arrow"
-            disabled={!previousDateKey || isNavigationLocked}
-            onClick={() => handleNavigateDate("previous")}
-            type="button"
-            variant="subtle"
-          >
-            <span aria-hidden="true">&lt;</span>
-          </ActionIcon>
-          <Popover
-            middlewares={{ flip: true, shift: true }}
-            onChange={setIsCalendarOpen}
-            opened={isCalendarOpen}
-            position="bottom"
-            shadow="xl"
-            width="auto"
-            withArrow
-          >
-            <Popover.Target>
-              <UnstyledButton
-                aria-expanded={isCalendarOpen}
-                aria-haspopup="dialog"
-                aria-label={`Choose date, currently ${activeDay.heading}`}
-                className="day-browser__heading-button"
-                disabled={isNavigationLocked || !calendarMonth}
-                onClick={() => setIsCalendarOpen((current) => !current)}
-                type="button"
-              >
-                <span className="sr-only">{activeDay.heading}</span>
-                <Box className="day-browser__heading-viewport">
-                  <Box
-                    className="day-browser__heading-track"
-                    data-direction={transition?.direction}
-                    style={headingTrackStyle}
-                  >
-                    {renderedHeadingPanes.map(
-                      ({ dateKey, motionRole, phase }) => (
-                        <Box
-                          className="day-browser__heading-pane"
-                          data-motion-role={motionRole}
-                          data-phase={phase ?? undefined}
-                          key={`heading-${dateKey}`}
-                        >
-                          <span className="day-browser__heading-title">
-                            {loadedDayMap.get(dateKey)?.heading ??
-                              availableDayMap.get(dateKey)?.heading ??
-                              activeDay.heading}
-                          </span>
-                        </Box>
-                      )
-                    )}
-                  </Box>
+          <span aria-hidden="true">&lt;</span>
+        </ActionIcon>
+        <Popover
+          middlewares={{ flip: true, shift: true }}
+          onChange={setIsCalendarOpen}
+          opened={isCalendarOpen}
+          position="bottom"
+          shadow="xl"
+          width="auto"
+          withArrow
+        >
+          <Popover.Target>
+            <UnstyledButton
+              aria-expanded={isCalendarOpen}
+              aria-haspopup="dialog"
+              aria-label={`Choose date, currently ${activeDay.heading}`}
+              className="day-browser__heading-button"
+              disabled={isNavigationLocked || !calendarMonth}
+              onClick={() => setIsCalendarOpen((current) => !current)}
+              type="button"
+            >
+              <span className="sr-only">{activeDay.heading}</span>
+              <Box className="day-browser__heading-viewport">
+                <Box
+                  className="day-browser__heading-track"
+                  data-direction={transition?.direction}
+                  style={headingTrackStyle}
+                >
+                  {renderedHeadingPanes.map(({ dateKey, motionRole, phase }) => (
+                    <Box
+                      className="day-browser__heading-pane"
+                      data-motion-role={motionRole}
+                      data-phase={phase ?? undefined}
+                      key={`heading-${dateKey}`}
+                    >
+                      <span className="day-browser__heading-title">
+                        {loadedDayMap.get(dateKey)?.heading ??
+                          availableDayMap.get(dateKey)?.heading ??
+                          activeDay.heading}
+                      </span>
+                    </Box>
+                  ))}
                 </Box>
-              </UnstyledButton>
-            </Popover.Target>
-            <HomepageDayCalendarDropdown
-              calendarGestureHandlers={calendarGestureHandlers}
-              calendarMonth={calendarMonth}
-              onNextMonth={() => {
-                if (calendarMonth?.nextMonthKey) {
-                  setCalendarMonthKey(calendarMonth.nextMonthKey);
-                }
-              }}
-              onPreviousMonth={() => {
-                if (calendarMonth?.previousMonthKey) {
-                  setCalendarMonthKey(calendarMonth.previousMonthKey);
-                }
-              }}
-              onSelectDate={handleCalendarDateSelect}
-            />
-          </Popover>
-          <ActionIcon
-            aria-label="Next date"
-            className="day-browser__arrow"
-            disabled={!nextDateKey || isNavigationLocked}
-            onClick={() => handleNavigateDate("next")}
-            type="button"
-            variant="subtle"
-          >
-            <span aria-hidden="true">&gt;</span>
-          </ActionIcon>
-        </Box>
+              </Box>
+            </UnstyledButton>
+          </Popover.Target>
+          <HomepageDayCalendarDropdown
+            calendarGestureHandlers={calendarGestureHandlers}
+            calendarMonth={calendarMonth}
+            onNextMonth={() => {
+              if (calendarMonth?.nextMonthKey) {
+                setCalendarMonthKey(calendarMonth.nextMonthKey);
+              }
+            }}
+            onPreviousMonth={() => {
+              if (calendarMonth?.previousMonthKey) {
+                setCalendarMonthKey(calendarMonth.previousMonthKey);
+              }
+            }}
+            onSelectDate={handleCalendarDateSelect}
+          />
+        </Popover>
+        <ActionIcon
+          aria-label="Next date"
+          className="day-browser__arrow"
+          disabled={!nextDateKey || isNavigationLocked}
+          onClick={() => handleNavigateDate("next")}
+          type="button"
+          variant="subtle"
+        >
+          <span aria-hidden="true">&gt;</span>
+        </ActionIcon>
       </Box>
       {isLoadingDay ? (
         <span className="sr-only" role="status">
