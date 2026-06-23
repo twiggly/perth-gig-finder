@@ -4,7 +4,7 @@ import React from "react";
 
 export function SiteHeaderBrand() {
   return (
-    <Link className="site-header__brand-link" href="/">
+    <Link className="site-header__brand-link" href="/" prefetch>
       <Image
         alt=""
         className="site-header__logo-mark"

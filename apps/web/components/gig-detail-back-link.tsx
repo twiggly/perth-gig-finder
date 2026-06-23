@@ -1,12 +1,13 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import {
   consumeCurrentGigDetailReturnState,
-  isPlainGigDetailNavigationClick
+  isPlainGigDetailNavigationClick,
+  readCurrentGigDetailReturnState
 } from "@/lib/gig-detail-return";
 
 interface GigDetailBackLinkProps {
@@ -19,6 +20,11 @@ export function GigDetailBackLink({
   slug
 }: GigDetailBackLinkProps) {
   const router = useRouter();
+  const [returnHref, setReturnHref] = useState<string | null>(null);
+
+  useEffect(() => {
+    setReturnHref(readCurrentGigDetailReturnState(slug)?.href ?? null);
+  }, [slug]);
 
   function handleClick(event: React.MouseEvent<HTMLAnchorElement>) {
     if (
@@ -49,8 +55,9 @@ export function GigDetailBackLink({
     <Link
       aria-label="Back to gigs"
       className="gig-detail__back"
-      href={fallbackHref}
+      href={returnHref ?? fallbackHref}
       onClick={handleClick}
+      prefetch
     >
       <span aria-hidden="true">←</span>
     </Link>

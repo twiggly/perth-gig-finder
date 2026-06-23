@@ -224,6 +224,23 @@ export function consumeCurrentGigDetailReturnState(
   }
 }
 
+export function readCurrentGigDetailReturnState(
+  slug: string
+): GigDetailReturnState | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    return readValidGigDetailReturnState({
+      slug,
+      storage: window.sessionStorage
+    });
+  } catch {
+    return null;
+  }
+}
+
 function isValidHomepageReturnHref(href: string): boolean {
   if (!href.startsWith("/") || href.startsWith("//") || href.includes("\\")) {
     return false;

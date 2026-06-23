@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildGigDetailFallbackHref,
@@ -7,6 +7,7 @@ import {
   GIG_DETAIL_RETURN_STATE_MAX_AGE_MS,
   GIG_DETAIL_RETURN_STATE_STORAGE_KEY,
   isPlainGigDetailNavigationClick,
+  readCurrentGigDetailReturnState,
   readValidGigDetailReturnState,
   writeGigDetailReturnState,
   type GigDetailReturnStorage
@@ -27,6 +28,10 @@ class MemoryStorage implements GigDetailReturnStorage {
     this.values.set(key, value);
   }
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function createPlainClick(overrides = {}) {
   return {
@@ -89,6 +94,30 @@ describe("gig detail return state", () => {
         storage
       })
     ).toBeNull();
+  });
+
+  it("reads current browser return state without consuming it", () => {
+    const storage = new MemoryStorage();
+
+    writeGigDetailReturnState({
+      href: "/?date=2026-06-14&q=jazz",
+      nowMs: Date.now(),
+      slug: "opm-acoustic-night",
+      storage
+    });
+    vi.stubGlobal("window", {
+      sessionStorage: storage
+    });
+
+    expect(readCurrentGigDetailReturnState("opm-acoustic-night")?.href).toBe(
+      "/?date=2026-06-14&q=jazz"
+    );
+    expect(
+      readValidGigDetailReturnState({
+        slug: "opm-acoustic-night",
+        storage
+      })?.href
+    ).toBe("/?date=2026-06-14&q=jazz");
   });
 
   it("rejects stale and wrong-slug return state", () => {
