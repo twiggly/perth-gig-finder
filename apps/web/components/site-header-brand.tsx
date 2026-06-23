@@ -1,9 +1,10 @@
 import Image from "next/image";
+import Link from "next/link";
 import React from "react";
 
 export function SiteHeaderBrand() {
   return (
-    <>
+    <Link className="site-header__brand-link" href="/">
       <Image
         alt=""
         className="site-header__logo-mark"
@@ -15,6 +16,6 @@ export function SiteHeaderBrand() {
       <h1 className="site-header__title">
         <span className="site-header__title-text">Gig Radar</span>
       </h1>
-    </>
+    </Link>
   );
 }

@@ -8,6 +8,7 @@ describe("SiteHeaderBrand", () => {
   it("renders the Gig Radar heading with the logo mark", () => {
     const html = renderToStaticMarkup(<SiteHeaderBrand />);
 
+    expect(html).toContain('<a class="site-header__brand-link" href="/">');
     expect(html).toContain("Gig Radar");
     expect(html).toContain("site-header__logo-mark");
     expect(html).toContain('src="/logo.svg"');
