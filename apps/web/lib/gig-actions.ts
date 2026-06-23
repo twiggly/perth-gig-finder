@@ -1,3 +1,5 @@
+import { normalizeAbsoluteHttpUrl } from "@perth-gig-finder/shared";
+
 import type { GigCardRecord } from "./gigs";
 
 export interface GigAction {
@@ -72,9 +74,13 @@ function getBuyTicketsLabel(ticketUrl: string, venueSlug: string): string {
 }
 
 function getVenueListingUrl(
-  sourceUrl: string,
+  sourceUrl: string | null,
   venueWebsiteUrl: string
 ): string {
+  if (!sourceUrl) {
+    return venueWebsiteUrl;
+  }
+
   const sourceHostname = getHostname(sourceUrl);
   const venueHostname = getHostname(venueWebsiteUrl);
 
@@ -101,18 +107,21 @@ export function getGigActions(
   >
 ): GigAction[] {
   const actions: GigAction[] = [];
+  const ticketUrl = normalizeAbsoluteHttpUrl(gig.ticket_url);
+  const venueWebsiteUrl = normalizeAbsoluteHttpUrl(gig.venue_website_url);
+  const sourceUrl = normalizeAbsoluteHttpUrl(gig.source_url);
 
-  if (gig.ticket_url) {
+  if (ticketUrl) {
     actions.push({
-      href: gig.ticket_url,
+      href: ticketUrl,
       key: "tickets",
-      label: getBuyTicketsLabel(gig.ticket_url, gig.venue_slug)
+      label: getBuyTicketsLabel(ticketUrl, gig.venue_slug)
     });
   }
 
-  if (gig.venue_website_url) {
+  if (venueWebsiteUrl) {
     actions.push({
-      href: getVenueListingUrl(gig.source_url, gig.venue_website_url),
+      href: getVenueListingUrl(sourceUrl, venueWebsiteUrl),
       key: "venue",
       label: `Listing @ ${getVenueListingLabelName(gig.venue_slug, gig.venue_name)}`
     });

@@ -31,7 +31,7 @@ describe("getGigActions", () => {
         label: "Tickets @ oztix"
       },
       {
-        href: "https://venue.example.com",
+        href: "https://venue.example.com/",
         key: "venue",
         label: "Listing @ Test Venue"
       }
@@ -84,8 +84,7 @@ describe("getGigActions", () => {
 
   it.each([
     "https://tickets.example.com/show",
-    "https://www.ellingtonjazz.com.au/tc-events/show",
-    "not a url"
+    "https://www.ellingtonjazz.com.au/tc-events/show"
   ])(
     "falls back to a generic buy label for %s",
     (ticketUrl) => {
@@ -104,6 +103,23 @@ describe("getGigActions", () => {
       ]);
     }
   );
+
+  it.each([
+    "not a url",
+    "/tickets/show",
+    "javascript:alert(1)",
+    "data:text/html,<p>tickets</p>",
+    "file:///tmp/tickets",
+    "https://user@example.com/tickets"
+  ])("omits unsafe or malformed ticket URLs: %s", (ticketUrl) => {
+    expect(
+      getGigActions(
+        createGigActionInput({
+          ticket_url: ticketUrl
+        })
+      )
+    ).toEqual([]);
+  });
 
   it("labels Ellington ticket links by venue", () => {
     const ticketUrl = "https://www.ellingtonjazz.com.au/tc-events/show";
@@ -201,6 +217,43 @@ describe("getGigActions", () => {
         label: "Listing @ The Bird"
       }
     ]);
+  });
+
+  it("does not let an unsafe source URL replace a safe venue homepage", () => {
+    expect(
+      getGigActions(
+        createGigActionInput({
+          ticket_url: null,
+          source_url: "javascript:alert(1)",
+          venue_name: "The Bird",
+          venue_website_url: "https://www.williamstreetbird.com/"
+        })
+      )
+    ).toEqual([
+      {
+        href: "https://www.williamstreetbird.com/",
+        key: "venue",
+        label: "Listing @ The Bird"
+      }
+    ]);
+  });
+
+  it.each([
+    "not a url",
+    "/venue",
+    "javascript:alert(1)",
+    "data:text/html,<p>venue</p>",
+    "file:///tmp/venue",
+    "https://user@example.com/venue"
+  ])("omits unsafe or malformed venue URLs: %s", (venueWebsiteUrl) => {
+    expect(
+      getGigActions(
+        createGigActionInput({
+          ticket_url: null,
+          venue_website_url: venueWebsiteUrl
+        })
+      )
+    ).toEqual([]);
   });
 
   it("returns no actions when neither link exists", () => {
