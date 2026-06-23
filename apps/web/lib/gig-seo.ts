@@ -3,6 +3,7 @@ import type { GigStatus } from "@perth-gig-finder/shared";
 
 import { formatGigCardArtists } from "./gig-card-artists";
 import { getRenderableGigImageUrl, type GigCardRecord } from "./gigs";
+import { serializeJsonLd } from "./json-ld";
 import {
   buildGigDetailPath,
   buildGigDetailUrl,
@@ -190,5 +191,5 @@ export function buildGigEventStructuredData(gig: GigCardRecord) {
 }
 
 export function buildGigEventStructuredDataJson(gig: GigCardRecord): string {
-  return JSON.stringify(buildGigEventStructuredData(gig));
+  return serializeJsonLd(buildGigEventStructuredData(gig));
 }

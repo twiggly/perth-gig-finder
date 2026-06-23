@@ -5,6 +5,7 @@ import {
   buildRobotsConfig,
   buildSitemap,
   buildSiteStructuredData,
+  buildSiteStructuredDataJson,
   SITE_LOGO_URL,
   SITE_SEARCH_URL_TEMPLATE,
   SITE_SITEMAP_URL,
@@ -73,5 +74,13 @@ describe("SEO helpers", () => {
         url: SITE_URL
       })
     );
+  });
+
+  it("serializes site structured data safely for JSON-LD script injection", () => {
+    const serialized = buildSiteStructuredDataJson();
+
+    expect(serialized).not.toContain("</script>");
+    expect(serialized).not.toContain("<script");
+    expect(JSON.parse(serialized)).toEqual(buildSiteStructuredData());
   });
 });
