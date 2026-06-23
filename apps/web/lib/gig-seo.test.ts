@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { GigCardRecord } from "./gigs";
 import {
   buildGigEventStructuredData,
+  buildGigEventStructuredDataJson,
   buildGigMetadata,
   buildGigMetadataDescription,
   formatPerthIsoWithOffset
@@ -144,5 +145,22 @@ describe("gig SEO helpers", () => {
     });
     expect(event).not.toHaveProperty("offers");
     expect(event).not.toHaveProperty("performer");
+  });
+
+  it("serializes gig Event JSON-LD safely for scraper-controlled strings", () => {
+    const gig = createGig({
+      artist_names: ["Safe\u2028Artist"],
+      title: "Bad </script><script>alert('xss')</script>",
+      venue_address: "1 Test Lane\u2029Northbridge",
+      venue_name: "Venue < Name"
+    });
+    const serialized = buildGigEventStructuredDataJson(gig);
+
+    expect(serialized).not.toContain("</script>");
+    expect(serialized).not.toContain("<script");
+    expect(serialized).toContain("\\u003c");
+    expect(serialized).toContain("\\u2028");
+    expect(serialized).toContain("\\u2029");
+    expect(JSON.parse(serialized)).toEqual(buildGigEventStructuredData(gig));
   });
 });

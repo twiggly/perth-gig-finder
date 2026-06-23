@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 
 import type { GigSitemapRecord } from "./gigs";
+import { serializeJsonLd } from "./json-ld";
 
 export const SITE_URL = "https://gigradar.com.au";
 export const SITE_TITLE = "Gig Radar";
@@ -81,5 +82,5 @@ export function buildSiteStructuredData() {
 }
 
 export function buildSiteStructuredDataJson(): string {
-  return JSON.stringify(buildSiteStructuredData());
+  return serializeJsonLd(buildSiteStructuredData());
 }
