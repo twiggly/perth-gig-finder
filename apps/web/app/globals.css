@@ -372,9 +372,9 @@ code {
   place-items: center;
   width: 2.95rem;
   height: 2.95rem;
-  border: 1px solid var(--soft-border);
+  border: 1px solid transparent;
   border-radius: 999px;
-  background: var(--soft-fill);
+  background: transparent;
   color: var(--subtle-text);
 }
 
@@ -383,17 +383,21 @@ code {
   cursor: pointer;
   transition:
     background-color 160ms ease,
-    border-color 160ms ease,
+    box-shadow 160ms ease,
     color 160ms ease;
 }
 
 .site-header__theme-toggle:hover,
-.site-header__theme-toggle:focus-visible,
-.site-header__profile:hover,
-.site-header__profile:focus-visible {
-  border-color: var(--control-focus-border);
-  background: var(--control-bg-hover);
+.site-header__profile:hover {
+  background: var(--soft-fill);
   color: var(--text);
+}
+
+.site-header__theme-toggle:focus-visible,
+.site-header__profile:focus-visible {
+  background: var(--soft-fill);
+  color: var(--text);
+  box-shadow: 0 0 0 2px var(--control-focus-border);
   outline: none;
 }
 
