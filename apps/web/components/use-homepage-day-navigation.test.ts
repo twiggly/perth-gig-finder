@@ -30,7 +30,6 @@ describe("buildHomepageDayTransitionPanes", () => {
       direction: "next",
       fromDateKey: "2026-04-29",
       phase: "animating",
-      startedWithStickyHeader: false,
       toDateKey: "2026-04-30"
     };
 
@@ -53,7 +52,6 @@ describe("buildHomepageDayTransitionPanes", () => {
       direction: "next",
       fromDateKey: "2026-04-29",
       phase: "animating",
-      startedWithStickyHeader: true,
       toDateKey: "2026-04-30"
     };
     const completion = completeHomepageDayTransition(
@@ -150,7 +148,6 @@ describe("buildHomepageDayTransitionPanes", () => {
       direction: "next",
       fromDateKey: "2026-04-29",
       phase: "animating",
-      startedWithStickyHeader: false,
       toDateKey: "2026-04-30"
     };
 
@@ -176,7 +173,6 @@ describe("buildHomepageDayTransitionPanes", () => {
         pendingTransition: {
           direction: "next",
           fromDateKey: "2026-04-29",
-          startedWithStickyHeader: true,
           toDateKey: "2026-04-30"
         },
         prefersReducedMotion: false
@@ -187,7 +183,6 @@ describe("buildHomepageDayTransitionPanes", () => {
           direction: "next",
           fromDateKey: "2026-04-29",
           phase: "preparing",
-          startedWithStickyHeader: true,
           toDateKey: "2026-04-30"
         }
     });
@@ -200,7 +195,6 @@ describe("buildHomepageDayTransitionPanes", () => {
         pendingTransition: {
           direction: "next",
           fromDateKey: "2026-04-29",
-          startedWithStickyHeader: true,
           toDateKey: "2026-04-30"
         },
         prefersReducedMotion: true

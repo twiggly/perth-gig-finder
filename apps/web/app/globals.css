@@ -883,61 +883,42 @@ body[data-filter-dropdown-open="true"] .date-pills {
   pointer-events: none;
 }
 
-.day-browser__header-shell {
-  position: relative;
-  z-index: 16;
-  width: min(100%, 32rem);
-  min-height: calc(3.2rem + 0.9rem);
-  margin: 0 auto;
-}
-
 .day-browser__header {
-  --day-browser-header-pill-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 16;
   display: grid;
   grid-template-columns: 3.2rem minmax(0, 1fr) 3.2rem;
   align-items: center;
   gap: 0.8rem;
-  width: 100%;
+  width: min(100%, 32rem);
   margin: 0 auto;
   padding: 0.45rem 0;
   border-radius: 999px;
-  background-color: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow:
-    0 18px 42px rgba(0, 0, 0, 0),
-    inset 0 0 0 1px transparent;
   isolation: isolate;
-  transition:
-    background-color 220ms var(--day-browser-header-pill-ease),
-    box-shadow 220ms var(--day-browser-header-pill-ease),
-    padding 220ms var(--day-browser-header-pill-ease);
+  transition: padding 180ms ease;
+}
+
+.day-browser__header::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--page-bg-fallback) 86%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
 }
 
 .day-browser__header[data-stuck="true"] {
-  position: fixed;
-  top: 0;
-  right: 0;
-  left: 0;
-  z-index: 16;
-  width: min(calc(100vw - 2rem), 32rem);
   padding-inline: 0.45rem;
-  background-color: color-mix(
-    in srgb,
-    var(--page-bg-fallback) 86%,
-    transparent
-  );
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow:
-    0 18px 42px rgba(0, 0, 0, 0.14),
-    inset 0 0 0 1px var(--faint-border);
 }
 
-.day-browser__header[data-sticky-restoring="true"],
-.day-browser__header[data-sticky-restoring="true"] {
-  transition: none;
+.day-browser__header[data-stuck="true"]::before {
+  opacity: 1;
 }
 
 .day-browser__heading-viewport,
@@ -1887,16 +1868,9 @@ body[data-filter-dropdown-open="true"] .date-pills {
     padding-inline: 0.4rem;
   }
 
-  .day-browser__header-shell {
-    width: min(100%, 28rem);
-  }
-
   .day-browser__header {
     gap: 0.6rem;
-  }
-
-  .day-browser__header[data-stuck="true"] {
-    width: min(calc(100vw - 2rem), 28rem);
+    width: min(100%, 28rem);
   }
 
   .gig-card {
@@ -1944,18 +1918,10 @@ body[data-filter-dropdown-open="true"] .date-pills {
     border-radius: 1rem;
   }
 
-  .day-browser__header-shell {
-    width: 100%;
-    min-height: calc(2.85rem + 0.9rem);
-  }
-
   .day-browser__header {
     gap: 0.5rem;
     grid-template-columns: 2.85rem minmax(0, 1fr) 2.85rem;
-  }
-
-  .day-browser__header[data-stuck="true"] {
-    width: calc(100vw - 0.85rem);
+    width: 100%;
   }
 
   .day-browser__heading-title {
