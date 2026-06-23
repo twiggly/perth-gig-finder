@@ -3,6 +3,8 @@ import sharp from "sharp";
 
 import {
   buildMirroredImagePath,
+  type ImageHostResolver,
+  IMAGE_MIRROR_MAX_REDIRECTS,
   IMAGE_MIRROR_MAX_BYTES,
   IMAGE_MIRROR_SOURCE_MAX_BYTES,
   mirrorSourceImage,
@@ -44,6 +46,19 @@ async function createPngBuffer(width: number, height: number): Promise<Buffer> {
   })
     .png()
     .toBuffer();
+}
+
+function createPublicImageHostResolver(): ImageHostResolver {
+  return vi.fn(async () => ["93.184.216.34"]);
+}
+
+function mirrorSourceImageForTest(
+  input: Parameters<typeof mirrorSourceImage>[0]
+) {
+  return mirrorSourceImage({
+    resolveHostname: createPublicImageHostResolver(),
+    ...input
+  });
 }
 
 async function createLargePatternedPngBuffer(input: {
@@ -230,6 +245,133 @@ describe("image mirroring", () => {
     ).toBe(true);
   });
 
+  it.each([
+    ["unsupported scheme", "ftp://images.example.com/poster.png"],
+    ["credentials", "https://user:pass@images.example.com/poster.png"],
+    ["localhost", "https://localhost/poster.png"],
+    ["private IPv4", "https://10.0.0.1/poster.png"],
+    ["private IPv6", "https://[::1]/poster.png"]
+  ])("rejects unsafe image URLs before fetch: %s", async (_label, sourceImageUrl) => {
+    const upload = vi.fn().mockResolvedValue({ error: null });
+    const fetchMock = vi.fn<typeof fetch>();
+
+    const result = await mirrorSourceImageForTest({
+      sourceGig: createSourceGig({
+        sourceImageUrl
+      }),
+      fetchImpl: fetchMock,
+      upload
+    });
+
+    expect(result.status).toBe("failed");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("rejects hostnames that resolve to private addresses before fetch", async () => {
+    const upload = vi.fn().mockResolvedValue({ error: null });
+    const fetchMock = vi.fn<typeof fetch>();
+    const resolveHostname = vi.fn<ImageHostResolver>(async () => ["192.168.0.10"]);
+
+    const result = await mirrorSourceImage({
+      sourceGig: createSourceGig({
+        sourceImageUrl: "https://images.example.com/poster.png"
+      }),
+      fetchImpl: fetchMock,
+      resolveHostname,
+      upload
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.errorMessage).toContain("Unsafe image host");
+    expect(resolveHostname).toHaveBeenCalledWith("images.example.com");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("follows safe redirects before mirroring the image", async () => {
+    const imageBuffer = await createPngBuffer(4, 2);
+    const upload = vi.fn().mockResolvedValue({ error: null });
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: { location: "https://cdn.example.com/poster.png" }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array(imageBuffer), {
+          status: 200,
+          headers: { "content-type": "image/png" }
+        })
+      );
+
+    const result = await mirrorSourceImageForTest({
+      sourceGig: createSourceGig({
+        sourceImageUrl: "https://images.example.com/start.png"
+      }),
+      fetchImpl: fetchMock,
+      upload
+    });
+
+    expect(result.status).toBe("ready");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://images.example.com/start.png");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("https://cdn.example.com/poster.png");
+    expect(upload).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects unsafe redirects before following them", async () => {
+    const upload = vi.fn().mockResolvedValue({ error: null });
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(null, {
+        status: 302,
+        headers: { location: "http://127.0.0.1/poster.png" }
+      })
+    );
+
+    const result = await mirrorSourceImageForTest({
+      sourceGig: createSourceGig({
+        sourceImageUrl: "https://images.example.com/start.png"
+      }),
+      fetchImpl: fetchMock,
+      upload
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.errorMessage).toContain("Unsafe image host");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("enforces a redirect limit", async () => {
+    const upload = vi.fn().mockResolvedValue({ error: null });
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input));
+      const currentRedirect = Number(url.searchParams.get("redirect") ?? "0");
+      return new Response(null, {
+        status: 302,
+        headers: {
+          location: `https://images.example.com/poster.png?redirect=${currentRedirect + 1}`
+        }
+      });
+    });
+
+    const result = await mirrorSourceImageForTest({
+      sourceGig: createSourceGig({
+        sourceImageUrl: "https://images.example.com/poster.png?redirect=0"
+      }),
+      fetchImpl: fetchMock,
+      upload
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.errorMessage).toContain("redirect limit");
+    expect(fetchMock).toHaveBeenCalledTimes(IMAGE_MIRROR_MAX_REDIRECTS + 1);
+    expect(upload).not.toHaveBeenCalled();
+  });
+
   it("rejects unsupported content types without uploading", async () => {
     const upload = vi.fn().mockResolvedValue({ error: null });
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
@@ -239,7 +381,7 @@ describe("image mirroring", () => {
       })
     );
 
-    const result = await mirrorSourceImage({
+    const result = await mirrorSourceImageForTest({
       sourceGig: createSourceGig(),
       fetchImpl: fetchMock,
       upload
@@ -262,7 +404,7 @@ describe("image mirroring", () => {
       })
     );
 
-    const result = await mirrorSourceImage({
+    const result = await mirrorSourceImageForTest({
       sourceGig: createSourceGig(),
       fetchImpl: fetchMock,
       upload
@@ -291,7 +433,7 @@ describe("image mirroring", () => {
 
     expect(imageBuffer.byteLength).toBeGreaterThan(IMAGE_MIRROR_MAX_BYTES);
 
-    const result = await mirrorSourceImage({
+    const result = await mirrorSourceImageForTest({
       sourceGig: createSourceGig(),
       fetchImpl: fetchMock,
       upload
@@ -332,7 +474,7 @@ describe("image mirroring", () => {
 
     expect(imageBuffer.byteLength).toBeGreaterThan(IMAGE_MIRROR_MAX_BYTES);
 
-    const result = await mirrorSourceImage({
+    const result = await mirrorSourceImageForTest({
       sourceGig: createSourceGig(),
       fetchImpl: fetchMock,
       upload
@@ -471,7 +613,7 @@ describe("image mirroring", () => {
       })
     );
 
-    const result = await mirrorSourceImage({
+    const result = await mirrorSourceImageForTest({
       sourceGig: createSourceGig(),
       fetchImpl: fetchMock,
       upload,
