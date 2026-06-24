@@ -924,8 +924,9 @@ body[data-filter-dropdown-open="true"] .date-pills {
 .day-browser__header::before {
   position: absolute;
   inset: 0;
-  z-index: -1;
+  z-index: 0;
   border-radius: inherit;
+  background: rgba(14, 11, 19, 0.86);
   background: color-mix(in srgb, var(--page-bg-fallback) 86%, transparent);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -949,6 +950,8 @@ body[data-filter-dropdown-open="true"] .date-pills {
 }
 
 .day-browser__heading-button {
+  position: relative;
+  z-index: 1;
   display: block;
   justify-self: center;
   width: min(100%, 14.75rem);
@@ -1258,6 +1261,8 @@ body[data-filter-dropdown-open="true"] .date-pills {
 }
 
 .day-browser__arrow {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
