@@ -9,6 +9,10 @@ import React, { useState } from "react";
 
 import { normalizeAppColorScheme } from "@/lib/color-scheme";
 
+interface SiteHeaderActionsProps {
+  leadingAction?: React.ReactNode;
+}
+
 interface AccountComingSoonModalProps {
   onClose: () => void;
   opened: boolean;
@@ -55,7 +59,7 @@ export function AccountComingSoonModal({
   );
 }
 
-export function SiteHeaderActions() {
+export function SiteHeaderActions({ leadingAction }: SiteHeaderActionsProps = {}) {
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const { colorScheme, setColorScheme } = useMantineColorScheme({
     keepTransitions: true
@@ -65,6 +69,7 @@ export function SiteHeaderActions() {
 
   return (
     <div className="site-header__actions">
+      {leadingAction}
       <UnstyledButton
         aria-label="Toggle color scheme"
         className="site-header__theme-toggle"
