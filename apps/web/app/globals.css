@@ -542,7 +542,7 @@ code {
   }
 
   .site-header__title {
-    font-size: clamp(2.25rem, 4.8vw, 4.2rem);
+    font-size: clamp(2.1rem, 3.8vw, 3.4rem);
   }
 
   .site-header__actions {
