@@ -6,7 +6,11 @@ import Script from "next/script";
 
 import "@mantine/core/styles.layer.css";
 import "./globals.css";
-import { getAppColorSchemeScript } from "@/lib/color-scheme";
+import {
+  DEFAULT_APP_COLOR_SCHEME,
+  getAppColorSchemeScript,
+  getAppFirstPaintBackgroundStyle
+} from "@/lib/color-scheme";
 import {
   buildSiteStructuredDataJson,
   SITE_DESCRIPTION,
@@ -71,8 +75,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" {...mantineHtmlProps}>
+    <html
+      {...mantineHtmlProps}
+      data-mantine-color-scheme={DEFAULT_APP_COLOR_SCHEME}
+      lang="en"
+    >
       <head>
+        <style
+          dangerouslySetInnerHTML={{ __html: getAppFirstPaintBackgroundStyle() }}
+          id="app-first-paint-background"
+        />
         <Script
           dangerouslySetInnerHTML={{ __html: getAppColorSchemeScript() }}
           id="app-color-scheme"
@@ -80,6 +92,7 @@ export default function RootLayout({
         />
         <script
           dangerouslySetInnerHTML={{ __html: buildSiteStructuredDataJson() }}
+          id="site-structured-data"
           type="application/ld+json"
         />
       </head>
