@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { mantineHtmlProps } from "@mantine/core";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import Script from "next/script";
 
 import "@mantine/core/styles.layer.css";
@@ -83,6 +85,8 @@ export default function RootLayout({
       </head>
       <body>
         <AppProviders>{children}</AppProviders>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
