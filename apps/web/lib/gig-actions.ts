@@ -1,4 +1,4 @@
-import { normalizeAbsoluteHttpUrl } from "@perth-gig-finder/shared";
+import { normalizeAbsoluteHttpUrl } from "@perth-gig-finder/shared/url";
 
 import type { GigCardRecord } from "./gigs";
 

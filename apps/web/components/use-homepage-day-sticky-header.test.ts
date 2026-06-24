@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { getHomepageDateHeaderStuck } from "./use-homepage-day-sticky-header";
+import {
+  getHomepageDateHeaderStuck,
+  getHomepageDateHeaderStuckFromObserverEntry
+} from "./use-homepage-day-sticky-header";
 
 describe("homepage day sticky header helpers", () => {
   it("treats the date header as stuck when the sentinel is above the viewport", () => {
@@ -15,5 +18,26 @@ describe("homepage day sticky header helpers", () => {
   it("does not treat missing sentinel geometry as stuck", () => {
     expect(getHomepageDateHeaderStuck(null)).toBe(false);
     expect(getHomepageDateHeaderStuck(undefined)).toBe(false);
+  });
+
+  it("maps observer geometry above the viewport to stuck", () => {
+    expect(
+      getHomepageDateHeaderStuckFromObserverEntry({
+        boundingClientRect: { top: -0.5 } as DOMRectReadOnly
+      })
+    ).toBe(true);
+  });
+
+  it("maps visible observer geometry to unstuck", () => {
+    expect(
+      getHomepageDateHeaderStuckFromObserverEntry({
+        boundingClientRect: { top: 0 } as DOMRectReadOnly
+      })
+    ).toBe(false);
+    expect(
+      getHomepageDateHeaderStuckFromObserverEntry({
+        boundingClientRect: { top: 12 } as DOMRectReadOnly
+      })
+    ).toBe(false);
   });
 });
