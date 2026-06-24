@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { listGigsForDate } from "@/lib/gigs";
+import { listHomepageGigsForDate } from "@/lib/homepage-gigs-cache";
 import { getPerthDayBounds } from "@/lib/homepage-dates";
 import { parseHomepageFilters } from "@/lib/homepage-filters";
 import { isSupabaseConfigured } from "@/lib/supabase";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   });
 
   try {
-    const day = await listGigsForDate(filters, dateKey);
+    const day = await listHomepageGigsForDate(filters, dateKey);
 
     if (!day) {
       return NextResponse.json(
