@@ -14,6 +14,7 @@ import {
   getInitialHomepageCalendarMonthKey
 } from "@/lib/homepage-calendar";
 import {
+  getHydratedHomepageDayDateKeys,
   getNextHomepageDayPrefetchDateKeys,
   type HomepageDayPayload
 } from "@/lib/homepage-day-loading";
@@ -198,14 +199,21 @@ export function HomepageDayBrowser({
       return;
     }
 
-    const dateKeysToPrefetch = getNextHomepageDayPrefetchDateKeys({
-      activeDateKey,
-      availableDateKeys,
-      loadedDateKeys
-    });
+    const dateKeysToPrefetch = [
+      ...getHydratedHomepageDayDateKeys({
+        activeDateKey,
+        availableDateKeys,
+        now: new Date()
+      }),
+      ...getNextHomepageDayPrefetchDateKeys({
+        activeDateKey,
+        availableDateKeys,
+        loadedDateKeys
+      })
+    ];
 
-    for (const dateKey of dateKeysToPrefetch) {
-      if (dateKey) {
+    for (const dateKey of new Set(dateKeysToPrefetch)) {
+      if (dateKey && !loadedDayMap.has(dateKey)) {
         prefetchHomepageDay(dateKey);
       }
     }
