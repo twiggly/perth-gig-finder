@@ -25,6 +25,7 @@
   --control-bg-hover: rgba(11, 9, 16, 0.64);
   --control-placeholder: rgba(248, 242, 232, 0.55);
   --control-focus-border: rgba(249, 90, 55, 0.65);
+  --calendar-today-ring: rgba(74, 222, 128, 0.82);
   --popover-bg: rgba(16, 12, 22, 0.98);
   --soft-fill: rgba(255, 255, 255, 0.08);
   --soft-fill-strong: rgba(255, 255, 255, 0.1);
@@ -65,6 +66,7 @@
   --control-bg-hover: rgba(255, 255, 255, 0.78);
   --control-placeholder: rgba(33, 25, 21, 0.48);
   --control-focus-border: rgba(249, 90, 55, 0.65);
+  --calendar-today-ring: rgba(22, 163, 74, 0.78);
   --popover-bg: rgba(255, 250, 242, 0.98);
   --soft-fill: rgba(33, 25, 21, 0.06);
   --soft-fill-strong: rgba(33, 25, 21, 0.1);
@@ -934,7 +936,7 @@ body[data-filter-dropdown-open="true"] .date-pills {
   grid-template-columns: 3.2rem minmax(0, 1fr) 3.2rem;
   align-items: center;
   gap: 0.8rem;
-  width: min(100%, 32rem);
+  width: min(100%, 34rem);
   margin: 0 auto;
   padding: 0.45rem 0;
   border-radius: 999px;
@@ -975,7 +977,7 @@ body[data-filter-dropdown-open="true"] .date-pills {
   z-index: 1;
   display: block;
   justify-self: center;
-  width: min(100%, 14.75rem);
+  width: min(100%, 16rem);
   min-width: min(11.5rem, calc(100% - 7.2rem));
   padding: 0.4rem 0.65rem;
   border-radius: 999px;
@@ -1207,13 +1209,28 @@ body[data-filter-dropdown-open="true"] .date-pills {
 }
 
 .day-calendar__day--today:not(.day-calendar__day--active) {
-  box-shadow: inset 0 0 0 1px var(--control-focus-border);
+  box-shadow: 0 0 0 1px var(--calendar-today-ring);
 }
 
 .day-calendar__day--active {
   background: var(--accent);
   color: var(--inverse-text);
-  box-shadow: 0 0 0 1px var(--control-focus-border);
+}
+
+.day-calendar__day--active.day-calendar__day--today {
+  box-shadow: 0 0 0 1px var(--calendar-today-ring);
+}
+
+.day-calendar__day--active:hover,
+.day-calendar__day--active:focus-visible {
+  background: var(--accent);
+  color: var(--inverse-text);
+  box-shadow: 0 0 0 1px var(--faint-border);
+}
+
+.day-calendar__day--active.day-calendar__day--today:hover,
+.day-calendar__day--active.day-calendar__day--today:focus-visible {
+  box-shadow: 0 0 0 1px var(--calendar-today-ring);
 }
 
 .day-browser__content-pane {
@@ -1394,10 +1411,16 @@ body[data-filter-dropdown-open="true"] .date-pills {
     outline-color 160ms ease;
 }
 
-.gig-card__surface--interactive:hover,
 .gig-card--open .gig-card__surface--interactive {
   background-color: var(--row-hover);
   outline: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .gig-card__surface--interactive:hover {
+    background-color: var(--row-hover);
+    outline: none;
+  }
 }
 
 .gig-card__surface--interactive:focus-visible {
@@ -1420,6 +1443,7 @@ body[data-filter-dropdown-open="true"] .date-pills {
   background: transparent;
   color: inherit;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .gig-card__toggle-overlay:focus-visible {
@@ -1485,6 +1509,7 @@ body[data-filter-dropdown-open="true"] .date-pills {
   z-index: 3;
   color: inherit;
   text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .gig-card__detail-link:hover,

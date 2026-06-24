@@ -33,7 +33,7 @@ describe("SiteHeader", () => {
 
     expect(html).toContain("site-header-shell--detail");
     expect(html).toContain("Gig Radar");
-    expect(html).toContain("Toggle color scheme");
+    expect(html).not.toContain("Toggle color scheme");
     expect(html).toContain("Open account information");
     expect(html).not.toContain("site-header__filter-toggle");
   });

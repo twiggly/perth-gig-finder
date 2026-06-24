@@ -19,13 +19,13 @@ function renderWithMantine(node: React.ReactNode) {
 }
 
 describe("SiteHeaderActions", () => {
-  it("renders theme and account controls", () => {
+  it("renders account controls without the hidden theme toggle", () => {
     const html = renderWithMantine(<SiteHeaderActions />);
 
-    expect(html).toContain('aria-label="Toggle color scheme"');
-    expect(html).toContain('title="Toggle color scheme"');
-    expect(html).toContain("site-header__theme-icon--sun");
-    expect(html).toContain("site-header__theme-icon--moon");
+    expect(html).not.toContain('aria-label="Toggle color scheme"');
+    expect(html).not.toContain('title="Toggle color scheme"');
+    expect(html).not.toContain("site-header__theme-icon--sun");
+    expect(html).not.toContain("site-header__theme-icon--moon");
     expect(html).toContain('aria-label="Open account information"');
     expect(html).toContain('title="Account"');
     expect(html).toContain("site-header__profile");
@@ -44,7 +44,7 @@ describe("SiteHeaderActions", () => {
     );
 
     expect(html).toContain("site-header__filter-toggle");
-    expect(html).toContain('aria-label="Toggle color scheme"');
+    expect(html).not.toContain('aria-label="Toggle color scheme"');
     expect(html).toContain('aria-label="Open account information"');
   });
 

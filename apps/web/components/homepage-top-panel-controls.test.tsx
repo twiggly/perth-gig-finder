@@ -50,7 +50,7 @@ describe("HomepageTopPanelControls", () => {
     expect(togglePanelId).toBeTruthy();
     expect(html).toContain(`id="${togglePanelId}"`);
     expect(html).toContain('hidden=""');
-    expect(html).toContain('aria-label="Toggle color scheme"');
+    expect(html).not.toContain('aria-label="Toggle color scheme"');
     expect(html).toContain('aria-label="Open account information"');
   });
 
