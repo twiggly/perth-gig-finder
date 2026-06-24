@@ -54,6 +54,7 @@ export default async function GigDetailPage({ params }: GigDetailPageProps) {
       <GigDetailContent gig={gig} />
       <script
         dangerouslySetInnerHTML={{ __html: buildGigEventStructuredDataJson(gig) }}
+        id={`gig-structured-data-${gig.slug}`}
         type="application/ld+json"
       />
     </main>

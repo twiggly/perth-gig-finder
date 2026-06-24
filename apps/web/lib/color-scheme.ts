@@ -5,6 +5,10 @@ export type ExplicitColorScheme = "dark" | "light";
 export const APP_COLOR_SCHEME_STORAGE_KEY = "mantine-color-scheme-value";
 export const DEFAULT_APP_COLOR_SCHEME: ExplicitColorScheme = "dark";
 
+export function getAppFirstPaintBackgroundStyle(): string {
+  return `html{background-color:#0d0b11;color-scheme:dark;}body{background-color:#0e0b13;}html[data-mantine-color-scheme="light"]{background-color:rgb(241,239,233);color-scheme:light;}html[data-mantine-color-scheme="light"] body{background-color:rgb(241,239,233);}`;
+}
+
 export function normalizeAppColorScheme(value: unknown): ExplicitColorScheme {
   return value === "light" || value === "dark" ? value : DEFAULT_APP_COLOR_SCHEME;
 }
