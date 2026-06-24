@@ -29,6 +29,23 @@ describe("SiteHeaderActions", () => {
     expect(html).toContain('aria-label="Open account information"');
     expect(html).toContain('title="Account"');
     expect(html).toContain("site-header__profile");
+    expect(html).not.toContain("site-header__filter-toggle");
+  });
+
+  it("can render an optional leading action", () => {
+    const html = renderWithMantine(
+      <SiteHeaderActions
+        leadingAction={
+          <button className="site-header__filter-toggle" type="button">
+            Search
+          </button>
+        }
+      />
+    );
+
+    expect(html).toContain("site-header__filter-toggle");
+    expect(html).toContain('aria-label="Toggle color scheme"');
+    expect(html).toContain('aria-label="Open account information"');
   });
 
   it("renders the account coming-soon modal content when opened", () => {

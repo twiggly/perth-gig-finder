@@ -1,5 +1,5 @@
-import { HomepageFilters } from "@/components/homepage-filters";
 import { HomepageDayBrowser } from "@/components/homepage-day-browser";
+import { HomepageTopPanelControls } from "@/components/homepage-top-panel-controls";
 import { SiteHeader } from "@/components/site-header";
 import { getHydratedHomepageDayDateKeys } from "@/lib/homepage-day-loading";
 import { resolveHomepageDateKey } from "@/lib/homepage-dates";
@@ -71,15 +71,13 @@ async function ConfiguredHomepage({
   return (
     <>
       <div className="top-panel">
-        <SiteHeader actions />
-        <div className="top-panel__filters">
-          <HomepageFilters
-            activeDateKey={activeDateKey}
-            availableDateKeys={availableDays.map((day) => day.dateKey)}
-            currentQuery={filters.q}
-            selectedVenues={selectedVenues}
-          />
-        </div>
+        <SiteHeader />
+        <HomepageTopPanelControls
+          activeDateKey={activeDateKey}
+          availableDateKeys={availableDays.map((day) => day.dateKey)}
+          currentQuery={filters.q}
+          selectedVenues={selectedVenues}
+        />
       </div>
       {availableDays.length === 0 ||
       !activeDateKey ||

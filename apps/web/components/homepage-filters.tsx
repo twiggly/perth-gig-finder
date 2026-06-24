@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useId } from "react";
+import React, { useEffect, useEffectEvent, useId } from "react";
 import { Box } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 
@@ -27,6 +27,8 @@ interface HomepageFiltersProps {
   activeDateKey: string | null;
   availableDateKeys: string[];
   currentQuery: string;
+  filterPanelId: string;
+  isFilterPanelVisible: boolean;
   selectedVenues: VenueOption[];
 }
 
@@ -34,6 +36,8 @@ export function HomepageFilters({
   activeDateKey,
   availableDateKeys,
   currentQuery,
+  filterPanelId,
+  isFilterPanelVisible,
   selectedVenues
 }: HomepageFiltersProps) {
   const previewAssetRevision = LOCAL_PREVIEW_ASSET_REVISION;
@@ -130,12 +134,24 @@ export function HomepageFilters({
     removeVenue(slug);
   }
 
+  const closeAllMenusForHiddenPanel = useEffectEvent(() => {
+    closeAllMenus();
+  });
+
+  useEffect(() => {
+    if (!isFilterPanelVisible) {
+      closeAllMenusForHiddenPanel();
+    }
+  }, [isFilterPanelVisible]);
+
   return (
     <>
       <Box
         component="section"
         className="filter-panel"
         data-preview-revision={previewAssetRevision}
+        hidden={!isFilterPanelVisible}
+        id={filterPanelId}
       >
         <div className="filter-toolbar">
           <SearchFilterForm
