@@ -10,7 +10,7 @@ When work ships, remove it from this file or rewrite it to reflect the new next 
 
 ### 1. Add More Perth-Relevant Sources
 
-Expand coverage in [apps/scraper/src/sources](/Users/tajbishop/Documents/perth-gig-finder/apps/scraper/src/sources).
+Expand coverage in [apps/scraper/src/sources](apps/scraper/src/sources).
 
 Outcome:
 - more complete city coverage and fewer missing gigs from important Perth venues/promoters
@@ -41,9 +41,9 @@ Key areas:
 - source-specific cleanup before upsert
 
 Primary touchpoints:
-- [apps/scraper/src/index.ts](/Users/tajbishop/Documents/perth-gig-finder/apps/scraper/src/index.ts)
-- [apps/scraper/src/supabase-store.ts](/Users/tajbishop/Documents/perth-gig-finder/apps/scraper/src/supabase-store.ts)
-- [packages/shared](/Users/tajbishop/Documents/perth-gig-finder/packages/shared)
+- [apps/scraper/src/index.ts](apps/scraper/src/index.ts)
+- [apps/scraper/src/supabase-store.ts](apps/scraper/src/supabase-store.ts)
+- [packages/shared](packages/shared)
 
 ### 3. Harden Image Handling
 
@@ -55,15 +55,15 @@ Outcome:
 - better fallback behavior when a source image is bad
 
 Key areas:
-- bad source image URL rejection
-- image mirror retries and failure states
+- image mirror retry strategy and failure-state handling
 - source-specific fallback selection
 - preserving useful metadata when mirroring is unavailable
+- clearer aggregate image-backfill reporting
 
 Primary touchpoints:
-- [apps/scraper/src/image-mirror.ts](/Users/tajbishop/Documents/perth-gig-finder/apps/scraper/src/image-mirror.ts)
-- [apps/scraper/src/mirror-images.ts](/Users/tajbishop/Documents/perth-gig-finder/apps/scraper/src/mirror-images.ts)
-- source adapters in [apps/scraper/src/sources](/Users/tajbishop/Documents/perth-gig-finder/apps/scraper/src/sources)
+- [apps/scraper/src/image-mirror.ts](apps/scraper/src/image-mirror.ts)
+- [apps/scraper/src/mirror-images.ts](apps/scraper/src/mirror-images.ts)
+- source adapters in [apps/scraper/src/sources](apps/scraper/src/sources)
 
 ## Next
 
@@ -72,10 +72,11 @@ Primary touchpoints:
 The hosted pipeline works, but scraper visibility can still improve.
 
 Useful follow-ups:
-- clearer per-source timing summaries
-- easier image-backfill failure summaries
-- better scrape run reporting in hosted workflows
-- optional separation of scrape and mirror reporting if maintenance needs it
+- persisted scrape/source trends
+- GitHub Actions job summaries
+- source failure alerting
+- easier comparison across scrape runs
+- clearer aggregate mirror reporting
 
 ### 5. Add Scraper-Side Enrichment
 
