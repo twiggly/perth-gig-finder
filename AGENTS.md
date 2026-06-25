@@ -48,21 +48,23 @@ This file is for coding agents working in this repository. Keep it short, practi
 ## Hosted Operations
 
 - Production and previews are deployed from Vercel.
-- Hosted data refresh runs through [/.github/workflows/refresh-hosted-gigs.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-hosted-gigs.yml).
-- Hosted artist provenance repairs run through [/.github/workflows/repair-hosted-artists.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/repair-hosted-artists.yml).
-- `ticketmaster-au` refresh runs through [/.github/workflows/refresh-ticketmaster-self-hosted.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-ticketmaster-self-hosted.yml) on a self-hosted runner labeled `perth-gig-finder` and `ticketmaster`.
-- `moshtix-wa` refresh runs through [/.github/workflows/refresh-moshtix-self-hosted.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-moshtix-self-hosted.yml) on the same self-hosted runner path, because Moshtix blocks GitHub-hosted runners with `403` responses.
-- Runner health is monitored through [/.github/workflows/check-ticketmaster-runner.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/check-ticketmaster-runner.yml).
-- The runner health workflow depends on the `RUNNER_MONITOR_TOKEN` repository secret so it can read the GitHub runners API.
+- Hosted data refresh runs through [.github/workflows/refresh-hosted-gigs.yml](.github/workflows/refresh-hosted-gigs.yml).
+- Hosted artist provenance repairs run through [.github/workflows/repair-hosted-artists.yml](.github/workflows/repair-hosted-artists.yml).
+- `ticketmaster-au` refresh runs through [.github/workflows/refresh-ticketmaster-self-hosted.yml](.github/workflows/refresh-ticketmaster-self-hosted.yml) on a self-hosted runner labeled `perth-gig-finder` and `ticketmaster`.
+- `moshtix-wa` refresh runs through [.github/workflows/refresh-moshtix-self-hosted.yml](.github/workflows/refresh-moshtix-self-hosted.yml) on the same self-hosted runner labels, because Moshtix blocks GitHub-hosted runners with `403` responses.
+- Runner health is monitored through [.github/workflows/check-ticketmaster-runner.yml](.github/workflows/check-ticketmaster-runner.yml).
+- The runner health workflow depends on the `RUNNER_MONITOR_TOKEN` repository secret so it can check the GitHub runners API for an online runner with the `perth-gig-finder` and `ticketmaster` labels.
 - The hosted workflow:
+  - runs `cleanup-images -- --execute --older-than-days 14 --skip-orphans` as a preflight cleanup
   - runs `scrape` against hosted Supabase
+  - excludes `ticketmaster-au` and `moshtix-wa`, which refresh through the self-hosted workflows
   - runs `mirror-images` as best effort
+  - runs post-mirror image cleanup
   - runs `audit:gigs -- --supabase --reconcile-sources --record-history --limit 30` against the hosted `gig_cards` public view and private source-gig status breakdown
 - Hosted refresh audits run in non-strict mode: hard audit errors fail, warning-level findings remain visible.
 - Hosted audit history rows live in private `public.audit_runs` records and require `SUPABASE_SERVICE_ROLE_KEY`; do not grant public access to that table.
 - Use `pnpm audit:gigs -- --supabase --reconcile-sources` when comparing scraper/source counts with public homepage counts; it reports active public cards separately from source ownership handoffs and postponed/cancelled source rows.
 - After merging Supabase migrations that affect web queries or public views, check hosted migration state with `supabase migration list --linked` and apply pending hosted migrations before declaring production healthy.
-- The hosted GitHub runner currently excludes `ticketmaster-au`, because Ticketmaster blocks it with `403` responses there.
 - A few poster mirror failures should not fail the whole hosted refresh workflow.
 
 ## Supabase Rules
@@ -71,15 +73,21 @@ This file is for coding agents working in this repository. Keep it short, practi
   - `apps/web/.env.local`
   - `apps/scraper/.env`
 - Hosted Vercel environments use hosted Supabase env vars configured in Vercel, not local files.
+- Public tables have RLS enabled. Public views such as `gig_cards` and `homepage_gig_dates` use `security_invoker` so underlying RLS policies apply through the Supabase API.
+- `anon` and `authenticated` roles should only receive the limited public read surface needed by the web app. Operational and sensitive data such as `scrape_runs`, `audit_runs`, raw payloads, checksums, and error examples stays private.
+- Privileged scrape, audit, migration, repair, and image cleanup jobs use `SUPABASE_SERVICE_ROLE_KEY` or linked Supabase admin access. Do not grant public write policies to support server-side jobs.
+- Web code can use `SUPABASE_SERVICE_ROLE_KEY` when it is present in the runtime, so do not document the web runtime as exclusively anon-key based.
+- Supabase security verification SQL lives under [supabase/verification](supabase/verification).
 - Mirrored images live in Supabase Storage, not in Postgres itself.
 - Postgres stores mirrored image metadata such as path, dimensions, and mirror status.
 
 ## Image Mirroring
 
 - Image backfill exists to mirror third-party posters into Supabase Storage and record stable metadata.
-- Current mirror limits are defined in [apps/scraper/src/image-mirror.ts](/Users/tajbishop/Documents/perth-gig-finder/apps/scraper/src/image-mirror.ts):
+- Current mirror limits are defined in [apps/scraper/src/image-mirror.ts](apps/scraper/src/image-mirror.ts):
   - source download limit: `32 MB`
   - mirrored output limit: `8 MB`
+- Old hosted mirrored images are cleaned up with `pnpm cleanup-images`. It is dry-run by default; use `--execute`, `--older-than-days`, and `--skip-orphans` deliberately.
 - If a source image is bad or unavailable, prefer fixing the source adapter rather than weakening the render guard in the web app.
 
 ## Generated And Local-Only Files
@@ -87,7 +95,7 @@ This file is for coding agents working in this repository. Keep it short, practi
 - Do not commit local env files.
 - Do not commit local Vercel metadata under `/.vercel`.
 - Do not commit `*.tsbuildinfo`.
-- Treat [apps/web/next-env.d.ts](/Users/tajbishop/Documents/perth-gig-finder/apps/web/next-env.d.ts) as generated. If it changes locally to a dev-specific path, restore it instead of committing it.
+- Treat [apps/web/next-env.d.ts](apps/web/next-env.d.ts) as generated. If it changes locally to a dev-specific path, restore it instead of committing it.
 
 ## Git Hygiene
 
@@ -95,19 +103,21 @@ This file is for coding agents working in this repository. Keep it short, practi
 - Prefer small, topic-focused commits.
 - Do not leave throwaway verification branches around after checks complete.
 - Clean up merged branches when they are no longer useful.
-- Use [PLANS.md](/Users/tajbishop/Documents/perth-gig-finder/PLANS.md) for roadmap and feature priority decisions.
+- Use [PLANS.md](PLANS.md) for roadmap and feature priority decisions.
 
 ## Documentation Hygiene
 
 - When a merged change makes docs stale, update the relevant file in the same change or immediately after:
-  - [README.md](/Users/tajbishop/Documents/perth-gig-finder/README.md) for project status, setup, and human-facing workflow
-  - [AGENTS.md](/Users/tajbishop/Documents/perth-gig-finder/AGENTS.md) for repo-specific operating rules
-  - [PLANS.md](/Users/tajbishop/Documents/perth-gig-finder/PLANS.md) for active priorities and shipped roadmap items
+  - [README.md](README.md) for project status, setup, and human-facing workflow
+  - [AGENTS.md](AGENTS.md) for repo-specific operating rules
+  - [PLANS.md](PLANS.md) for active priorities and shipped roadmap items
 - Do not force doc edits for unrelated cosmetic code changes, but do not leave behavior, infra, or workflow docs knowingly stale after merge.
 
 ## Common Traps
 
 - If local web commands fail, check Node version first, then Docker/Colima, then Supabase.
 - If hosted refresh fails in image backfill, inspect source image URLs before changing mirror limits.
+- If hosted storage quota grows unexpectedly, check `pnpm cleanup-images -- --older-than-days 14` before changing mirror behavior.
 - If production returns `500` after a deploy but local works, check for hosted Supabase schema drift before changing app code.
 - If Vercel preview behavior differs from local, verify environment variables and deployment context before changing app code.
+- If first paint or TTFB regresses on unfiltered homepage data, remember web functions are configured for Sydney in [apps/web/vercel.json](apps/web/vercel.json) and unfiltered homepage date/day data can be cached for five minutes.

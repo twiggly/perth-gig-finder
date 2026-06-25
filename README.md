@@ -1,19 +1,19 @@
 # Perth Gig Finder
 
-Perth Gig Finder is a web app for discovering live music events in Perth by aggregating gig listings from multiple venue and event websites into one searchable place.
+Perth Gig Finder is the repository for Gig Radar, a public web app for discovering live music events in Perth by aggregating gig listings from multiple venue and event websites into one searchable place. Production runs at `https://gigradar.com.au`.
 
 ## Project Docs
 
 - `README.md`: project overview, current status, and human-facing setup guidance
-- [AGENTS.md](/Users/tajbishop/Documents/perth-gig-finder/AGENTS.md): repo-specific operating rules for coding agents
-- [PLANS.md](/Users/tajbishop/Documents/perth-gig-finder/PLANS.md): lightweight roadmap for active priorities
+- [AGENTS.md](AGENTS.md): repo-specific operating rules for coding agents
+- [PLANS.md](PLANS.md): lightweight roadmap for active priorities
 
 ## Product Goal
 
 Users should be able to:
 
 - browse upcoming gigs in Perth
-- search and filter by artist, venue, suburb, date, and genre
+- search and filter by artist, venue, suburb, and date
 - open shareable gig detail pages
 - click through to the original source listing
 - trust that listings are recent, deduplicated, and clearly sourced
@@ -100,20 +100,24 @@ Use the App Router from the start.
 - treat Supabase as the source of truth
 - add authenticated features later without reshaping the public data model
 
-Good first pages:
+Live public routes:
 
 - `/`
-- `/gigs`
 - `/gigs/[slug]` (live for active future gigs)
-- `/venues/[slug]`
+
+Not built yet:
+
+- `/gigs` index
+- venue detail pages
 
 ## MVP Status
 
 - Sources live today:
+  - `Humanitix Perth Music` filtered down to strict Perth-metro gigs
   - `Milk Bar`
   - `Rosemount Hotel`
+  - `The Ellington`
   - `The Bird`
-  - `Humanitix Perth Music` filtered down to strict Perth-metro gigs
   - `Oztix WA` filtered down to Perth-metro music gigs
   - `Moshtix WA` filtered down to Perth-metro music gigs
   - `Ticketek WA` filtered down to Perth-metro live music results
@@ -122,7 +126,7 @@ Good first pages:
 - Active future gigs have crawlable `/gigs/[slug]` detail pages with canonical metadata, Event JSON-LD, and links from homepage cards.
 - SEO discovery endpoints are live through `/robots.txt` and `/sitemap.xml`.
 - Mirrored source images are stored in Supabase Storage and preferred over third-party hotlinks.
-- Production is live at `https://gigradar.com.au` on Vercel, and Git-connected preview deployments are enabled for this repository.
+- Production runs on Vercel, and Git-connected preview deployments are enabled for this repository.
 
 ## Current Limitations
 
@@ -136,17 +140,24 @@ Good first pages:
 - Git-connected preview deployments are created from repository pushes.
 - Hosted preview and production deployments use the hosted Supabase project configured in Vercel.
 - Apply hosted Supabase migrations before or alongside deploying web code that depends on new public view columns.
-- Hosted data refresh runs through [/.github/workflows/refresh-hosted-gigs.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-hosted-gigs.yml).
-- Hosted artist provenance repairs run through [/.github/workflows/repair-hosted-artists.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/repair-hosted-artists.yml).
-- `ticketmaster-au` runs separately through [/.github/workflows/refresh-ticketmaster-self-hosted.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/refresh-ticketmaster-self-hosted.yml) on a self-hosted runner labeled `perth-gig-finder` and `ticketmaster`, because GitHub-hosted runners are currently blocked with `403` responses.
-- Runner health is monitored by [/.github/workflows/check-ticketmaster-runner.yml](/Users/tajbishop/Documents/perth-gig-finder/.github/workflows/check-ticketmaster-runner.yml), which fails if no matching self-hosted Ticketmaster runner is online.
+- Hosted data refresh runs through [.github/workflows/refresh-hosted-gigs.yml](.github/workflows/refresh-hosted-gigs.yml).
+- Hosted artist provenance repairs run through [.github/workflows/repair-hosted-artists.yml](.github/workflows/repair-hosted-artists.yml).
+- The main hosted refresh excludes `ticketmaster-au` and `moshtix-wa`.
+- `ticketmaster-au` runs separately through [.github/workflows/refresh-ticketmaster-self-hosted.yml](.github/workflows/refresh-ticketmaster-self-hosted.yml) on a self-hosted runner labeled `perth-gig-finder` and `ticketmaster`, because GitHub-hosted runners are currently blocked with `403` responses.
+- `moshtix-wa` runs separately through [.github/workflows/refresh-moshtix-self-hosted.yml](.github/workflows/refresh-moshtix-self-hosted.yml) on the same self-hosted runner labels, because Moshtix blocks GitHub-hosted runners with `403` responses.
+- Runner health is monitored by [.github/workflows/check-ticketmaster-runner.yml](.github/workflows/check-ticketmaster-runner.yml), which checks for an online self-hosted runner with the `perth-gig-finder` and `ticketmaster` labels.
 - The runner health workflow reads the GitHub runners API through the `RUNNER_MONITOR_TOKEN` repository secret.
 - The hosted refresh workflow:
-  - scrapes source data into hosted Supabase
+  - runs preflight image cleanup for old mirrored images
+  - scrapes source data into hosted Supabase, excluding `ticketmaster-au` and `moshtix-wa`
   - backfills mirrored images as best effort
+  - runs post-mirror image cleanup
   - audits the hosted `gig_cards` public view that feeds the homepage and records audit history in Supabase
+- Image cleanup is available through `pnpm cleanup-images`. It is dry-run by default; use `--execute` to delete, `--older-than-days <n>` to override the default retention window, and `--skip-orphans` when bucket orphan scanning should be skipped.
 - The hosted public payload audit runs in non-strict mode: hard errors fail the workflow, while warning-level findings stay visible in the workflow logs.
 - For manual checks, run `pnpm audit:gigs -- --url <deployment-url> --vercel` for Vercel-protected deployments.
+- Vercel functions for the web app are configured for Sydney through `apps/web/vercel.json`.
+- Unfiltered homepage date/day data is cached server-side for five minutes. Filtered searches and venue-filtered paths may use dynamic data paths, and recent scrape results can lag by the cache interval in unfiltered responses.
 
 ## Local Development
 
