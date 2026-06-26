@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyHomepageDayScrollHandoffOverride,
+  cancelHomepageDayStickyScrollRestoration,
+  clearHomepageDayScrollHandoffOverride,
   getHomepageDayNaturalMaxScrollTop,
   getHomepageDayOutgoingCompensationOffset,
   getHomepageDayPreservedScrollTarget,
@@ -15,7 +18,10 @@ import {
   getInitialHomepageDayScrollReservePlan,
   getNextHomepageDayScrollIntent,
   getNextHomepageDayScrollDebtReserve,
+  isHomepageDayStickyScrollRestorationGeometryStable,
   isHomepageDayScrollIntentFresh,
+  performHomepageDayStickyScrollHandoff,
+  scheduleHomepageDayStickyScrollRestoration,
   shouldPlanHomepageDayScrollReserve,
   shouldRestoreHomepageDayScroll
 } from "./use-homepage-day-scroll-restoration";
@@ -200,10 +206,22 @@ describe("homepage day scroll restoration helpers", () => {
   it("keeps sticky restoration hold until the final scroll has run", () => {
     expect(
       getHomepageDayStickyScrollRestorationHoldRelease({
-        hasScrolled: false,
         isHoldActive: true,
         maxRetryCount: 3,
+        phase: "arming",
         retryCount: 0,
+        stableFrameCount: 0,
+        stickySentinelTop: -12
+      })
+    ).toBe("keep");
+
+    expect(
+      getHomepageDayStickyScrollRestorationHoldRelease({
+        isHoldActive: true,
+        maxRetryCount: 3,
+        phase: "scrolling",
+        retryCount: 0,
+        stableFrameCount: 0,
         stickySentinelTop: -12
       })
     ).toBe("keep");
@@ -212,38 +230,80 @@ describe("homepage day scroll restoration helpers", () => {
   it("keeps sticky restoration hold for one frame after the final scroll", () => {
     expect(
       getHomepageDayStickyScrollRestorationHoldRelease({
-        hasScrolled: true,
         isHoldActive: true,
         maxRetryCount: 3,
+        phase: "confirming",
         retryCount: 0,
+        stableFrameCount: 0,
         stickySentinelTop: -12
       })
     ).toBe("retry");
   });
 
-  it("clears sticky restoration hold once post-scroll geometry confirms stuck", () => {
+  it("waits for consecutive stable post-scroll geometry before release", () => {
     expect(
       getHomepageDayStickyScrollRestorationHoldRelease({
         currentScrollTop: 360,
-        hasScrolled: true,
         isHoldActive: true,
         maxRetryCount: 3,
+        phase: "confirming",
         retryCount: 1,
         scrollTarget: 360,
+        stableFrameCount: 1,
         stickySentinelTop: -12
       })
-    ).toBe("clear");
+    ).toBe("retry");
+
+    expect(
+      getHomepageDayStickyScrollRestorationHoldRelease({
+        currentScrollTop: 360,
+        isHoldActive: true,
+        maxRetryCount: 3,
+        phase: "confirming",
+        retryCount: 2,
+        scrollTarget: 360,
+        stableFrameCount: 2,
+        stickySentinelTop: -12
+      })
+    ).toBe("release-next-frame");
+  });
+
+  it("treats sticky restoration geometry as stable only at target with a stuck sentinel", () => {
+    expect(
+      isHomepageDayStickyScrollRestorationGeometryStable({
+        currentScrollTop: 359,
+        scrollTarget: 360,
+        stickySentinelTop: -1
+      })
+    ).toBe(true);
+
+    expect(
+      isHomepageDayStickyScrollRestorationGeometryStable({
+        currentScrollTop: 358,
+        scrollTarget: 360,
+        stickySentinelTop: -1
+      })
+    ).toBe(false);
+
+    expect(
+      isHomepageDayStickyScrollRestorationGeometryStable({
+        currentScrollTop: 360,
+        scrollTarget: 360,
+        stickySentinelTop: 0
+      })
+    ).toBe(false);
   });
 
   it("clears sticky restoration hold once the user scrolls above the restoration target", () => {
     expect(
       getHomepageDayStickyScrollRestorationHoldRelease({
         currentScrollTop: 120,
-        hasScrolled: true,
         isHoldActive: true,
         maxRetryCount: 3,
+        phase: "confirming",
         retryCount: 0,
         scrollTarget: 240,
+        stableFrameCount: 0,
         stickySentinelTop: 80
       })
     ).toBe("clear");
@@ -253,11 +313,12 @@ describe("homepage day scroll restoration helpers", () => {
     expect(
       getHomepageDayStickyScrollRestorationHoldRelease({
         currentScrollTop: 360,
-        hasScrolled: true,
         isHoldActive: true,
         maxRetryCount: 3,
+        phase: "confirming",
         retryCount: 1,
         scrollTarget: 360,
+        stableFrameCount: 1,
         stickySentinelTop: 4
       })
     ).toBe("retry");
@@ -267,14 +328,146 @@ describe("homepage day scroll restoration helpers", () => {
     expect(
       getHomepageDayStickyScrollRestorationHoldRelease({
         currentScrollTop: 360,
-        hasScrolled: true,
         isHoldActive: true,
         maxRetryCount: 3,
+        phase: "confirming",
         retryCount: 3,
         scrollTarget: 360,
+        stableFrameCount: 0,
         stickySentinelTop: 4
       })
     ).toBe("fallback-clear");
+  });
+
+  it("schedules sticky restoration scroll only after the second animation frame", () => {
+    const callbacks = new Map<number, FrameRequestCallback>();
+    const events: string[] = [];
+    let nextFrameId = 0;
+
+    const frames = scheduleHomepageDayStickyScrollRestoration({
+      onBeforeScrollFrame: () => {
+        events.push("before-scroll-frame");
+      },
+      onScroll: () => {
+        events.push("scroll");
+      },
+      requestAnimationFrame: (callback) => {
+        nextFrameId += 1;
+        callbacks.set(nextFrameId, callback);
+        return nextFrameId;
+      }
+    });
+
+    expect(frames).toEqual({
+      firstFrame: 1,
+      secondFrame: null
+    });
+    expect(events).toEqual([]);
+
+    callbacks.get(1)?.(16);
+    expect(frames).toEqual({
+      firstFrame: null,
+      secondFrame: 2
+    });
+    expect(events).toEqual(["before-scroll-frame"]);
+
+    callbacks.get(2)?.(32);
+    expect(frames).toEqual({
+      firstFrame: null,
+      secondFrame: null
+    });
+    expect(events).toEqual(["before-scroll-frame", "scroll"]);
+  });
+
+  it("cancels both pending sticky restoration frames", () => {
+    const frames = {
+      firstFrame: 1,
+      secondFrame: 2
+    };
+    const cancelledFrames: number[] = [];
+
+    cancelHomepageDayStickyScrollRestoration({
+      cancelAnimationFrame: (handle) => {
+        cancelledFrames.push(handle);
+      },
+      frames
+    });
+
+    expect(cancelledFrames).toEqual([1, 2]);
+    expect(frames).toEqual({
+      firstFrame: null,
+      secondFrame: null
+    });
+  });
+
+  it("applies and clears the sticky scroll handoff override", () => {
+    const events: string[] = [];
+    const alignElement = {
+      dataset: {},
+      getBoundingClientRect: () => {
+        events.push("flush-layout");
+        return {} as DOMRect;
+      }
+    } as unknown as HTMLElement;
+
+    expect(applyHomepageDayScrollHandoffOverride(alignElement)).toBe(
+      alignElement
+    );
+    expect(alignElement.dataset.scrollHandoff).toBe("true");
+    expect(events).toEqual(["flush-layout"]);
+
+    clearHomepageDayScrollHandoffOverride(alignElement);
+    expect(alignElement.dataset.scrollHandoff).toBeUndefined();
+  });
+
+  it("clears the alignment transform before sticky scroll handoff", () => {
+    const events: string[] = [];
+    const alignElement = {
+      dataset: {},
+      getBoundingClientRect: () => {
+        events.push("flush-layout");
+        return {} as DOMRect;
+      }
+    } as unknown as HTMLElement;
+
+    performHomepageDayStickyScrollHandoff({
+      alignedElement: alignElement,
+      commitConfirming: () => {
+        events.push(`commit:${alignElement.dataset.scrollHandoff}`);
+      },
+      scrollTarget: 360,
+      scrollTo: (options) => {
+        events.push(
+          `scroll:${options.top}:${alignElement.dataset.scrollHandoff}`
+        );
+      }
+    });
+
+    expect(events).toEqual([
+      "flush-layout",
+      "scroll:360:true",
+      "commit:true"
+    ]);
+    expect(alignElement.dataset.scrollHandoff).toBeUndefined();
+  });
+
+  it("cleans up the sticky scroll handoff override if confirming throws", () => {
+    const alignElement = {
+      dataset: {},
+      getBoundingClientRect: () => ({} as DOMRect)
+    } as unknown as HTMLElement;
+
+    expect(() =>
+      performHomepageDayStickyScrollHandoff({
+        alignedElement: alignElement,
+        commitConfirming: () => {
+          throw new Error("confirming failed");
+        },
+        scrollTarget: 360,
+        scrollTo: () => {}
+      })
+    ).toThrow("confirming failed");
+    expect(alignElement.dataset.scrollHandoff).toBeUndefined();
   });
 
   it("treats stored sticky scroll intent as short lived", () => {

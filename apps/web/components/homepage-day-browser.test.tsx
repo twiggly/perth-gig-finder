@@ -1,7 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MantineProvider } from "@mantine/core";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { theme } from "@/app/theme";
 import type { DateGroup } from "@/lib/homepage-dates";
@@ -11,18 +11,54 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/"
 }));
 
+const homepageDayBrowserMockState = vi.hoisted(() => ({
+  isDateHeaderStuck: false,
+  isStickyScrollRestorationVisualHoldActive: false,
+  stickyScrollRestorationCoverRect: null as {
+    columnGap: string;
+    gridTemplateColumns: string;
+    height: number;
+    left: number;
+    paddingBottom: string;
+    paddingLeft: string;
+    paddingRight: string;
+    paddingTop: string;
+    top: number;
+    width: number;
+  } | null,
+  stickyScrollRestorationPhase: null as
+    | "arming"
+    | "scrolling"
+    | "confirming"
+    | null
+}));
+
 vi.mock("./use-homepage-day-scroll-restoration", () => ({
   useHomepageDayScrollRestoration: () => ({
     captureDateChangeLayout: () => {},
     clearDateChangeLayout: () => {},
+    isStickyScrollRestorationVisualHoldActive:
+      homepageDayBrowserMockState.isStickyScrollRestorationVisualHoldActive,
+    stickyScrollRestorationCoverRect:
+      homepageDayBrowserMockState.stickyScrollRestorationCoverRect,
+    stickyScrollRestorationPhase:
+      homepageDayBrowserMockState.stickyScrollRestorationPhase,
     scrollAlignmentDateKey: null,
     scrollAlignmentOffset: 0,
     scrollCarryoverDateKey: null,
     scrollCarryoverReserve: 0,
     scrollOutgoingCompensationDateKey: null,
     scrollOutgoingCompensationOffset: 0,
+    scrollRestorationAlignmentDateKey: null,
     scrollReserveHeight: 0,
     scrollReserveTargetDateKey: null
+  })
+}));
+
+vi.mock("./use-homepage-day-sticky-header", () => ({
+  useHomepageDayStickyHeader: () => ({
+    isDateHeaderStuck: homepageDayBrowserMockState.isDateHeaderStuck,
+    stickySentinelRef: { current: null }
   })
 }));
 
@@ -84,6 +120,13 @@ function renderBrowser(days: Array<DateGroup<GigCardRecord>>) {
 }
 
 describe("HomepageDayBrowser", () => {
+  beforeEach(() => {
+    homepageDayBrowserMockState.isDateHeaderStuck = false;
+    homepageDayBrowserMockState.isStickyScrollRestorationVisualHoldActive = false;
+    homepageDayBrowserMockState.stickyScrollRestorationCoverRect = null;
+    homepageDayBrowserMockState.stickyScrollRestorationPhase = null;
+  });
+
   it("renders the date heading as a calendar trigger", () => {
     const html = renderBrowser([
       {
@@ -99,7 +142,83 @@ describe("HomepageDayBrowser", () => {
     expect(html).not.toContain("day-browser__header-shell");
     expect(html).toContain("day-browser__heading-button");
     expect(html).toContain("Wed, Apr 29th");
-    expect(html).not.toContain("data-sticky-restoring");
+    expect(html).not.toContain('data-stuck="true"');
+    expect(html).not.toContain("day-browser__header-cover");
+  });
+
+  it("renders an independent cover while sticky scroll restoration is holding", () => {
+    homepageDayBrowserMockState.isDateHeaderStuck = false;
+    homepageDayBrowserMockState.isStickyScrollRestorationVisualHoldActive = true;
+    homepageDayBrowserMockState.stickyScrollRestorationCoverRect = {
+      columnGap: "12px",
+      gridTemplateColumns: "48px 240px 48px",
+      height: 66,
+      left: 12,
+      paddingBottom: "7px",
+      paddingLeft: "8px",
+      paddingRight: "8px",
+      paddingTop: "7px",
+      top: 0,
+      width: 360
+    };
+    homepageDayBrowserMockState.stickyScrollRestorationPhase = "arming";
+
+    const html = renderBrowser([
+      {
+        dateKey: "2026-04-29",
+        heading: "Wed, Apr 29th",
+        items: [createGig()]
+      }
+    ]);
+
+    expect(html).not.toContain('data-stuck="true"');
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).toContain("day-browser__header-cover");
+    expect(html).toContain('data-sticky-restoration-phase="arming"');
+    expect(html).toContain("left:12px");
+    expect(html).toContain("width:360px");
+    expect(html).toContain("height:66px");
+    expect(html).toContain("padding-left:8px");
+    expect(html).toContain("grid-template-columns:48px 240px 48px");
+  });
+
+  it.each(["arming", "scrolling", "confirming"] as const)(
+    "renders a non-interactive visual cover during %s restoration",
+    (phase) => {
+      homepageDayBrowserMockState.isStickyScrollRestorationVisualHoldActive =
+        true;
+      homepageDayBrowserMockState.stickyScrollRestorationPhase = phase;
+
+      const html = renderBrowser([
+        {
+          dateKey: "2026-04-29",
+          heading: "Wed, Apr 29th",
+          items: [createGig()]
+        }
+      ]);
+
+      expect(html).toContain("day-browser__header-cover");
+      expect(html).toContain('aria-hidden="true"');
+      expect(html).toContain(`data-sticky-restoration-phase="${phase}"`);
+      expect(html).toContain("day-browser__header-cover-arrow");
+      expect(html).not.toContain("day-browser__header-shell");
+    }
+  );
+
+  it("renders the header as stuck from raw sticky state without restoration styling", () => {
+    homepageDayBrowserMockState.isDateHeaderStuck = true;
+    homepageDayBrowserMockState.isStickyScrollRestorationVisualHoldActive = false;
+
+    const html = renderBrowser([
+      {
+        dateKey: "2026-04-29",
+        heading: "Wed, Apr 29th",
+        items: [createGig()]
+      }
+    ]);
+
+    expect(html).toContain('data-stuck="true"');
+    expect(html).not.toContain("day-browser__header-cover");
   });
 
   it("renders only the active day even when adjacent days are seeded", () => {

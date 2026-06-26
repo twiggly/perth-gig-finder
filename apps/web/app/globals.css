@@ -972,6 +972,39 @@ body[data-filter-dropdown-open="true"] .date-pills {
   overflow: hidden;
 }
 
+.day-browser__header-cover {
+  position: fixed;
+  top: 0;
+  left: max(0.425rem, calc((100vw - 34rem) / 2));
+  z-index: 18;
+  display: grid;
+  grid-template-columns: 3.2rem minmax(0, 1fr) 3.2rem;
+  align-items: center;
+  gap: 0.8rem;
+  width: min(calc(100vw - 0.85rem), 34rem);
+  padding: 0.45rem;
+  border-radius: 999px;
+  color: var(--text);
+  isolation: isolate;
+  pointer-events: none;
+}
+
+.day-browser__header-cover::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: rgba(14, 11, 19, 0.92);
+  background: color-mix(in srgb, var(--page-bg-fallback) 92%, transparent);
+  content: "";
+  pointer-events: none;
+}
+
+.day-browser__header-cover .day-browser__heading-button,
+.day-browser__header-cover .day-browser__arrow {
+  cursor: default;
+}
+
 .day-browser__heading-button {
   position: relative;
   z-index: 1;
@@ -1251,6 +1284,10 @@ body[data-filter-dropdown-open="true"] .date-pills {
 
 .day-browser__content-align[data-scroll-align-target="true"] {
   transform: translate3d(0, var(--day-browser-scroll-align-y, 0px), 0);
+}
+
+.day-browser__content-align[data-scroll-handoff="true"] {
+  transform: translate3d(0, 0, 0) !important;
 }
 
 .day-browser__content-viewport,

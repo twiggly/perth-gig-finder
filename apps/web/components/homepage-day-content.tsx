@@ -24,6 +24,7 @@ interface HomepageDayContentProps {
   scrollAlignmentDateKey: string | null;
   scrollCarryoverDateKey: string | null;
   scrollOutgoingCompensationDateKey: string | null;
+  scrollRestorationAlignmentDateKey: string | null;
   scrollReserveTargetDateKey: string | null;
   scrollTargetContentRef: React.Ref<HTMLDivElement>;
   transitionDirection?: SwipeDirection;
@@ -41,6 +42,7 @@ export function HomepageDayContent({
   scrollAlignmentDateKey,
   scrollCarryoverDateKey,
   scrollOutgoingCompensationDateKey,
+  scrollRestorationAlignmentDateKey,
   scrollReserveTargetDateKey,
   scrollTargetContentRef,
   transitionDirection
@@ -69,6 +71,9 @@ export function HomepageDayContent({
             dateKey === scrollAlignmentDateKey &&
             motionRole === "to" &&
             phase !== "settling";
+          const isScrollRestorationAlignTarget =
+            dateKey === scrollRestorationAlignmentDateKey &&
+            (motionRole === "active" || motionRole === "to");
           const isScrollOutgoingCompensationTarget =
             dateKey === scrollOutgoingCompensationDateKey &&
             motionRole === "from";
@@ -105,7 +110,9 @@ export function HomepageDayContent({
                   isScrollOutgoingCompensationTarget ? "true" : undefined
                 }
                 data-scroll-align-target={
-                  isScrollAlignTarget ? "true" : undefined
+                  isScrollAlignTarget || isScrollRestorationAlignTarget
+                    ? "true"
+                    : undefined
                 }
               >
                 <Box
