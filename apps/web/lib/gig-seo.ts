@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { GigStatus } from "@perth-gig-finder/shared";
 
 import { formatGigCardArtists } from "./gig-card-artists";
-import { getRenderableGigImageUrl, type GigCardRecord } from "./gigs";
+import { getRenderableGigImage, type GigCardRecord } from "./gigs";
 import { serializeJsonLd } from "./json-ld";
 import {
   buildGigDetailPath,
@@ -55,13 +55,13 @@ function getGigMetadataImage(gig: GigCardRecord): {
   url: string;
   width: number;
 } {
-  const imageUrl = getRenderableGigImageUrl(gig);
+  const image = getRenderableGigImage(gig);
 
-  if (imageUrl) {
+  if (image) {
     return {
-      height: gig.image_height ?? SITE_LOGO_HEIGHT,
-      url: imageUrl,
-      width: gig.image_width ?? SITE_LOGO_WIDTH
+      height: image.height,
+      url: image.url,
+      width: image.width
     };
   }
 
@@ -144,14 +144,14 @@ export function buildGigMetadata(gig: GigCardRecord): Metadata {
 }
 
 export function buildGigEventStructuredData(gig: GigCardRecord) {
-  const imageUrl = getRenderableGigImageUrl(gig);
+  const image = getRenderableGigImage(gig);
   const event: Record<string, unknown> = {
     "@context": "https://schema.org",
     "@type": "Event",
     description: buildGigMetadataDescription(gig),
     eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
     eventStatus: getSchemaEventStatus(gig.status),
-    image: [imageUrl ? getAbsoluteUrl(imageUrl) : SITE_LOGO_URL],
+    image: [image ? getAbsoluteUrl(image.url) : SITE_LOGO_URL],
     location: {
       "@type": "Place",
       address: {

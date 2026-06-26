@@ -4,6 +4,7 @@ import {
   buildAvailableGigDates,
   getAdjacentGigImagePreloadUrls,
   getGigImagePreloadUrls,
+  getRenderableGigImage,
   getRenderableGigImageUrl,
   type HomepageDateAvailabilityRecord,
   type GigCardRecord
@@ -141,6 +142,66 @@ describe("gig image preload helpers", () => {
     ).toBeNull();
   });
 
+  it("uses The Bird placeholder when a Bird gig has no renderable image", () => {
+    expect(
+      getRenderableGigImage(
+        createGig("bird-placeholder", {
+          image_height: null,
+          image_width: null,
+          source_image_url: null,
+          venue_slug: "the-bird"
+        })
+      )
+    ).toEqual({
+      height: 940,
+      isPlaceholder: true,
+      url: "/venue-placeholders/the-bird.png",
+      width: 1674
+    });
+    expect(
+      getRenderableGigImageUrl(
+        createGig("bird-placeholder-url", {
+          image_height: null,
+          image_width: null,
+          source_image_url: null,
+          venue_slug: "the-bird"
+        })
+      )
+    ).toBe("/venue-placeholders/the-bird.png");
+  });
+
+  it("keeps real images ahead of The Bird placeholder", () => {
+    expect(
+      getRenderableGigImage(
+        createGig("bird-real", {
+          image_height: 900,
+          image_width: 600,
+          source_image_url: "https://images.example.com/bird-real.jpg",
+          venue_slug: "the-bird"
+        })
+      )
+    ).toEqual({
+      height: 900,
+      isPlaceholder: false,
+      url: "https://images.example.com/bird-real.jpg",
+      width: 600
+    });
+  });
+
+  it("does not use a placeholder for non-Bird gigs with no image", () => {
+    expect(
+      getRenderableGigImage(
+        createGig("no-image", {
+          image_height: null,
+          image_width: null,
+          source_image_url: null,
+          venue_slug: "milk-bar",
+          venue_name: "Milk Bar"
+        })
+      )
+    ).toBeNull();
+  });
+
   it("limits one day of preload urls and excludes invalid or duplicate images", () => {
     const gigs = [
       createGig("1"),
@@ -165,6 +226,29 @@ describe("gig image preload helpers", () => {
       "https://images.example.com/shared.jpg",
       "https://images.example.com/3.jpg",
       "https://images.example.com/4.jpg"
+    ]);
+  });
+
+  it("de-dupes The Bird placeholder in preload urls", () => {
+    const gigs = [
+      createGig("bird-placeholder-a", {
+        image_height: null,
+        image_width: null,
+        source_image_url: null,
+        venue_slug: "the-bird"
+      }),
+      createGig("bird-placeholder-b", {
+        image_height: null,
+        image_width: null,
+        source_image_url: null,
+        venue_slug: "the-bird"
+      }),
+      createGig("other-image")
+    ];
+
+    expect(getGigImagePreloadUrls(gigs, 5)).toEqual([
+      "/venue-placeholders/the-bird.png",
+      "https://images.example.com/other-image.jpg"
     ]);
   });
 

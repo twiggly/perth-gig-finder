@@ -74,7 +74,9 @@ describe("GigDetailContent", () => {
         gig={createGig({
           image_height: null,
           image_width: null,
-          source_image_url: null
+          source_image_url: null,
+          venue_name: "Milk Bar",
+          venue_slug: "milk-bar"
         })}
       />
     );
@@ -84,9 +86,28 @@ describe("GigDetailContent", () => {
     expect(html).not.toContain("Gig Radar listing");
     expect(html).toContain("ALT//THURSDAYS");
     expect(html).toContain("gig-detail__venue-icon");
-    expect(html).toContain("<p>The Bird,</p>");
+    expect(html).toContain("<p>Milk Bar,</p>");
     expect(html).toContain("Buy tickets");
-    expect(html).toContain("Listing @ The Bird");
+    expect(html).toContain("Listing @ Milk Bar");
+  });
+
+  it("renders The Bird placeholder for image-less Bird gigs", () => {
+    const html = renderToStaticMarkup(
+      <GigDetailContent
+        gig={createGig({
+          image_height: null,
+          image_width: null,
+          source_image_url: null,
+          venue_slug: "the-bird"
+        })}
+      />
+    );
+
+    expect(html).toContain("gig-detail__panel--with-media");
+    expect(html).toContain("gig-detail__image");
+    expect(html).toContain("%2Fvenue-placeholders%2Fthe-bird.png");
+    expect(html).toContain('width="1674"');
+    expect(html).toContain('height="940"');
   });
 
   it("keeps the venue suburb on the same line when no address exists", () => {
@@ -144,6 +165,8 @@ describe("GigDetailContent", () => {
           image_width: null,
           source_image_url: null,
           ticket_url: null,
+          venue_name: "Milk Bar",
+          venue_slug: "milk-bar",
           venue_address: null,
           venue_website_url: null
         })}

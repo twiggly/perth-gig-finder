@@ -7,8 +7,7 @@ import { getGigActions } from "@/lib/gig-actions";
 import { formatGigCardArtists } from "@/lib/gig-card-artists";
 import { buildGigDetailFallbackHref } from "@/lib/gig-detail-return";
 import {
-  getRenderableGigImageUrl,
-  hasRenderableGigImage,
+  getRenderableGigImage,
   type GigCardRecord
 } from "@/lib/gigs";
 import { formatPerthDateTime } from "@/lib/gig-seo";
@@ -106,12 +105,11 @@ function VenueLine({ gig }: { gig: GigCardRecord }) {
 export function GigDetailContent({ gig }: { gig: GigCardRecord }) {
   const actions = getGigActions(gig);
   const artistLine = formatGigCardArtists(gig.title, gig.artist_names);
-  const imageUrl = getRenderableGigImageUrl(gig);
-  const hasRenderableImage = hasRenderableGigImage(gig) && Boolean(imageUrl);
+  const image = getRenderableGigImage(gig);
   const fallbackHref = buildGigDetailFallbackHref(gig.starts_at);
   const panelClassName = [
     "gig-detail__panel",
-    hasRenderableImage
+    image
       ? "gig-detail__panel--with-media"
       : "gig-detail__panel--no-media"
   ].join(" ");
@@ -119,18 +117,18 @@ export function GigDetailContent({ gig }: { gig: GigCardRecord }) {
   return (
     <article className="gig-detail">
       <div className={panelClassName}>
-        {hasRenderableImage && imageUrl ? (
+        {image ? (
           <div className="gig-detail__media">
             <Image
               alt={`${gig.title} poster`}
               className="gig-detail__image"
-              height={gig.image_height!}
+              height={image.height}
               priority
               quality={GIG_DETAIL_IMAGE_QUALITY}
               sizes={GIG_DETAIL_IMAGE_SIZES}
-              src={imageUrl}
+              src={image.url}
               style={{ height: "auto", width: "100%" }}
-              width={gig.image_width!}
+              width={image.width}
             />
           </div>
         ) : null}

@@ -208,6 +208,29 @@ describe("GigCard", () => {
     expect(html).not.toContain('loading="eager"');
   });
 
+  it("renders The Bird placeholder when a Bird gig has no poster", () => {
+    const html = renderToStaticMarkup(
+      <MantineProvider defaultColorScheme="dark" theme={theme}>
+        <GigCard
+          gig={createGig({
+            image_height: null,
+            image_width: null,
+            source_image_url: null,
+            venue_slug: "the-bird"
+          })}
+          isOpen={false}
+          onClose={() => {}}
+          onToggle={() => {}}
+        />
+      </MantineProvider>
+    );
+
+    expect(html).toContain("gig-card__media-image");
+    expect(html).toContain("/venue-placeholders/the-bird.png");
+    expect(html).toContain('width="1674"');
+    expect(html).toContain('height="940"');
+  });
+
   it("exposes the action count for one-action cards", () => {
     const html = renderToStaticMarkup(
       <MantineProvider defaultColorScheme="dark" theme={theme}>

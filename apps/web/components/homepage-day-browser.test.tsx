@@ -81,12 +81,12 @@ function createGig(
     image_version: null,
     ticket_url: "https://tickets.example.com",
     source_url: "https://source.example.com/gig-1",
-    source_name: "The Bird",
-    venue_slug: "the-bird",
-    venue_name: "The Bird",
+    source_name: "Source",
+    venue_slug: "venue",
+    venue_name: "Venue",
     venue_suburb: "Northbridge",
-    venue_address: "181 William Street, Northbridge WA 6003",
-    venue_website_url: "https://www.williamstreetbird.com/",
+    venue_address: "1 Example Street, Northbridge WA 6003",
+    venue_website_url: "https://venue.example.com/",
     status: "active",
     ...overrides
   };

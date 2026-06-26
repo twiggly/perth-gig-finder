@@ -53,11 +53,13 @@ describe("gig SEO helpers", () => {
     const gig = createGig({
       image_height: null,
       image_width: null,
-      source_image_url: null
+      source_image_url: null,
+      venue_name: "Milk Bar",
+      venue_slug: "milk-bar"
     });
 
     expect(buildGigMetadataDescription(gig)).toContain(
-      "ALT//THURSDAYS with Melanija | Esper at The Bird, Northbridge"
+      "ALT//THURSDAYS with Melanija | Esper at Milk Bar, Northbridge"
     );
     expect(buildGigMetadata(gig)).toMatchObject({
       alternates: {
@@ -74,6 +76,30 @@ describe("gig SEO helpers", () => {
       twitter: {
         card: "summary",
         images: ["/logo.png"]
+      }
+    });
+  });
+
+  it("uses The Bird placeholder for image-less Bird gig metadata", () => {
+    const gig = createGig({
+      image_height: null,
+      image_width: null,
+      source_image_url: null,
+      venue_slug: "the-bird"
+    });
+
+    expect(buildGigMetadata(gig)).toMatchObject({
+      openGraph: {
+        images: [
+          {
+            height: 940,
+            url: "/venue-placeholders/the-bird.png",
+            width: 1674
+          }
+        ]
+      },
+      twitter: {
+        images: ["/venue-placeholders/the-bird.png"]
       }
     });
   });
@@ -136,7 +162,9 @@ describe("gig SEO helpers", () => {
         image_height: null,
         image_width: null,
         source_image_url: null,
-        ticket_url: null
+        ticket_url: null,
+        venue_name: "Milk Bar",
+        venue_slug: "milk-bar"
       })
     );
 
@@ -145,6 +173,21 @@ describe("gig SEO helpers", () => {
     });
     expect(event).not.toHaveProperty("offers");
     expect(event).not.toHaveProperty("performer");
+  });
+
+  it("uses The Bird placeholder for image-less Bird gig structured data", () => {
+    const event = buildGigEventStructuredData(
+      createGig({
+        image_height: null,
+        image_width: null,
+        source_image_url: null,
+        venue_slug: "the-bird"
+      })
+    );
+
+    expect(event).toMatchObject({
+      image: [`${SITE_URL}/venue-placeholders/the-bird.png`]
+    });
   });
 
   it("serializes gig Event JSON-LD safely for scraper-controlled strings", () => {

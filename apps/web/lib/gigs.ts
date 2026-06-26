@@ -55,11 +55,26 @@ interface GigImageRecord {
   image_version: string | null;
   image_width: number | null;
   source_image_url: string | null;
+  venue_slug?: string | null;
 }
 
 interface GigImageGroup {
   items: GigCardRecord[];
 }
+
+export interface RenderableGigImage {
+  height: number;
+  isPlaceholder: boolean;
+  url: string;
+  width: number;
+}
+
+const THE_BIRD_PLACEHOLDER_IMAGE: RenderableGigImage = {
+  height: 940,
+  isPlaceholder: true,
+  url: "/venue-placeholders/the-bird.png",
+  width: 1674
+};
 
 const GIG_CARD_SELECT =
   "id, slug, title, starts_at, ends_at, artist_names, image_path, source_image_url, image_width, image_height, image_version, ticket_url, source_url, source_name, venue_slug, venue_name, venue_suburb, venue_address, venue_website_url, status";
@@ -277,7 +292,7 @@ function encodeStoragePath(path: string): string {
     .join("/");
 }
 
-export function getGigImageUrl(gig: GigCardRecord): string | null {
+export function getGigImageUrl(gig: GigImageRecord): string | null {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "") ?? null;
 
   if (gig.image_path && supabaseUrl) {
@@ -290,21 +305,37 @@ export function getGigImageUrl(gig: GigCardRecord): string | null {
 }
 
 export function hasRenderableGigImage(gig: GigImageRecord): boolean {
-  return (
+  return Boolean(getRenderableGigImage(gig));
+}
+
+export function getRenderableGigImage(
+  gig: GigImageRecord
+): RenderableGigImage | null {
+  const hasGigImage =
     typeof gig.image_width === "number" &&
     gig.image_width > 0 &&
     typeof gig.image_height === "number" &&
     gig.image_height > 0 &&
-    Boolean(gig.image_path || gig.source_image_url)
-  );
-}
+    Boolean(gig.image_path || gig.source_image_url);
 
-export function getRenderableGigImageUrl(gig: GigCardRecord): string | null {
-  if (!hasRenderableGigImage(gig)) {
-    return null;
+  if (hasGigImage) {
+    const url = getGigImageUrl(gig);
+
+    if (url) {
+      return {
+        height: gig.image_height!,
+        isPlaceholder: false,
+        url,
+        width: gig.image_width!
+      };
+    }
   }
 
-  return getGigImageUrl(gig);
+  return gig.venue_slug === "the-bird" ? THE_BIRD_PLACEHOLDER_IMAGE : null;
+}
+
+export function getRenderableGigImageUrl(gig: GigImageRecord): string | null {
+  return getRenderableGigImage(gig)?.url ?? null;
 }
 
 export function getGigImagePreloadUrls(
