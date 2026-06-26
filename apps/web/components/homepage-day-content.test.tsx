@@ -97,6 +97,7 @@ function renderContent({
   scrollAlignmentDateKey = null,
   scrollCarryoverDateKey = null,
   scrollOutgoingCompensationDateKey = null,
+  scrollRestorationAlignmentDateKey = null,
   scrollReserveTargetDateKey = null,
   transitionDirection
 }: {
@@ -108,6 +109,7 @@ function renderContent({
   scrollAlignmentDateKey?: string | null;
   scrollCarryoverDateKey?: string | null;
   scrollOutgoingCompensationDateKey?: string | null;
+  scrollRestorationAlignmentDateKey?: string | null;
   scrollReserveTargetDateKey?: string | null;
   transitionDirection?: "next" | "previous";
 } = {}) {
@@ -127,6 +129,7 @@ function renderContent({
         scrollAlignmentDateKey={scrollAlignmentDateKey}
         scrollCarryoverDateKey={scrollCarryoverDateKey}
         scrollOutgoingCompensationDateKey={scrollOutgoingCompensationDateKey}
+        scrollRestorationAlignmentDateKey={scrollRestorationAlignmentDateKey}
         scrollReserveTargetDateKey={scrollReserveTargetDateKey}
         scrollTargetContentRef={React.createRef<HTMLDivElement>()}
         transitionDirection={transitionDirection}
@@ -498,6 +501,53 @@ describe("HomepageDayContent", () => {
 
     expect(html).toContain('data-phase="settling"');
     expect(html).not.toContain('data-scroll-align-target="true"');
+  });
+
+  it("keeps restoration alignment on the incoming pane during settling", () => {
+    const today = createDay();
+    const tomorrow = createDay({
+      dateKey: "2026-04-30",
+      heading: "Thu, Apr 30th",
+      items: [
+        createGig({
+          id: "gig-2",
+          title: "Tomorrow's Show"
+        })
+      ]
+    });
+    const html = renderContent({
+      days: [today, tomorrow],
+      renderedContentPanes: [
+        {
+          dateKey: "2026-04-29",
+          motionRole: "from",
+          phase: "settling"
+        },
+        {
+          dateKey: "2026-04-30",
+          motionRole: "to",
+          phase: "settling"
+        }
+      ],
+      scrollRestorationAlignmentDateKey: "2026-04-30",
+      transitionDirection: "next"
+    });
+
+    expect(html).toContain('data-phase="settling"');
+    expect(html).toContain('data-scroll-align-target="true"');
+    expect(html.match(/data-scroll-align-target="true"/g)).toHaveLength(1);
+    expect(html).toMatch(
+      /class="[^"]*day-browser__content-align[^"]*" data-scroll-align-target="true"/
+    );
+  });
+
+  it("keeps restoration alignment on the final active pane until scroll handoff", () => {
+    const html = renderContent({
+      scrollRestorationAlignmentDateKey: "2026-04-29"
+    });
+
+    expect(html).toContain('data-motion-role="active"');
+    expect(html).toContain('data-scroll-align-target="true"');
   });
 
   it("marks the outgoing from pane as carryover without making it the target", () => {

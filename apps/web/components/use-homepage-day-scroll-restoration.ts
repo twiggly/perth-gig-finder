@@ -7,6 +7,7 @@ import {
   useState,
   type RefObject
 } from "react";
+import { flushSync } from "react-dom";
 
 import {
   isHomepageDayTransitionActive,
@@ -47,8 +48,11 @@ interface HomepageDayScrollRestoration {
   captureDateChangeLayout: (targetDateKey?: string) => void;
   clearDateChangeLayout: () => void;
   isStickyScrollRestorationVisualHoldActive: boolean;
+  stickyScrollRestorationCoverRect: HomepageDayStickyScrollRestorationCoverRect | null;
+  stickyScrollRestorationPhase: HomepageDayStickyScrollRestorationPhase | null;
   scrollAlignmentDateKey: string | null;
   scrollAlignmentOffset: number;
+  scrollRestorationAlignmentDateKey: string | null;
   scrollCarryoverDateKey: string | null;
   scrollCarryoverReserve: number;
   scrollOutgoingCompensationDateKey: string | null;
@@ -89,15 +93,42 @@ interface HomepageDayOutgoingScrollCompensation {
   targetDateKey: string | null;
 }
 
+export type HomepageDayStickyScrollRestorationPhase =
+  | "arming"
+  | "scrolling"
+  | "confirming";
+
+export interface HomepageDayStickyScrollRestorationCoverRect {
+  columnGap: string;
+  gridTemplateColumns: string;
+  height: number;
+  left: number;
+  paddingBottom: string;
+  paddingLeft: string;
+  paddingRight: string;
+  paddingTop: string;
+  top: number;
+  width: number;
+}
+
 interface HomepageDayStickyScrollRestorationHold {
-  hasScrolled: boolean;
+  coverRect: HomepageDayStickyScrollRestorationCoverRect | null;
+  generation: number;
+  phase: HomepageDayStickyScrollRestorationPhase;
   retryCount: number;
   scrollTarget: number;
+  stableFrameCount: number;
+}
+
+interface HomepageDayStickyScrollRestorationFrames {
+  firstFrame: number | null;
+  secondFrame: number | null;
 }
 
 type HomepageDayStickyScrollRestorationHoldRelease =
   | "clear"
   | "keep"
+  | "release-next-frame"
   | "retry"
   | "fallback-clear";
 
@@ -107,7 +138,9 @@ type HomepageDayScrollIntentWindow = Window &
   };
 
 const ACTIVE_DAY_SCROLL_OFFSET_PX = 8;
+const HOMEPAGE_DAY_SCROLL_HANDOFF_DATASET_KEY = "scrollHandoff";
 const STICKY_ACTIVATION_OFFSET_PX = 1;
+const STICKY_SCROLL_RESTORATION_STABLE_FRAME_COUNT = 2;
 const STICKY_SCROLL_RESTORATION_HOLD_RELEASE_MAX_RETRIES = 3;
 const STICKY_SCROLL_INTENT_STORAGE_KEY =
   "gig-radar:homepage-day-sticky-scroll-intent";
@@ -203,22 +236,24 @@ export function shouldRestoreHomepageDayScroll(
 
 export function getHomepageDayStickyScrollRestorationHoldRelease({
   currentScrollTop,
-  hasScrolled,
   isHoldActive,
   maxRetryCount,
+  phase,
   retryCount,
   scrollTarget,
+  stableFrameCount,
   stickySentinelTop
 }: {
   currentScrollTop?: number | null;
-  hasScrolled: boolean;
   isHoldActive: boolean;
   maxRetryCount: number;
+  phase: HomepageDayStickyScrollRestorationPhase | null;
   retryCount: number;
   scrollTarget?: number | null;
+  stableFrameCount: number;
   stickySentinelTop?: number | null;
 }): HomepageDayStickyScrollRestorationHoldRelease {
-  if (!isHoldActive || !hasScrolled) {
+  if (!isHoldActive || phase !== "confirming") {
     return "keep";
   }
 
@@ -230,12 +265,18 @@ export function getHomepageDayStickyScrollRestorationHoldRelease({
     return "clear";
   }
 
-  if (retryCount <= 0) {
-    return "retry";
-  }
+  const isStickyGeometryStable =
+    isHomepageDayStickyScrollRestorationGeometryStable({
+      currentScrollTop,
+      scrollTarget,
+      stickySentinelTop
+    });
 
-  if (typeof stickySentinelTop === "number" && stickySentinelTop < 0) {
-    return "clear";
+  if (
+    isStickyGeometryStable &&
+    stableFrameCount >= STICKY_SCROLL_RESTORATION_STABLE_FRAME_COUNT
+  ) {
+    return "release-next-frame";
   }
 
   if (retryCount < maxRetryCount) {
@@ -243,6 +284,117 @@ export function getHomepageDayStickyScrollRestorationHoldRelease({
   }
 
   return "fallback-clear";
+}
+
+export function isHomepageDayStickyScrollRestorationGeometryStable({
+  currentScrollTop,
+  scrollTarget,
+  stickySentinelTop
+}: {
+  currentScrollTop?: number | null;
+  scrollTarget?: number | null;
+  stickySentinelTop?: number | null;
+}): boolean {
+  return Boolean(
+    typeof currentScrollTop === "number" &&
+      typeof scrollTarget === "number" &&
+      currentScrollTop >= scrollTarget - STICKY_ACTIVATION_OFFSET_PX &&
+      typeof stickySentinelTop === "number" &&
+      stickySentinelTop < 0
+  );
+}
+
+export function scheduleHomepageDayStickyScrollRestoration({
+  onBeforeScrollFrame,
+  onScroll,
+  requestAnimationFrame
+}: {
+  onBeforeScrollFrame: () => void;
+  onScroll: () => void;
+  requestAnimationFrame: (callback: FrameRequestCallback) => number;
+}): HomepageDayStickyScrollRestorationFrames {
+  const frames: HomepageDayStickyScrollRestorationFrames = {
+    firstFrame: null,
+    secondFrame: null
+  };
+
+  frames.firstFrame = requestAnimationFrame(() => {
+    frames.firstFrame = null;
+    onBeforeScrollFrame();
+    frames.secondFrame = requestAnimationFrame(() => {
+      frames.secondFrame = null;
+      onScroll();
+    });
+  });
+
+  return frames;
+}
+
+export function cancelHomepageDayStickyScrollRestoration({
+  cancelAnimationFrame,
+  frames
+}: {
+  cancelAnimationFrame: (handle: number) => void;
+  frames: HomepageDayStickyScrollRestorationFrames;
+}) {
+  if (frames.firstFrame !== null) {
+    cancelAnimationFrame(frames.firstFrame);
+  }
+
+  if (frames.secondFrame !== null) {
+    cancelAnimationFrame(frames.secondFrame);
+  }
+
+  frames.firstFrame = null;
+  frames.secondFrame = null;
+}
+
+export function applyHomepageDayScrollHandoffOverride(
+  alignedElement: HTMLElement | null
+): HTMLElement | null {
+  if (!alignedElement) {
+    return null;
+  }
+
+  alignedElement.dataset[HOMEPAGE_DAY_SCROLL_HANDOFF_DATASET_KEY] = "true";
+  alignedElement.getBoundingClientRect();
+
+  return alignedElement;
+}
+
+export function clearHomepageDayScrollHandoffOverride(
+  alignedElement: HTMLElement | null
+) {
+  if (
+    alignedElement?.dataset[HOMEPAGE_DAY_SCROLL_HANDOFF_DATASET_KEY] === "true"
+  ) {
+    delete alignedElement.dataset[HOMEPAGE_DAY_SCROLL_HANDOFF_DATASET_KEY];
+  }
+}
+
+export function performHomepageDayStickyScrollHandoff({
+  alignedElement,
+  commitConfirming,
+  scrollTarget,
+  scrollTo
+}: {
+  alignedElement: HTMLElement | null;
+  commitConfirming: () => void;
+  scrollTarget: number;
+  scrollTo: (options: ScrollToOptions) => void;
+}) {
+  const markedElement =
+    applyHomepageDayScrollHandoffOverride(alignedElement);
+
+  try {
+    scrollTo({
+      behavior: "auto",
+      top: scrollTarget
+    });
+    commitConfirming();
+  } finally {
+    clearHomepageDayScrollHandoffOverride(markedElement);
+  }
 }
 
 export function getHomepageDayScrollTarget({
@@ -562,9 +714,16 @@ export function useHomepageDayScrollRestoration(
   const pendingScrollIntentRef = useRef<HomepageDayScrollIntent | null>(null);
   const pendingScrollTargetRef = useRef<number | null>(null);
   const previousActiveDateKeyRef = useRef(activeDateKey);
+  const stickyRestorationGenerationRef = useRef(0);
   const stickyRestorationHoldReleaseFrameRef = useRef<number | null>(null);
   const stickyRestorationHoldRef =
     useRef<HomepageDayStickyScrollRestorationHold | null>(null);
+  const stickyRestorationScrollFramesRef =
+    useRef<HomepageDayStickyScrollRestorationFrames>({
+      firstFrame: null,
+      secondFrame: null
+    });
+  const stickyScrollHandoffElementRef = useRef<HTMLElement | null>(null);
   const carryoverReserveRef =
     useRef<HomepageDayScrollCarryoverReserve>(EMPTY_CARRYOVER_RESERVE);
   const outgoingCompensationRef =
@@ -606,6 +765,32 @@ export function useHomepageDayScrollRestoration(
     }
   }
 
+  function cancelStickyRestorationScrollFrames() {
+    if (typeof window === "undefined") {
+      stickyRestorationScrollFramesRef.current = {
+        firstFrame: null,
+        secondFrame: null
+      };
+      return;
+    }
+
+    cancelHomepageDayStickyScrollRestoration({
+      cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+      frames: stickyRestorationScrollFramesRef.current
+    });
+  }
+
+  function clearStickyScrollHandoffMarker() {
+    clearHomepageDayScrollHandoffOverride(stickyScrollHandoffElementRef.current);
+    stickyScrollHandoffElementRef.current = null;
+  }
+
+  function nextStickyRestorationGeneration() {
+    stickyRestorationGenerationRef.current += 1;
+
+    return stickyRestorationGenerationRef.current;
+  }
+
   function setPendingScrollIntent(nextIntent: HomepageDayScrollIntent | null) {
     pendingScrollIntentRef.current = nextIntent;
     writeStoredHomepageDayScrollIntent(nextIntent);
@@ -625,7 +810,10 @@ export function useHomepageDayScrollRestoration(
   }
 
   function clearStickyRestorationHold() {
+    nextStickyRestorationGeneration();
     cancelStickyRestorationHoldReleaseFrame();
+    cancelStickyRestorationScrollFrames();
+    clearStickyScrollHandoffMarker();
     setStickyRestorationHold(null);
   }
 
@@ -672,6 +860,34 @@ export function useHomepageDayScrollRestoration(
       document.querySelector<HTMLElement>(".day-browser__header");
 
     return header?.getBoundingClientRect().height ?? 0;
+  }
+
+  function getStickyHeaderCoverRect():
+    | HomepageDayStickyScrollRestorationCoverRect
+    | null {
+    const header =
+      stickyHeaderRef.current ??
+      document.querySelector<HTMLElement>(".day-browser__header");
+
+    if (!header) {
+      return null;
+    }
+
+    const rect = header.getBoundingClientRect();
+    const styles = getComputedStyle(header);
+
+    return {
+      columnGap: styles.columnGap,
+      gridTemplateColumns: styles.gridTemplateColumns,
+      height: rect.height,
+      left: rect.left,
+      paddingBottom: styles.paddingBottom,
+      paddingLeft: styles.paddingLeft,
+      paddingRight: styles.paddingRight,
+      paddingTop: styles.paddingTop,
+      top: rect.top,
+      width: rect.width
+    };
   }
 
   function isDateHeaderStuckNow() {
@@ -750,6 +966,24 @@ export function useHomepageDayScrollRestoration(
     return getStickyScrollTargetForContent(
       document.querySelector<HTMLElement>(".gig-grid[data-active-date='true']")
     );
+  }
+
+  function getCurrentRestorationAlignElement(
+    targetDateKey: string | null
+  ): HTMLElement | null {
+    if (typeof document === "undefined" || !targetDateKey) {
+      return null;
+    }
+
+    const targetGrid = Array.from(
+      document.querySelectorAll<HTMLElement>(".gig-grid[data-date]")
+    ).find((grid) => grid.dataset.date === targetDateKey);
+    const alignElement = targetGrid?.closest(".day-browser__content-align");
+
+    return alignElement instanceof HTMLElement &&
+      alignElement.dataset.scrollAlignTarget === "true"
+      ? alignElement
+      : null;
   }
 
   function shrinkScrollDebtReserve() {
@@ -910,6 +1144,17 @@ export function useHomepageDayScrollRestoration(
     }
   }
 
+  useEffect(
+    () => () => {
+      nextStickyRestorationGeneration();
+      cancelScrollFrames();
+      cancelStickyRestorationHoldReleaseFrame();
+      cancelStickyRestorationScrollFrames();
+      clearStickyScrollHandoffMarker();
+    },
+    []
+  );
+
   useLayoutEffect(() => {
     const effectiveIntent = getEffectiveScrollIntent();
 
@@ -1058,7 +1303,7 @@ export function useHomepageDayScrollRestoration(
       return undefined;
     }
 
-    const scrollTarget = getCurrentStickyScrollTarget() ?? reservePlan.scrollTarget;
+    const scrollTarget = reservePlan.scrollTarget;
     const naturalMaxScrollTop = getCurrentNaturalMaxScrollTop();
 
     if (naturalMaxScrollTop !== null) {
@@ -1081,31 +1326,101 @@ export function useHomepageDayScrollRestoration(
     const currentHold = stickyRestorationHoldRef.current;
 
     if (!currentHold || currentHold.scrollTarget !== scrollTarget) {
+      cancelStickyRestorationScrollFrames();
+      const generation = nextStickyRestorationGeneration();
+
       setStickyRestorationHold({
-        hasScrolled: false,
+        coverRect: getStickyHeaderCoverRect(),
+        generation,
+        phase: "arming",
         retryCount: 0,
-        scrollTarget
+        scrollTarget,
+        stableFrameCount: 0
       });
       return undefined;
     }
 
-    if (!currentHold.hasScrolled) {
+    if (currentHold.phase === "arming") {
+      const hasScheduledScroll =
+        stickyRestorationScrollFramesRef.current.firstFrame !== null ||
+        stickyRestorationScrollFramesRef.current.secondFrame !== null;
+
+      if (!hasScheduledScroll) {
+        const generation = currentHold.generation;
+
+        stickyRestorationScrollFramesRef.current =
+          scheduleHomepageDayStickyScrollRestoration({
+            onBeforeScrollFrame: () => {
+              const pendingHold = stickyRestorationHoldRef.current;
+
+              if (
+                !pendingHold ||
+                pendingHold.generation !== generation ||
+                pendingHold.scrollTarget !== scrollTarget ||
+                pendingHold.phase !== "arming"
+              ) {
+                return;
+              }
+
+              setStickyRestorationHold({
+                ...pendingHold,
+                phase: "scrolling"
+              });
+            },
+            onScroll: () => {
+              const pendingHold = stickyRestorationHoldRef.current;
+
+              if (
+                !pendingHold ||
+                pendingHold.generation !== generation ||
+                pendingHold.scrollTarget !== scrollTarget ||
+                (pendingHold.phase !== "arming" &&
+                  pendingHold.phase !== "scrolling")
+              ) {
+                return;
+              }
+
+              stickyScrollHandoffElementRef.current =
+                getCurrentRestorationAlignElement(reservePlan.dateKey);
+
+              try {
+                performHomepageDayStickyScrollHandoff({
+                  alignedElement: stickyScrollHandoffElementRef.current,
+                  commitConfirming: () => {
+                    flushSync(() => {
+                      setPendingScrollIntent(null);
+                      clearCarryoverReserve();
+                      setStickyRestorationHold({
+                        ...pendingHold,
+                        phase: "confirming",
+                        retryCount: 0,
+                        stableFrameCount: 0
+                      });
+                    });
+                  },
+                  scrollTarget,
+                  scrollTo: (options) => window.scrollTo(options)
+                });
+              } finally {
+                clearStickyScrollHandoffMarker();
+              }
+            },
+            requestAnimationFrame: window.requestAnimationFrame.bind(window)
+          });
+      }
+
+      return undefined;
+    }
+
+    if (currentHold.phase === "scrolling") {
+      return undefined;
+    }
+
+    if (currentHold.phase === "confirming") {
       setPendingScrollIntent(null);
       clearCarryoverReserve();
-      window.scrollTo({
-        behavior: "auto",
-        top: scrollTarget
-      });
-      setStickyRestorationHold({
-        hasScrolled: true,
-        retryCount: 0,
-        scrollTarget
-      });
       return undefined;
     }
-
-    setPendingScrollIntent(null);
-    clearCarryoverReserve();
 
     return undefined;
   }, [
@@ -1113,6 +1428,7 @@ export function useHomepageDayScrollRestoration(
     isContentAnimating,
     isDateTransitioning,
     pendingScrollIntent,
+    reservePlan.dateKey,
     reservePlan.height,
     reservePlan.isPlanned,
     reservePlan.naturalMaxScrollTop,
@@ -1137,11 +1453,12 @@ export function useHomepageDayScrollRestoration(
 
     const release = getHomepageDayStickyScrollRestorationHoldRelease({
       currentScrollTop: window.scrollY,
-      hasScrolled: stickyRestorationHold?.hasScrolled ?? false,
       isHoldActive: stickyRestorationHold !== null,
       maxRetryCount: STICKY_SCROLL_RESTORATION_HOLD_RELEASE_MAX_RETRIES,
+      phase: stickyRestorationHold?.phase ?? null,
       retryCount: stickyRestorationHold?.retryCount ?? 0,
       scrollTarget: stickyRestorationHold?.scrollTarget ?? null,
+      stableFrameCount: stickyRestorationHold?.stableFrameCount ?? 0,
       stickySentinelTop:
         stickyRestorationHold === null ? null : getStickySentinelTop()
     });
@@ -1155,19 +1472,59 @@ export function useHomepageDayScrollRestoration(
       return undefined;
     }
 
+    if (release === "release-next-frame") {
+      const releaseGeneration = stickyRestorationHold?.generation ?? null;
+
+      stickyRestorationHoldReleaseFrameRef.current = window.requestAnimationFrame(
+        () => {
+          stickyRestorationHoldReleaseFrameRef.current = null;
+
+          const currentHold = stickyRestorationHoldRef.current;
+
+          if (
+            !currentHold ||
+            currentHold.generation !== releaseGeneration
+          ) {
+            return;
+          }
+
+          clearStickyRestorationHold();
+        }
+      );
+
+      return () => {
+        if (stickyRestorationHoldReleaseFrameRef.current !== null) {
+          window.cancelAnimationFrame(stickyRestorationHoldReleaseFrameRef.current);
+          stickyRestorationHoldReleaseFrameRef.current = null;
+        }
+      };
+    }
+
+    const retryGeneration = stickyRestorationHold?.generation ?? null;
+    const isStableThisFrame =
+      stickyRestorationHold?.phase === "confirming" &&
+      isHomepageDayStickyScrollRestorationGeometryStable({
+        currentScrollTop: window.scrollY,
+        scrollTarget: stickyRestorationHold.scrollTarget,
+        stickySentinelTop: getStickySentinelTop()
+      });
+
     stickyRestorationHoldReleaseFrameRef.current = window.requestAnimationFrame(
       () => {
         stickyRestorationHoldReleaseFrameRef.current = null;
 
         const currentHold = stickyRestorationHoldRef.current;
 
-        if (!currentHold) {
+        if (!currentHold || currentHold.generation !== retryGeneration) {
           return;
         }
 
         setStickyRestorationHold({
           ...currentHold,
-          retryCount: currentHold.retryCount + 1
+          retryCount: currentHold.retryCount + 1,
+          stableFrameCount: isStableThisFrame
+            ? currentHold.stableFrameCount + 1
+            : 0
         });
       }
     );
@@ -1264,7 +1621,7 @@ export function useHomepageDayScrollRestoration(
       const currentHold = stickyRestorationHoldRef.current;
 
       if (
-        currentHold?.hasScrolled &&
+        currentHold &&
         window.scrollY <
           currentHold.scrollTarget - STICKY_ACTIVATION_OFFSET_PX
       ) {
@@ -1310,23 +1667,29 @@ export function useHomepageDayScrollRestoration(
   }, [isDateTransitioning, outgoingCompensation.dateKey]);
 
   const hasOutgoingCompensation = outgoingCompensation.dateKey !== null;
+  const isRestorationAlignmentHeld =
+    stickyRestorationHold?.phase === "arming" ||
+    stickyRestorationHold?.phase === "scrolling";
+  const shouldExposeStickyAlignment =
+    reservePlan.mode === "sticky" &&
+    reservePlan.isPlanned &&
+    (!hasOutgoingCompensation || isRestorationAlignmentHeld);
 
   return {
     captureDateChangeLayout,
     clearDateChangeLayout,
     isStickyScrollRestorationVisualHoldActive: stickyRestorationHold !== null,
-    scrollAlignmentDateKey:
-      reservePlan.mode === "sticky" &&
-      reservePlan.isPlanned &&
-      !hasOutgoingCompensation
-        ? reservePlan.dateKey
-        : null,
-    scrollAlignmentOffset:
-      reservePlan.mode === "sticky" &&
-      reservePlan.isPlanned &&
-      !hasOutgoingCompensation
-        ? reservePlan.alignmentOffset
-        : 0,
+    stickyScrollRestorationCoverRect: stickyRestorationHold?.coverRect ?? null,
+    stickyScrollRestorationPhase: stickyRestorationHold?.phase ?? null,
+    scrollAlignmentDateKey: shouldExposeStickyAlignment
+      ? reservePlan.dateKey
+      : null,
+    scrollAlignmentOffset: shouldExposeStickyAlignment
+      ? reservePlan.alignmentOffset
+      : 0,
+    scrollRestorationAlignmentDateKey: isRestorationAlignmentHeld
+      ? reservePlan.dateKey
+      : null,
     scrollCarryoverDateKey: carryoverReserve.dateKey,
     scrollCarryoverReserve: carryoverReserve.height,
     scrollOutgoingCompensationDateKey: outgoingCompensation.dateKey,

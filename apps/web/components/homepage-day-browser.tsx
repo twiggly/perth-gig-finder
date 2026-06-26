@@ -158,12 +158,16 @@ export function HomepageDayBrowser({
   const {
     captureDateChangeLayout,
     clearDateChangeLayout,
+    isStickyScrollRestorationVisualHoldActive,
+    stickyScrollRestorationCoverRect,
+    stickyScrollRestorationPhase,
     scrollAlignmentDateKey,
     scrollAlignmentOffset,
     scrollCarryoverDateKey,
     scrollCarryoverReserve,
     scrollOutgoingCompensationDateKey,
     scrollOutgoingCompensationOffset,
+    scrollRestorationAlignmentDateKey,
     scrollReserveHeight,
     scrollReserveTargetDateKey
   } = useHomepageDayScrollRestoration({
@@ -176,6 +180,36 @@ export function HomepageDayBrowser({
   });
   captureDateChangeLayoutRef.current = captureDateChangeLayout;
   clearDateChangeLayoutRef.current = clearDateChangeLayout;
+  const stickyRestorationCoverStyle = useMemo(
+    () =>
+      stickyScrollRestorationCoverRect
+        ? ({
+            columnGap: stickyScrollRestorationCoverRect.columnGap,
+            gridTemplateColumns:
+              stickyScrollRestorationCoverRect.gridTemplateColumns,
+            height: `${stickyScrollRestorationCoverRect.height}px`,
+            left: `${stickyScrollRestorationCoverRect.left}px`,
+            paddingBottom: stickyScrollRestorationCoverRect.paddingBottom,
+            paddingLeft: stickyScrollRestorationCoverRect.paddingLeft,
+            paddingRight: stickyScrollRestorationCoverRect.paddingRight,
+            paddingTop: stickyScrollRestorationCoverRect.paddingTop,
+            top: `${stickyScrollRestorationCoverRect.top}px`,
+            width: `${stickyScrollRestorationCoverRect.width}px`
+          }) as React.CSSProperties
+        : undefined,
+    [
+      stickyScrollRestorationCoverRect?.height,
+      stickyScrollRestorationCoverRect?.left,
+      stickyScrollRestorationCoverRect?.paddingBottom,
+      stickyScrollRestorationCoverRect?.paddingLeft,
+      stickyScrollRestorationCoverRect?.paddingRight,
+      stickyScrollRestorationCoverRect?.paddingTop,
+      stickyScrollRestorationCoverRect?.top,
+      stickyScrollRestorationCoverRect?.width,
+      stickyScrollRestorationCoverRect?.columnGap,
+      stickyScrollRestorationCoverRect?.gridTemplateColumns
+    ]
+  );
   const dayContentViewportStyle = useMemo(
     () =>
       ({
@@ -387,6 +421,47 @@ export function HomepageDayBrowser({
           <span aria-hidden="true">&gt;</span>
         </ActionIcon>
       </Box>
+      {isStickyScrollRestorationVisualHoldActive ? (
+        <Box
+          aria-hidden="true"
+          className="day-browser__header-cover"
+          data-sticky-restoration-phase={
+            stickyScrollRestorationPhase ?? undefined
+          }
+          style={stickyRestorationCoverStyle}
+        >
+          <span className="day-browser__arrow day-browser__header-cover-arrow">
+            &lt;
+          </span>
+          <Box className="day-browser__heading-button day-browser__header-cover-heading">
+            <Box className="day-browser__heading-viewport">
+              <Box
+                className="day-browser__heading-track"
+                data-direction={transition?.direction}
+                style={headingTrackStyle}
+              >
+                {renderedHeadingPanes.map(({ dateKey, motionRole, phase }) => (
+                  <Box
+                    className="day-browser__heading-pane"
+                    data-motion-role={motionRole}
+                    data-phase={phase ?? undefined}
+                    key={`heading-cover-${dateKey}`}
+                  >
+                    <span className="day-browser__heading-title">
+                      {loadedDayMap.get(dateKey)?.heading ??
+                        availableDayMap.get(dateKey)?.heading ??
+                        activeDay.heading}
+                    </span>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          </Box>
+          <span className="day-browser__arrow day-browser__header-cover-arrow">
+            &gt;
+          </span>
+        </Box>
+      ) : null}
       {isLoadingDay ? (
         <span className="sr-only" role="status">
           Loading gigs for the selected date.
@@ -414,6 +489,7 @@ export function HomepageDayBrowser({
         scrollAlignmentDateKey={scrollAlignmentDateKey}
         scrollCarryoverDateKey={scrollCarryoverDateKey}
         scrollOutgoingCompensationDateKey={scrollOutgoingCompensationDateKey}
+        scrollRestorationAlignmentDateKey={scrollRestorationAlignmentDateKey}
         scrollReserveTargetDateKey={scrollReserveTargetDateKey}
         scrollTargetContentRef={scrollTargetContentRef}
         transitionDirection={transition?.direction}
