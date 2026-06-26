@@ -13,6 +13,7 @@ describe("SiteHeaderBrand", () => {
     expect(html).toContain("site-header__logo-mark");
     expect(html).toContain('src="/logo.svg"');
     expect(html).toContain('alt=""');
+    expect(html).toContain('<link rel="preload" as="image" href="/logo.svg"');
     expect(html).toContain("site-header__title-text");
   });
 });

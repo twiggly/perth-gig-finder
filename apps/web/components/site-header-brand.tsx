@@ -9,6 +9,7 @@ export function SiteHeaderBrand() {
         alt=""
         className="site-header__logo-mark"
         height={196}
+        priority
         src="/logo.svg"
         unoptimized
         width={196}

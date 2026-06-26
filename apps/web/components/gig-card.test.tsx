@@ -167,7 +167,7 @@ describe("GigCard", () => {
     expect(firstActionIndex).toBeGreaterThan(popoverIndex);
   });
 
-  it("marks a renderable poster as eager when it is the likely LCP image", () => {
+  it("marks a renderable poster as eager when requested", () => {
     const html = renderToStaticMarkup(
       <MantineProvider defaultColorScheme="dark" theme={theme}>
         <GigCard
@@ -176,7 +176,7 @@ describe("GigCard", () => {
             image_width: 600,
             source_image_url: "https://assets.oztix.com.au/poster.jpg"
           })}
-          isLikelyLcpImage
+          imageLoadingIntent="eager"
           isOpen={false}
           onClose={() => {}}
           onToggle={() => {}}

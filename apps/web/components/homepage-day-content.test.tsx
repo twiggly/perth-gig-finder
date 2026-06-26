@@ -154,7 +154,7 @@ describe("HomepageDayContent", () => {
     expect(html).toContain("ALT//THURSDAYS");
   });
 
-  it("eagerly loads only the first renderable poster in the active pane", () => {
+  it("eagerly loads the first four renderable posters in the active pane", () => {
     const html = renderContent({
       days: [
         createDay({
@@ -167,18 +167,42 @@ describe("HomepageDayContent", () => {
               id: "gig-2",
               title: "Second Poster",
               source_image_url: "https://assets.oztix.com.au/poster-2.jpg"
+            }),
+            createGigWithImage({
+              id: "gig-3",
+              title: "Third Poster",
+              source_image_url: "https://assets.oztix.com.au/poster-3.jpg"
+            }),
+            createGigWithImage({
+              id: "gig-4",
+              title: "Fourth Poster",
+              source_image_url: "https://assets.oztix.com.au/poster-4.jpg"
+            }),
+            createGigWithImage({
+              id: "gig-5",
+              title: "Fifth Poster",
+              source_image_url: "https://assets.oztix.com.au/poster-5.jpg"
             })
           ]
         })
       ]
     });
 
-    expect(html.match(/loading="eager"/g)).toHaveLength(1);
+    expect(html.match(/loading="eager"/g)).toHaveLength(4);
     expect(html).toMatch(
       /<img(?=[^>]*alt="First Poster poster")(?=[^>]*loading="eager")[^>]*>/
     );
-    expect(html).not.toMatch(
+    expect(html).toMatch(
       /<img(?=[^>]*alt="Second Poster poster")(?=[^>]*loading="eager")[^>]*>/
+    );
+    expect(html).toMatch(
+      /<img(?=[^>]*alt="Third Poster poster")(?=[^>]*loading="eager")[^>]*>/
+    );
+    expect(html).toMatch(
+      /<img(?=[^>]*alt="Fourth Poster poster")(?=[^>]*loading="eager")[^>]*>/
+    );
+    expect(html).not.toMatch(
+      /<img(?=[^>]*alt="Fifth Poster poster")(?=[^>]*loading="eager")[^>]*>/
     );
   });
 
@@ -224,7 +248,7 @@ describe("HomepageDayContent", () => {
     expect(html).not.toContain('loading="eager"');
   });
 
-  it("eagerly loads the first later renderable poster when the first gig has no image", () => {
+  it("does not count non-renderable posters toward the eager image limit", () => {
     const html = renderContent({
       days: [
         createDay({
@@ -237,18 +261,98 @@ describe("HomepageDayContent", () => {
             }),
             createGigWithImage({
               id: "gig-2",
-              title: "Later Poster"
+              title: "First Renderable Poster"
+            }),
+            createGigWithImage({
+              id: "gig-3",
+              title: "Second Renderable Poster",
+              source_image_url: "https://assets.oztix.com.au/poster-2.jpg"
+            }),
+            createGigWithImage({
+              id: "gig-4",
+              title: "Third Renderable Poster",
+              source_image_url: "https://assets.oztix.com.au/poster-3.jpg"
+            }),
+            createGigWithImage({
+              id: "gig-5",
+              title: "Fourth Renderable Poster",
+              source_image_url: "https://assets.oztix.com.au/poster-4.jpg"
+            }),
+            createGigWithImage({
+              id: "gig-6",
+              title: "Fifth Renderable Poster",
+              source_image_url: "https://assets.oztix.com.au/poster-5.jpg"
             })
           ]
         })
       ]
     });
 
-    expect(html.match(/loading="eager"/g)).toHaveLength(1);
+    expect(html.match(/loading="eager"/g)).toHaveLength(4);
     expect(html).toMatch(
-      /<img(?=[^>]*alt="Later Poster poster")(?=[^>]*loading="eager")[^>]*>/
+      /<img(?=[^>]*alt="First Renderable Poster poster")(?=[^>]*loading="eager")[^>]*>/
+    );
+    expect(html).toMatch(
+      /<img(?=[^>]*alt="Third Renderable Poster poster")(?=[^>]*loading="eager")[^>]*>/
     );
     expect(html).not.toMatch(/alt="No Poster poster"/);
+    expect(html).toMatch(
+      /<img(?=[^>]*alt="Fourth Renderable Poster poster")(?=[^>]*loading="eager")[^>]*>/
+    );
+    expect(html).not.toMatch(
+      /<img(?=[^>]*alt="Fifth Renderable Poster poster")(?=[^>]*loading="eager")[^>]*>/
+    );
+  });
+
+  it("counts The Bird placeholder as a renderable eager image", () => {
+    const html = renderContent({
+      days: [
+        createDay({
+          items: [
+            createGig({
+              id: "gig-1",
+              title: "Bird Placeholder",
+              venue_slug: "the-bird"
+            }),
+            createGigWithImage({
+              id: "gig-2",
+              title: "First Real Poster"
+            }),
+            createGigWithImage({
+              id: "gig-3",
+              title: "Second Real Poster",
+              source_image_url: "https://assets.oztix.com.au/poster-2.jpg"
+            }),
+            createGigWithImage({
+              id: "gig-4",
+              title: "Third Real Poster",
+              source_image_url: "https://assets.oztix.com.au/poster-3.jpg"
+            }),
+            createGigWithImage({
+              id: "gig-5",
+              title: "Fourth Real Poster",
+              source_image_url: "https://assets.oztix.com.au/poster-4.jpg"
+            }),
+            createGigWithImage({
+              id: "gig-6",
+              title: "Fifth Real Poster",
+              source_image_url: "https://assets.oztix.com.au/poster-5.jpg"
+            })
+          ]
+        })
+      ]
+    });
+
+    expect(html.match(/loading="eager"/g)).toHaveLength(4);
+    expect(html).toMatch(
+      /<img(?=[^>]*alt="Bird Placeholder poster")(?=[^>]*loading="eager")[^>]*>/
+    );
+    expect(html).toMatch(
+      /<img(?=[^>]*alt="Third Real Poster poster")(?=[^>]*loading="eager")[^>]*>/
+    );
+    expect(html).not.toMatch(
+      /<img(?=[^>]*alt="Fifth Real Poster poster")(?=[^>]*loading="eager")[^>]*>/
+    );
   });
 
   it("renders an active empty grid for days with no gigs", () => {

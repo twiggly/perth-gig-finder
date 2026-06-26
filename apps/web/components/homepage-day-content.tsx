@@ -9,6 +9,8 @@ import type { HomepageDayPayload } from "@/lib/homepage-day-loading";
 import type { SwipeDirection } from "@/lib/homepage-dates";
 import type { DayBrowserPaneState } from "./use-homepage-day-navigation";
 
+const ACTIVE_PANE_EAGER_IMAGE_LIMIT = 4;
+
 interface HomepageDayContentProps {
   activeDateKey: string;
   contentViewportStyle: CSSProperties;
@@ -79,10 +81,14 @@ export function HomepageDayContent({
             return null;
           }
 
-          const likelyLcpGigId = isActivePane
-            ? day.items.find((gig) => Boolean(getRenderableGigImage(gig)))?.id ??
-              null
-            : null;
+          const eagerImageGigIds = new Set(
+            isActivePane
+              ? day.items
+                  .filter((gig) => Boolean(getRenderableGigImage(gig)))
+                  .slice(0, ACTIVE_PANE_EAGER_IMAGE_LIMIT)
+                  .map((gig) => gig.id)
+              : []
+          );
 
           return (
             <Box
@@ -120,7 +126,9 @@ export function HomepageDayContent({
                   {day.items.map((gig) => (
                     <GigCard
                       gig={gig}
-                      isLikelyLcpImage={gig.id === likelyLcpGigId}
+                      imageLoadingIntent={
+                        eagerImageGigIds.has(gig.id) ? "eager" : "lazy"
+                      }
                       isOpen={openGigId === gig.id}
                       key={gig.id}
                       onClose={() => onCloseGig(gig.id)}
