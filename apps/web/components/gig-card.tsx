@@ -18,6 +18,8 @@ const GIG_CARD_IMAGE_SIZES =
   "(max-width: 480px) 88px, (max-width: 720px) 115px, 168px";
 const GIG_CARD_IMAGE_QUALITY = 72;
 
+export type GigCardImageLoadingIntent = "eager" | "lazy";
+
 function formatGigDate(value: string): string {
   return new Intl.DateTimeFormat("en-AU", {
     hour: "numeric",
@@ -69,7 +71,7 @@ function VenueLine({
 
 interface GigCardProps {
   gig: GigCardRecord;
-  isLikelyLcpImage?: boolean;
+  imageLoadingIntent?: GigCardImageLoadingIntent;
   isOpen: boolean;
   onClose: () => void;
   onToggle: () => void;
@@ -77,7 +79,7 @@ interface GigCardProps {
 
 export function GigCard({
   gig,
-  isLikelyLcpImage = false,
+  imageLoadingIntent = "lazy",
   isOpen,
   onClose,
   onToggle
@@ -150,7 +152,7 @@ export function GigCard({
         alt={`${gig.title} poster`}
         className="gig-card__media-image"
         height={image.height}
-        loading={isLikelyLcpImage ? "eager" : undefined}
+        loading={imageLoadingIntent === "eager" ? "eager" : undefined}
         quality={GIG_CARD_IMAGE_QUALITY}
         sizes={GIG_CARD_IMAGE_SIZES}
         src={image.url}
