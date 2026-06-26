@@ -9,8 +9,7 @@ import { getGigActions } from "@/lib/gig-actions";
 import { formatGigCardArtists } from "@/lib/gig-card-artists";
 import { recordCurrentGigDetailReturnState } from "@/lib/gig-detail-return";
 import {
-  getRenderableGigImageUrl,
-  hasRenderableGigImage,
+  getRenderableGigImage,
   type GigCardRecord
 } from "@/lib/gigs";
 import { buildGigDetailPath } from "@/lib/seo";
@@ -86,15 +85,12 @@ export function GigCard({
   const articleRef = useRef<HTMLElement>(null);
   const actions = getGigActions(gig);
   const isActionable = actions.length > 0;
-  const imageUrl = getRenderableGigImageUrl(gig);
-  const hasRenderableImage = hasRenderableGigImage(gig) && Boolean(imageUrl);
+  const image = getRenderableGigImage(gig);
   const artistLine = formatGigCardArtists(gig.title, gig.artist_names);
-  const imageWidth = hasRenderableImage ? gig.image_width! : undefined;
-  const imageHeight = hasRenderableImage ? gig.image_height! : undefined;
   const surfaceClassName = [
     "gig-card__surface",
     isActionable ? "gig-card__surface--interactive" : "gig-card__surface--static",
-    hasRenderableImage ? "" : "gig-card__surface--no-media"
+    image ? "" : "gig-card__surface--no-media"
   ]
     .filter(Boolean)
     .join(" ");
@@ -148,18 +144,18 @@ export function GigCard({
     };
   }, [isOpen, onClose]);
 
-  const media = hasRenderableImage && imageUrl ? (
+  const media = image ? (
     <Box className="gig-card__media">
       <Image
         alt={`${gig.title} poster`}
         className="gig-card__media-image"
-        height={imageHeight}
+        height={image.height}
         loading={isLikelyLcpImage ? "eager" : undefined}
         quality={GIG_CARD_IMAGE_QUALITY}
         sizes={GIG_CARD_IMAGE_SIZES}
-        src={imageUrl}
+        src={image.url}
         style={{ height: "auto", width: "100%" }}
-        width={imageWidth}
+        width={image.width}
       />
     </Box>
   ) : null;

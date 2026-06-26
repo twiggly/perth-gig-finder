@@ -231,7 +231,9 @@ describe("HomepageDayContent", () => {
           items: [
             createGig({
               id: "gig-1",
-              title: "No Poster"
+              title: "No Poster",
+              venue_name: "Milk Bar",
+              venue_slug: "milk-bar"
             }),
             createGigWithImage({
               id: "gig-2",
