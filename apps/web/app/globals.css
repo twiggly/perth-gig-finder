@@ -6,7 +6,7 @@
 @import "@fontsource/source-serif-4/latin-700.css";
 
 :root {
-  --bg: #0d0b11;
+  --bg: #121018;
   --panel: rgba(23, 19, 31, 0.82);
   --panel-border: rgba(255, 255, 255, 0.08);
   --text: #f8f2e8;
@@ -14,12 +14,12 @@
   --accent: #f95a37;
   --accent-soft: rgba(249, 90, 55, 0.12);
   --inverse-text: #120d0b;
-  --page-bg-fallback: #0e0b13;
-  --page-glow-left: rgba(128, 44, 30, 0.12);
-  --page-glow-right: rgba(34, 24, 78, 0.18);
-  --page-gradient-start: #0d0b11;
-  --page-gradient-mid: #17131f;
-  --page-gradient-end: #0e0b13;
+  --page-bg-fallback: #121018;
+  --page-glow-left: #121018;
+  --page-glow-right: #121018;
+  --page-gradient-start: #121018;
+  --page-gradient-mid: #121018;
+  --page-gradient-end: #121018;
   --control-border: rgba(255, 255, 255, 0.1);
   --control-bg: rgba(11, 9, 16, 0.64);
   --control-bg-hover: rgba(11, 9, 16, 0.64);
@@ -101,15 +101,7 @@ body {
   color: var(--text);
   font-family: var(--font-body), serif;
   background-color: var(--page-bg-fallback);
-  background:
-    radial-gradient(circle at top left, var(--page-glow-left), transparent 28rem),
-    radial-gradient(circle at top right, var(--page-glow-right), transparent 30rem),
-    linear-gradient(
-      180deg,
-      var(--page-gradient-start) 0,
-      var(--page-gradient-mid) 42rem,
-      var(--page-gradient-end) 88rem
-    );
+  background: var(--page-bg-fallback);
 }
 
 a {

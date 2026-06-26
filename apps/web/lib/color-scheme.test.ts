@@ -32,8 +32,8 @@ describe("getAppFirstPaintBackgroundStyle", () => {
   it("sets a dark first-paint background for html and body", () => {
     const style = getAppFirstPaintBackgroundStyle();
 
-    expect(style).toContain("html{background-color:#0d0b11;color-scheme:dark;}");
-    expect(style).toContain("body{background-color:#0e0b13;}");
+    expect(style).toContain("html{background-color:#121018;color-scheme:dark;}");
+    expect(style).toContain("body{background-color:#121018;}");
   });
 
   it("includes a light-scheme override for saved light preferences", () => {
