@@ -27,6 +27,8 @@
   --control-focus-border: rgba(249, 90, 55, 0.65);
   --calendar-today-ring: rgba(74, 222, 128, 0.82);
   --popover-bg: rgba(16, 12, 22, 0.98);
+  --gig-detail-toolbar-bg: rgba(32, 27, 42, 0.9);
+  --gig-detail-toolbar-bg-hover: rgba(44, 37, 56, 0.96);
   --soft-fill: rgba(255, 255, 255, 0.08);
   --soft-fill-strong: rgba(255, 255, 255, 0.1);
   --soft-border: rgba(255, 255, 255, 0.16);
@@ -68,6 +70,8 @@
   --control-focus-border: rgba(249, 90, 55, 0.65);
   --calendar-today-ring: rgba(22, 163, 74, 0.78);
   --popover-bg: rgba(255, 250, 242, 0.98);
+  --gig-detail-toolbar-bg: rgba(255, 250, 242, 0.84);
+  --gig-detail-toolbar-bg-hover: rgba(255, 252, 247, 0.94);
   --soft-fill: rgba(33, 25, 21, 0.06);
   --soft-fill-strong: rgba(33, 25, 21, 0.1);
   --soft-border: rgba(33, 25, 21, 0.16);
@@ -1687,28 +1691,35 @@ body[data-filter-dropdown-open="true"] .date-pills {
 .gig-detail__back,
 .gig-detail__share-button {
   display: inline-flex;
+  gap: 0.45rem;
   align-items: center;
   justify-content: center;
   width: max-content;
   min-width: 2.75rem;
   min-height: 2.75rem;
+  padding: 0.6rem 0.85rem;
   border: 0;
   border-radius: 999px;
-  background: transparent;
+  background: var(--gig-detail-toolbar-bg);
   color: var(--muted);
   cursor: pointer;
   font-family: var(--font-display), sans-serif;
-  font-size: 1.7rem;
+  font-size: 0.95rem;
   font-weight: 700;
   line-height: 1;
   text-decoration: none;
+  transition:
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .gig-detail__back:hover,
 .gig-detail__back:focus-visible,
 .gig-detail__share-button:hover,
 .gig-detail__share-button:focus-visible {
-  background: var(--soft-fill);
+  background: var(--gig-detail-toolbar-bg-hover);
+  box-shadow: 0 0 0 1px var(--faint-border);
   color: var(--text);
   outline: none;
 }
@@ -1717,6 +1728,25 @@ body[data-filter-dropdown-open="true"] .date-pills {
   position: relative;
   display: inline-flex;
   align-items: center;
+}
+
+.gig-detail__toolbar-icon {
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: 0 0 auto;
+}
+
+.gig-detail__toolbar-icon--back {
+  transform: translateX(-0.12rem);
+}
+
+.gig-detail__toolbar-label {
+  line-height: 1;
+}
+
+.gig-detail__back .gig-detail__toolbar-label {
+  display: inline-block;
+  transform: translateX(-0.12rem);
 }
 
 .gig-detail__share-icon {
@@ -1758,7 +1788,7 @@ body[data-filter-dropdown-open="true"] .date-pills {
   gap: clamp(0.85rem, 2vw, 1.25rem);
   align-items: start;
   padding: clamp(0.95rem, 2vw, 1.25rem);
-  border: 1px solid var(--panel-border);
+  border: 0;
   border-radius: 1.25rem;
   background: var(--panel);
   box-shadow: var(--shadow);
