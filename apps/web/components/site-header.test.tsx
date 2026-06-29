@@ -1,11 +1,18 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MantineProvider } from "@mantine/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { theme } from "@/app/theme";
 
 import { SiteHeader } from "./site-header";
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
+  useRouter: () => ({
+    replace: vi.fn()
+  })
+}));
 
 function renderWithMantine(element: React.ReactElement) {
   return renderToStaticMarkup(
