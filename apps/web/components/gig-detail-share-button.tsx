@@ -85,6 +85,7 @@ export function GigDetailShareButton({
         type="button"
       >
         <ShareIcon />
+        <span className="gig-detail__toolbar-label">Share</span>
       </button>
       <span aria-live="polite" className="gig-detail__share-status">
         {message}

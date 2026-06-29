@@ -49,9 +49,12 @@ describe("GigDetailContent", () => {
     );
     expect(html).toContain('href="/?date=2026-04-23"');
     expect(html).toContain('aria-label="Back to gigs"');
-    expect(html).toContain("←");
+    expect(html).toContain("gig-detail__toolbar-icon");
+    expect(html).toContain('stroke-width="2.6"');
+    expect(html).toContain(">Back</span>");
     expect(html).toContain("gig-detail__toolbar");
     expect(html).toContain('aria-label="Share gig"');
+    expect(html).toContain(">Share</span>");
     expect(html).toContain(
       "https://gigradar.com.au/gigs/alt-thursdays"
     );

@@ -15,6 +15,32 @@ interface GigDetailBackLinkProps {
   slug: string;
 }
 
+function BackArrowIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="gig-detail__toolbar-icon gig-detail__toolbar-icon--back"
+      fill="none"
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M14.5 5 7.5 12l7 7"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2.6"
+      />
+      <path
+        d="M8 12h11"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="2.6"
+      />
+    </svg>
+  );
+}
+
 export function GigDetailBackLink({
   fallbackHref,
   slug
@@ -59,7 +85,8 @@ export function GigDetailBackLink({
       onClick={handleClick}
       prefetch
     >
-      <span aria-hidden="true">←</span>
+      <BackArrowIcon />
+      <span className="gig-detail__toolbar-label">Back</span>
     </Link>
   );
 }
