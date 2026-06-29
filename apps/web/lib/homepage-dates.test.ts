@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   accumulateTrackpadSwipe,
+  consumeHomepageActiveDateUrlSyncSuppression,
   DAY_SWIPE_DURATION_MS,
   formatDateHeading,
   getAdjacentDateKey,
@@ -18,6 +19,7 @@ import {
   getSwipeDirection,
   isTrackpadHorizontalIntent,
   resolveHomepageDateKey,
+  suppressNextHomepageActiveDateUrlSync,
   shouldConsumeLockedTrackpadMomentum,
   TRACKPAD_HORIZONTAL_BIAS_RATIO,
   TRACKPAD_GESTURE_LOCK_MS,
@@ -29,6 +31,29 @@ describe("getPerthDateKey", () => {
   it("maps UTC timestamps into the correct Perth local date", () => {
     expect(getPerthDateKey("2026-04-06T12:00:00.000Z")).toBe("2026-04-06");
     expect(getPerthDateKey("2026-04-06T17:30:00.000Z")).toBe("2026-04-07");
+  });
+});
+
+describe("homepage active date URL sync suppression", () => {
+  it("suppresses one clean homepage sync after a brand reset", () => {
+    suppressNextHomepageActiveDateUrlSync();
+
+    expect(consumeHomepageActiveDateUrlSyncSuppression("/", "")).toBe(true);
+    expect(consumeHomepageActiveDateUrlSyncSuppression("/", "")).toBe(false);
+  });
+
+  it("does not suppress non-clean homepage URLs or non-homepage paths", () => {
+    suppressNextHomepageActiveDateUrlSync();
+
+    expect(
+      consumeHomepageActiveDateUrlSyncSuppression("/", "?date=2026-06-29")
+    ).toBe(false);
+
+    suppressNextHomepageActiveDateUrlSync();
+
+    expect(
+      consumeHomepageActiveDateUrlSyncSuppression("/gigs/example", "")
+    ).toBe(false);
   });
 });
 

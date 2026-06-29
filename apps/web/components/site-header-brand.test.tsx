@@ -1,8 +1,30 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { SiteHeaderBrand } from "./site-header-brand";
+import { shouldResetHomepageBrandNavigation } from "./site-header-brand-link";
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
+  useRouter: () => ({
+    replace: vi.fn()
+  })
+}));
+
+function createClickEvent(
+  overrides: Partial<Parameters<typeof shouldResetHomepageBrandNavigation>[1]> = {}
+): Parameters<typeof shouldResetHomepageBrandNavigation>[1] {
+  return {
+    altKey: false,
+    button: 0,
+    ctrlKey: false,
+    defaultPrevented: false,
+    metaKey: false,
+    shiftKey: false,
+    ...overrides
+  };
+}
 
 describe("SiteHeaderBrand", () => {
   it("renders the Gig Radar heading with the logo mark", () => {
@@ -15,5 +37,26 @@ describe("SiteHeaderBrand", () => {
     expect(html).toContain('alt=""');
     expect(html).toContain('<link rel="preload" as="image" href="/logo.svg"');
     expect(html).toContain("site-header__title-text");
+  });
+
+  it("intercepts plain homepage clicks to reset the homepage state", () => {
+    expect(
+      shouldResetHomepageBrandNavigation("/", createClickEvent())
+    ).toBe(true);
+  });
+
+  it("keeps detail-page and modified clicks as normal link navigation", () => {
+    expect(
+      shouldResetHomepageBrandNavigation(
+        "/gigs/example",
+        createClickEvent()
+      )
+    ).toBe(false);
+    expect(
+      shouldResetHomepageBrandNavigation("/", createClickEvent({ metaKey: true }))
+    ).toBe(false);
+    expect(
+      shouldResetHomepageBrandNavigation("/", createClickEvent({ button: 1 }))
+    ).toBe(false);
   });
 });

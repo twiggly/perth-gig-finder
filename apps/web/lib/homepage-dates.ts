@@ -43,6 +43,8 @@ export const HOMEPAGE_REQUEST_ACTIVE_DATE_EVENT =
   "homepage:request-active-date";
 const PERTH_OFFSET_MS = 8 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const HOMEPAGE_BRAND_RESET_STORAGE_KEY = "homepage-brand-reset-pending";
+let shouldSuppressNextHomepageDateUrlSync = false;
 
 const DAY_KEY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
@@ -254,12 +256,63 @@ export function announceHomepageActiveDate(dateKey: string): void {
   );
 }
 
+export function suppressNextHomepageActiveDateUrlSync(): void {
+  shouldSuppressNextHomepageDateUrlSync = true;
+
+  try {
+    window.sessionStorage.setItem(HOMEPAGE_BRAND_RESET_STORAGE_KEY, "1");
+  } catch {
+    // The in-memory marker still covers ordinary client-side navigation.
+  }
+}
+
+export function consumeHomepageActiveDateUrlSyncSuppression(
+  pathname: string,
+  currentSearch: string
+): boolean {
+  let hasStoredSuppression = false;
+
+  try {
+    hasStoredSuppression =
+      window.sessionStorage.getItem(HOMEPAGE_BRAND_RESET_STORAGE_KEY) === "1";
+  } catch {
+    hasStoredSuppression = false;
+  }
+
+  const shouldSuppress =
+    shouldSuppressNextHomepageDateUrlSync || hasStoredSuppression;
+
+  if (!shouldSuppress) {
+    return false;
+  }
+
+  if (pathname === "/" && currentSearch !== "") {
+    return false;
+  }
+
+  shouldSuppressNextHomepageDateUrlSync = false;
+
+  try {
+    window.sessionStorage.removeItem(HOMEPAGE_BRAND_RESET_STORAGE_KEY);
+  } catch {
+    // Storage can be unavailable in privacy modes.
+  }
+
+  return pathname === "/";
+}
+
 export function syncHomepageActiveDate(pathname: string, dateKey: string): void {
   if (typeof window === "undefined" || !dateKey) {
     return;
   }
 
   announceHomepageActiveDate(dateKey);
+
+  if (
+    consumeHomepageActiveDateUrlSyncSuppression(pathname, window.location.search)
+  ) {
+    return;
+  }
 
   const currentParams = new URLSearchParams(window.location.search);
   const hasLegacyWhen = currentParams.has("when");
