@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 
 type SetDateHeaderStuck = (isStuck: boolean) => void;
 
+export const HOMEPAGE_DATE_HEADER_OBSERVER_THRESHOLDS: number[] = [0, 1];
+
 export function getHomepageDateHeaderStuck(
   stickySentinelTop: number | null | undefined
 ) {
@@ -14,6 +16,12 @@ export function getHomepageDateHeaderStuckFromObserverEntry(
   entry: Pick<IntersectionObserverEntry, "boundingClientRect">
 ) {
   return getHomepageDateHeaderStuck(entry.boundingClientRect.top);
+}
+
+export function shouldCorrectHomepageDateHeaderStuckOnScroll(
+  isDateHeaderStuck: boolean
+) {
+  return isDateHeaderStuck;
 }
 
 function observeHomepageDateHeaderStickinessWithScrollFallback(input: {
@@ -59,6 +67,7 @@ function observeHomepageDateHeaderStickinessWithScrollFallback(input: {
 }
 
 function observeHomepageDateHeaderStickiness(input: {
+  isDateHeaderStuck: () => boolean;
   onStuckChange: SetDateHeaderStuck;
   sentinel: HTMLElement;
 }) {
@@ -70,6 +79,29 @@ function observeHomepageDateHeaderStickiness(input: {
     getHomepageDateHeaderStuck(input.sentinel.getBoundingClientRect().top)
   );
 
+  let correctionFrame: number | null = null;
+
+  function measureDateHeaderStickiness() {
+    correctionFrame = null;
+    input.onStuckChange(
+      getHomepageDateHeaderStuck(input.sentinel.getBoundingClientRect().top)
+    );
+  }
+
+  function scheduleDateHeaderStickinessCorrection() {
+    if (
+      !shouldCorrectHomepageDateHeaderStuckOnScroll(input.isDateHeaderStuck())
+    ) {
+      return;
+    }
+
+    if (correctionFrame !== null) {
+      return;
+    }
+
+    correctionFrame = window.requestAnimationFrame(measureDateHeaderStickiness);
+  }
+
   const observer = new IntersectionObserver(
     ([entry]) => {
       if (!entry) {
@@ -80,14 +112,35 @@ function observeHomepageDateHeaderStickiness(input: {
     },
     {
       root: null,
-      threshold: 0
+      threshold: HOMEPAGE_DATE_HEADER_OBSERVER_THRESHOLDS
     }
   );
 
   observer.observe(input.sentinel);
+  window.addEventListener("scroll", scheduleDateHeaderStickinessCorrection, {
+    passive: true
+  });
+  document.addEventListener("scroll", scheduleDateHeaderStickinessCorrection, {
+    passive: true
+  });
+  window.addEventListener("resize", scheduleDateHeaderStickinessCorrection);
 
   return () => {
     observer.disconnect();
+    window.removeEventListener(
+      "scroll",
+      scheduleDateHeaderStickinessCorrection
+    );
+    document.removeEventListener(
+      "scroll",
+      scheduleDateHeaderStickinessCorrection
+    );
+    window.removeEventListener("resize", scheduleDateHeaderStickinessCorrection);
+
+    if (correctionFrame !== null) {
+      window.cancelAnimationFrame(correctionFrame);
+      correctionFrame = null;
+    }
   };
 }
 
@@ -115,6 +168,7 @@ export function useHomepageDayStickyHeader() {
     }
 
     return observeHomepageDateHeaderStickiness({
+      isDateHeaderStuck: () => isDateHeaderStuckRef.current,
       onStuckChange: setDateHeaderStuck,
       sentinel
     });

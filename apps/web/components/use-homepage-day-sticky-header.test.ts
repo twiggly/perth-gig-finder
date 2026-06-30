@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  HOMEPAGE_DATE_HEADER_OBSERVER_THRESHOLDS,
   getHomepageDateHeaderStuck,
-  getHomepageDateHeaderStuckFromObserverEntry
+  getHomepageDateHeaderStuckFromObserverEntry,
+  shouldCorrectHomepageDateHeaderStuckOnScroll
 } from "./use-homepage-day-sticky-header";
 
 describe("homepage day sticky header helpers", () => {
@@ -39,5 +41,14 @@ describe("homepage day sticky header helpers", () => {
         boundingClientRect: { top: 12 } as DOMRectReadOnly
       })
     ).toBe(false);
+  });
+
+  it("observes both initial intersection and full visibility boundaries", () => {
+    expect(HOMEPAGE_DATE_HEADER_OBSERVER_THRESHOLDS).toEqual([0, 1]);
+  });
+
+  it("only schedules scroll correction while the header is currently stuck", () => {
+    expect(shouldCorrectHomepageDateHeaderStuckOnScroll(true)).toBe(true);
+    expect(shouldCorrectHomepageDateHeaderStuckOnScroll(false)).toBe(false);
   });
 });
