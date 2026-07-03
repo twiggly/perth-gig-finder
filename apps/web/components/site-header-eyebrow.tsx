@@ -54,8 +54,9 @@ export function SiteHeaderEyebrow() {
 
     syncMeasuredWidths();
 
-    const fonts = (document as Document & { fonts?: { ready: Promise<unknown> } })
-      .fonts;
+    const fonts = (
+      document as Document & { fonts?: { ready: Promise<unknown> } }
+    ).fonts;
     void fonts?.ready.then(syncMeasuredWidths).catch(() => {});
 
     const resizeObserver =

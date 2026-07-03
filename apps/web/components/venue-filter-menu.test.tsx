@@ -22,12 +22,14 @@ const VENUES: VenueOption[] = [
 ];
 
 function renderVenueMenu({
+  dropdownOffset,
   isOpen = false,
   isPending = false,
   isPhoneScrollbarDevice = false,
   suggestions = [],
   venueInput = ""
 }: {
+  dropdownOffset?: number;
   isOpen?: boolean;
   isPending?: boolean;
   isPhoneScrollbarDevice?: boolean;
@@ -37,6 +39,7 @@ function renderVenueMenu({
   return renderToStaticMarkup(
     <MantineProvider defaultColorScheme="dark" theme={theme}>
       <VenueFilterMenu
+        dropdownOffset={dropdownOffset}
         isOpen={isOpen}
         isPending={isPending}
         isPhoneScrollbarDevice={isPhoneScrollbarDevice}
@@ -120,5 +123,9 @@ describe("VenueFilterMenu", () => {
     expect(html).not.toContain('data-offset-scrollbars="y"');
     expect(html).toContain("The Bird");
     expect(html).toContain("Mojos Bar");
+  });
+
+  it("accepts a custom dropdown offset without changing default SSR output", () => {
+    expect(renderVenueMenu({ dropdownOffset: 42 })).toBe(renderVenueMenu());
   });
 });

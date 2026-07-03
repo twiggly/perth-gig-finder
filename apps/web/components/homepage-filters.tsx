@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useEffect, useEffectEvent, useId } from "react";
+import React, {
+  useEffect,
+  useEffectEvent,
+  useId,
+  useRef,
+  useState
+} from "react";
 import { Box } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 
@@ -22,6 +28,18 @@ const LOCAL_PREVIEW_ASSET_REVISION =
   process.env.NEXT_PUBLIC_LOCAL_PREVIEW_ASSET_REVISION ?? "0";
 const PHONE_SCROLLBAR_MEDIA_QUERY =
   "(max-width: 640px), (hover: none) and (pointer: coarse), (any-pointer: coarse)";
+export const HOMEPAGE_FILTER_DROPDOWN_BASE_OFFSET = 10;
+
+export function getHomepageFilterDropdownOffset(
+  chipBlockOffset: number | null | undefined
+): number {
+  const safeChipBlockOffset =
+    typeof chipBlockOffset === "number" && Number.isFinite(chipBlockOffset)
+      ? Math.max(0, Math.ceil(chipBlockOffset))
+      : 0;
+
+  return HOMEPAGE_FILTER_DROPDOWN_BASE_OFFSET + safeChipBlockOffset;
+}
 
 interface HomepageFiltersProps {
   activeDateKey: string | null;
@@ -43,11 +61,16 @@ export function HomepageFilters({
   const previewAssetRevision = LOCAL_PREVIEW_ASSET_REVISION;
   const searchMenuId = useId();
   const venueDropdownId = useId();
+  const filterToolbarRef = useRef<HTMLDivElement | null>(null);
+  const selectedVenueChipsRef = useRef<HTMLDivElement | null>(null);
+  const [filterDropdownOffset, setFilterDropdownOffset] = useState(
+    HOMEPAGE_FILTER_DROPDOWN_BASE_OFFSET
+  );
   const {
-    optimisticSelectedVenues,
     removeVenue,
     selectedVenueSlugs,
-    selectVenue
+    selectVenue,
+    visibleSelectedVenues
   } = useSelectedVenueFilters({
     navigate: navigateSelectedVenueFilter,
     selectedVenues
@@ -99,7 +122,7 @@ export function HomepageFilters({
     currentQuery,
     isSearchMenuOpen,
     navigate,
-    openSearchMenu,
+    openSearchMenu: handleOpenSearchMenu,
     selectedVenueSlugs,
     selectVenue
   });
@@ -116,6 +139,45 @@ export function HomepageFilters({
     selectedVenueSlugs,
     selectVenue
   });
+
+  function getMeasuredChipBlockOffset() {
+    const toolbarElement = filterToolbarRef.current;
+    const chipsElement = selectedVenueChipsRef.current;
+
+    if (!toolbarElement || !chipsElement || chipsElement.closest("[hidden]")) {
+      return null;
+    }
+
+    const toolbarRect = toolbarElement.getBoundingClientRect();
+    const chipsRect = chipsElement.getBoundingClientRect();
+
+    if (chipsRect.height <= 0) {
+      return null;
+    }
+
+    return Math.max(0, chipsRect.bottom - toolbarRect.bottom);
+  }
+
+  function syncFilterDropdownOffset() {
+    const nextOffset = getHomepageFilterDropdownOffset(
+      getMeasuredChipBlockOffset()
+    );
+
+    setFilterDropdownOffset((currentOffset) =>
+      currentOffset === nextOffset ? currentOffset : nextOffset
+    );
+  }
+
+  function handleOpenSearchMenu() {
+    syncFilterDropdownOffset();
+    openSearchMenu();
+  }
+
+  function handleToggleVenueMenu() {
+    syncFilterDropdownOffset();
+    toggleVenueMenu();
+  }
+
   function handleSearchMenuClose() {
     resetSearchControl();
   }
@@ -131,11 +193,15 @@ export function HomepageFilters({
   }
 
   function handleRemoveVenue(slug: string) {
+    closeAllMenus();
     removeVenue(slug);
   }
 
   const closeAllMenusForHiddenPanel = useEffectEvent(() => {
     closeAllMenus();
+  });
+  const syncFilterDropdownOffsetFromEffect = useEffectEvent(() => {
+    syncFilterDropdownOffset();
   });
 
   useEffect(() => {
@@ -143,6 +209,41 @@ export function HomepageFilters({
       closeAllMenusForHiddenPanel();
     }
   }, [isFilterPanelVisible]);
+
+  useEffect(() => {
+    syncFilterDropdownOffsetFromEffect();
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", syncFilterDropdownOffsetFromEffect);
+
+      return () => {
+        window.removeEventListener("resize", syncFilterDropdownOffsetFromEffect);
+      };
+    }
+
+    const observer = new ResizeObserver(() => {
+      syncFilterDropdownOffsetFromEffect();
+    });
+
+    if (filterToolbarRef.current) {
+      observer.observe(filterToolbarRef.current);
+    }
+
+    if (selectedVenueChipsRef.current) {
+      observer.observe(selectedVenueChipsRef.current);
+    }
+
+    window.addEventListener("resize", syncFilterDropdownOffsetFromEffect);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", syncFilterDropdownOffsetFromEffect);
+    };
+  }, [isFilterPanelVisible, visibleSelectedVenues.length]);
 
   return (
     <>
@@ -153,8 +254,9 @@ export function HomepageFilters({
         hidden={!isFilterPanelVisible}
         id={filterPanelId}
       >
-        <div className="filter-toolbar">
+        <div className="filter-toolbar" ref={filterToolbarRef}>
           <SearchFilterForm
+            dropdownOffset={filterDropdownOffset}
             formRef={searchMenuRef}
             isLoading={isLoadingSearchSuggestions}
             isOpen={isSearchMenuOpen}
@@ -169,6 +271,7 @@ export function HomepageFilters({
             suggestions={combinedSearchSuggestions}
           />
           <VenueFilterMenu
+            dropdownOffset={filterDropdownOffset}
             inputRef={venueSearchInputRef}
             isOpen={isVenueMenuOpen}
             isPending={isVenueSuggestionsPending}
@@ -178,25 +281,28 @@ export function HomepageFilters({
             onClose={closeVenueMenu}
             onInputChange={handleVenueInputChange}
             onSelectVenue={handleSelectVenue}
-            onTriggerClick={toggleVenueMenu}
+            onTriggerClick={handleToggleVenueMenu}
             suggestions={suggestions}
             venueInput={venueInput}
           />
         </div>
 
         <SelectedVenueChips
+          chipsRef={selectedVenueChipsRef}
           onRemoveVenue={handleRemoveVenue}
-          venues={optimisticSelectedVenues}
+          venues={visibleSelectedVenues}
         />
       </Box>
 
-      <DateShortcutPills
-        activeDateKey={currentActiveDateKey}
-        availableDateKeys={availableDateKeys}
-        isPending={isPending}
-        now={now}
-        onNavigate={navigateDateShortcut}
-      />
+      <div className="date-shortcut-row">
+        <DateShortcutPills
+          activeDateKey={currentActiveDateKey}
+          availableDateKeys={availableDateKeys}
+          isPending={isPending}
+          now={now}
+          onNavigate={navigateDateShortcut}
+        />
+      </div>
     </>
   );
 }

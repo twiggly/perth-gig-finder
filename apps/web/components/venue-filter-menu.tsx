@@ -10,6 +10,7 @@ import {
 import type { VenueOption } from "@/lib/venues";
 
 interface VenueFilterMenuProps {
+  dropdownOffset?: number;
   inputRef?: React.Ref<HTMLInputElement>;
   isOpen: boolean;
   isPending: boolean;
@@ -46,6 +47,7 @@ function VenueMenuChevron() {
 }
 
 export function VenueFilterMenu({
+  dropdownOffset = 10,
   inputRef,
   isOpen,
   isPending,
@@ -115,7 +117,7 @@ export function VenueFilterMenu({
       <Combobox
         dropdownPadding={0}
         hideDetached={false}
-        offset={10}
+        offset={dropdownOffset}
         onOptionSubmit={handleOptionSubmit}
         position="bottom-end"
         store={combobox}

@@ -27,8 +27,9 @@ describe("SiteHeader", () => {
     const html = renderWithMantine(<SiteHeader />);
 
     expect(html).toContain("site-header-shell");
-    expect(html).toContain("Perth");
     expect(html).toContain("Gig Radar");
+    expect(html).toContain("site-header__eyebrow");
+    expect(html).toContain('aria-label="Perth and Boorloo Live Music"');
     expect(html).not.toContain("Toggle color scheme");
     expect(html).not.toContain("Open account information");
   });
@@ -40,6 +41,7 @@ describe("SiteHeader", () => {
 
     expect(html).toContain("site-header-shell--detail");
     expect(html).toContain("Gig Radar");
+    expect(html).toContain("site-header__eyebrow");
     expect(html).not.toContain("Toggle color scheme");
     expect(html).toContain("Open account information");
     expect(html).not.toContain("site-header__filter-toggle");

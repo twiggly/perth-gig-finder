@@ -32,6 +32,9 @@ describe("SiteHeaderBrand", () => {
 
     expect(html).toContain('<a class="site-header__brand-link" href="/">');
     expect(html).toContain("Gig Radar");
+    expect(html).not.toContain("site-header__location");
+    expect(html).not.toContain("Perth");
+    expect(html).not.toContain("site-header__location-chevron");
     expect(html).toContain("site-header__logo-mark");
     expect(html).toContain('src="/logo.svg"');
     expect(html).toContain('alt=""');
