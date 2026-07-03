@@ -4,6 +4,7 @@ import { UnstyledButton } from "@mantine/core";
 import type { VenueOption } from "@/lib/venues";
 
 interface SelectedVenueChipsProps {
+  chipsRef?: React.Ref<HTMLDivElement>;
   onRemoveVenue: (slug: string) => void;
   venues: VenueOption[];
 }
@@ -13,6 +14,7 @@ function getVenueSummary(venue: VenueOption): string {
 }
 
 export function SelectedVenueChips({
+  chipsRef,
   onRemoveVenue,
   venues
 }: SelectedVenueChipsProps) {
@@ -21,12 +23,18 @@ export function SelectedVenueChips({
   }
 
   return (
-    <div className="filter-chips" role="list" aria-label="Selected venues">
+    <div
+      className="filter-chips"
+      ref={chipsRef}
+      role="list"
+      aria-label="Selected venues"
+    >
       {venues.map((venue) => (
         <UnstyledButton
           className="filter-chip"
           key={venue.slug}
           onClick={() => onRemoveVenue(venue.slug)}
+          onPointerDown={(event) => event.stopPropagation()}
           type="button"
         >
           <span>{venue.name}</span>

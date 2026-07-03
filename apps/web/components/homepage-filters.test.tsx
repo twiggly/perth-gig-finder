@@ -6,7 +6,11 @@ import { describe, expect, it, vi } from "vitest";
 import { theme } from "@/app/theme";
 import type { VenueOption } from "@/lib/venues";
 
-import { HomepageFilters } from "./homepage-filters";
+import {
+  getHomepageFilterDropdownOffset,
+  HOMEPAGE_FILTER_DROPDOWN_BASE_OFFSET,
+  HomepageFilters
+} from "./homepage-filters";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
@@ -45,6 +49,36 @@ function renderFilters({
 }
 
 describe("HomepageFilters", () => {
+  it("keeps the base dropdown offset without a visible chip block", () => {
+    expect(getHomepageFilterDropdownOffset(null)).toBe(
+      HOMEPAGE_FILTER_DROPDOWN_BASE_OFFSET
+    );
+    expect(getHomepageFilterDropdownOffset(undefined)).toBe(
+      HOMEPAGE_FILTER_DROPDOWN_BASE_OFFSET
+    );
+    expect(getHomepageFilterDropdownOffset(Number.NaN)).toBe(
+      HOMEPAGE_FILTER_DROPDOWN_BASE_OFFSET
+    );
+    expect(getHomepageFilterDropdownOffset(-12)).toBe(
+      HOMEPAGE_FILTER_DROPDOWN_BASE_OFFSET
+    );
+    expect(getHomepageFilterDropdownOffset(0)).toBe(
+      HOMEPAGE_FILTER_DROPDOWN_BASE_OFFSET
+    );
+  });
+
+  it("moves dropdowns below a one-row venue chip block", () => {
+    expect(getHomepageFilterDropdownOffset(46)).toBe(
+      HOMEPAGE_FILTER_DROPDOWN_BASE_OFFSET + 46
+    );
+  });
+
+  it("moves dropdowns below a wrapped multi-row venue chip block", () => {
+    expect(getHomepageFilterDropdownOffset(108.2)).toBe(
+      HOMEPAGE_FILTER_DROPDOWN_BASE_OFFSET + 109
+    );
+  });
+
   it("renders the search input and venue trigger", () => {
     const html = renderFilters({ availableDateKeys: ["2099-01-01"] });
 
@@ -52,9 +86,10 @@ describe("HomepageFilters", () => {
     expect(html).toContain("filter-panel");
     expect(html).not.toContain('hidden=""');
     expect(html).toContain('id="gig-search-input"');
-    expect(html).toContain('placeholder="Search events &amp; artists"');
+    expect(html).toContain('placeholder="Search for events"');
     expect(html).toContain("Venues");
     expect(html).toContain('aria-haspopup="listbox"');
+    expect(html).toContain('class="date-shortcut-row"');
     expect(html).toContain('class="date-pills"');
   });
 
@@ -66,6 +101,7 @@ describe("HomepageFilters", () => {
 
     expect(html).toContain('id="homepage-filter-panel-test"');
     expect(html).toContain('hidden=""');
+    expect(html).toContain('class="date-shortcut-row"');
     expect(html).toContain('class="date-pills"');
   });
 

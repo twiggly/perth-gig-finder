@@ -10,6 +10,7 @@ import {
 import type { SearchSuggestion } from "@/lib/search-suggestion-types";
 
 interface SearchFilterFormProps {
+  dropdownOffset?: number;
   formRef?: React.Ref<HTMLFormElement>;
   isLoading: boolean;
   isOpen: boolean;
@@ -108,6 +109,33 @@ function SearchSuggestionIcon({
   );
 }
 
+function SearchInputIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="filter-toolbar__search-icon"
+      fill="none"
+      height="18"
+      viewBox="0 0 20 20"
+      width="18"
+    >
+      <circle
+        cx="8.75"
+        cy="8.75"
+        r="5.25"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <path
+        d="m12.5 12.5 4 4"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.6"
+      />
+    </svg>
+  );
+}
+
 function getSearchSuggestionKey(suggestion: SearchSuggestion): string {
   return suggestion.type === "venue"
     ? `${suggestion.type}-${suggestion.slug}`
@@ -115,6 +143,7 @@ function getSearchSuggestionKey(suggestion: SearchSuggestion): string {
 }
 
 export function SearchFilterForm({
+  dropdownOffset = 10,
   formRef,
   isLoading,
   isOpen,
@@ -174,7 +203,7 @@ export function SearchFilterForm({
       <Combobox
         dropdownPadding={0}
         hideDetached={false}
-        offset={10}
+        offset={dropdownOffset}
         onOptionSubmit={handleOptionSubmit}
         position="bottom-start"
         store={combobox}
@@ -184,6 +213,7 @@ export function SearchFilterForm({
         <label className="sr-only" htmlFor="gig-search-input">
           Search gigs, artists, venues, and suburbs
         </label>
+        <SearchInputIcon />
         <Combobox.Target withAriaAttributes={false}>
           <TextInput
             id="gig-search-input"
@@ -197,7 +227,7 @@ export function SearchFilterForm({
             }}
             onChange={handleInputChange}
             onFocus={onFocus}
-            placeholder="Search events & artists"
+            placeholder="Search for events"
             type="search"
             unstyled
             value={searchInput}

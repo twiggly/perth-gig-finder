@@ -1,96 +1,109 @@
 "use client";
 
-import { useOptimistic } from "react";
+import { useEffect, useState } from "react";
 
 import type { VenueOption } from "@/lib/venues";
 import type { HomepageFilterNavigate } from "./use-homepage-filter-navigation";
-
-export type SelectedVenueOptimisticAction =
-  | {
-      type: "add";
-      venue: VenueOption;
-    }
-  | {
-      type: "remove";
-      slug: string;
-    }
-  | {
-      type: "clear";
-    };
 
 interface UseSelectedVenueFiltersOptions {
   navigate: HomepageFilterNavigate;
   selectedVenues: VenueOption[];
 }
 
-export function applySelectedVenueOptimisticAction(
+function getSelectedVenueSlugs(venues: VenueOption[]): string[] {
+  return venues.map((venue) => venue.slug);
+}
+
+function getSelectedVenueSlugKey(venues: VenueOption[]): string {
+  return getSelectedVenueSlugs(venues).join("|");
+}
+
+function getCurrentUrlVenueSlugKey(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return new URLSearchParams(window.location.search).getAll("venue").join("|");
+}
+
+export function addSelectedVenue(
   venues: VenueOption[],
-  action: SelectedVenueOptimisticAction
+  venue: VenueOption
 ): VenueOption[] {
-  if (action.type === "clear") {
-    return [];
-  }
-
-  if (action.type === "remove") {
-    return venues.filter((venue) => venue.slug !== action.slug);
-  }
-
-  if (venues.some((venue) => venue.slug === action.venue.slug)) {
+  if (venues.some((selectedVenue) => selectedVenue.slug === venue.slug)) {
     return venues;
   }
 
-  return [...venues, action.venue];
+  return [...venues, venue];
+}
+
+export function removeSelectedVenue(
+  venues: VenueOption[],
+  slug: string
+): VenueOption[] {
+  return venues.filter((venue) => venue.slug !== slug);
+}
+
+export function clearSelectedVenues(): VenueOption[] {
+  return [];
 }
 
 export function useSelectedVenueFilters({
   navigate,
   selectedVenues
 }: UseSelectedVenueFiltersOptions) {
-  const [optimisticSelectedVenues, addOptimisticVenueAction] = useOptimistic(
-    selectedVenues,
-    applySelectedVenueOptimisticAction
-  );
-  const selectedVenueSlugs = optimisticSelectedVenues.map((venue) => venue.slug);
+  const selectedVenuePropKey = getSelectedVenueSlugKey(selectedVenues);
+  const [visibleSelectedVenues, setVisibleSelectedVenues] =
+    useState(selectedVenues);
+  const selectedVenueSlugs = getSelectedVenueSlugs(visibleSelectedVenues);
+
+  useEffect(() => {
+    const currentUrlVenueSlugKey = getCurrentUrlVenueSlugKey();
+
+    if (
+      currentUrlVenueSlugKey !== null &&
+      currentUrlVenueSlugKey !== selectedVenuePropKey
+    ) {
+      return;
+    }
+
+    setVisibleSelectedVenues(selectedVenues);
+  }, [selectedVenuePropKey]);
 
   function selectVenue(venue: VenueOption) {
-    const nextVenueSlugs = selectedVenueSlugs.includes(venue.slug)
-      ? selectedVenueSlugs
-      : [...selectedVenueSlugs, venue.slug];
-
-    navigate(
-      {
-        venues: nextVenueSlugs
-      },
-      "replace",
-      () => addOptimisticVenueAction({ type: "add", venue })
+    const nextSelectedVenues = addSelectedVenue(
+      visibleSelectedVenues,
+      venue
     );
+    const nextVenueSlugs = getSelectedVenueSlugs(nextSelectedVenues);
+
+    setVisibleSelectedVenues(nextSelectedVenues);
+    navigate({ venues: nextVenueSlugs }, "replace");
   }
 
   function removeVenue(slug: string) {
-    const nextVenueSlugs = selectedVenueSlugs.filter(
-      (venueSlug) => venueSlug !== slug
+    const nextSelectedVenues = removeSelectedVenue(
+      visibleSelectedVenues,
+      slug
     );
+    const nextVenueSlugs = getSelectedVenueSlugs(nextSelectedVenues);
 
-    navigate(
-      {
-        venues: nextVenueSlugs
-      },
-      "replace",
-      () => addOptimisticVenueAction({ type: "remove", slug })
-    );
+    setVisibleSelectedVenues(nextSelectedVenues);
+    navigate({ venues: nextVenueSlugs }, "replace");
   }
 
   function clearVenues() {
-    navigate({ venues: [] }, "replace", () =>
-      addOptimisticVenueAction({ type: "clear" })
-    );
+    const nextSelectedVenues = clearSelectedVenues();
+
+    setVisibleSelectedVenues(nextSelectedVenues);
+    navigate({ venues: [] }, "replace");
   }
 
   return {
     clearVenues,
-    optimisticSelectedVenues,
     removeVenue,
     selectedVenueSlugs,
-    selectVenue
+    selectVenue,
+    visibleSelectedVenues
   };
 }

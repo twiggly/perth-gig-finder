@@ -33,11 +33,13 @@ const SEARCH_SUGGESTIONS: SearchSuggestion[] = [
 ];
 
 function renderSearchForm({
+  dropdownOffset,
   isLoading = false,
   isOpen = false,
   searchInput = "",
   suggestions = []
 }: {
+  dropdownOffset?: number;
   isLoading?: boolean;
   isOpen?: boolean;
   searchInput?: string;
@@ -46,6 +48,7 @@ function renderSearchForm({
   return renderToStaticMarkup(
     <MantineProvider defaultColorScheme="dark" theme={theme}>
       <SearchFilterForm
+        dropdownOffset={dropdownOffset}
         isLoading={isLoading}
         isOpen={isOpen}
         menuId="search-menu-test"
@@ -67,8 +70,10 @@ describe("SearchFilterForm", () => {
     const html = renderSearchForm();
 
     expect(html).toContain('class="filter-toolbar__search"');
+    expect(html).toContain('class="filter-toolbar__search-icon"');
+    expect(html).toContain('aria-hidden="true"');
     expect(html).toContain('id="gig-search-input"');
-    expect(html).toContain('placeholder="Search events &amp; artists"');
+    expect(html).toContain('placeholder="Search for events"');
     expect(html).toContain('aria-controls="search-menu-test"');
     expect(html).not.toContain("search-menu__popover");
   });
@@ -111,5 +116,9 @@ describe("SearchFilterForm", () => {
     });
 
     expect(html).not.toContain("search-menu__popover");
+  });
+
+  it("accepts a custom dropdown offset without changing default SSR output", () => {
+    expect(renderSearchForm({ dropdownOffset: 42 })).toBe(renderSearchForm());
   });
 });
