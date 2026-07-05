@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import React from "react";
 
 import { suppressNextHomepageActiveDateUrlSync } from "@/lib/homepage-dates";
+import { dispatchHomepageBrandResetEvent } from "./homepage-brand-reset-event";
 
 interface SiteHeaderBrandLinkProps {
   children: React.ReactNode;
@@ -45,6 +46,7 @@ export function SiteHeaderBrandLink({ children }: SiteHeaderBrandLinkProps) {
 
     event.preventDefault();
     suppressNextHomepageActiveDateUrlSync();
+    dispatchHomepageBrandResetEvent();
     router.replace("/");
   }
 

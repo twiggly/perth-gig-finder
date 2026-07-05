@@ -1,15 +1,15 @@
 import React from "react";
 
-import { SiteHeaderActions } from "@/components/site-header-actions";
 import { SiteHeaderBrand } from "@/components/site-header-brand";
 import { SiteHeaderEyebrow } from "@/components/site-header-eyebrow";
+import { SiteHeaderPublicActions } from "@/components/site-header-public-actions";
 
 interface SiteHeaderProps {
-  actions?: boolean;
+  actions?: "public-menu";
   className?: string;
 }
 
-export function SiteHeader({ actions = false, className }: SiteHeaderProps) {
+export function SiteHeader({ actions, className }: SiteHeaderProps) {
   const rootClassName = ["site-header-shell", className]
     .filter(Boolean)
     .join(" ");
@@ -20,7 +20,7 @@ export function SiteHeader({ actions = false, className }: SiteHeaderProps) {
         <SiteHeaderEyebrow />
         <SiteHeaderBrand />
       </header>
-      {actions ? <SiteHeaderActions /> : null}
+      {actions === "public-menu" ? <SiteHeaderPublicActions /> : null}
     </div>
   );
 }

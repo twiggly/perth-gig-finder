@@ -50,7 +50,7 @@ export default async function GigDetailPage({ params }: GigDetailPageProps) {
 
   return (
     <main className="page-shell">
-      <SiteHeader actions className="site-header-shell--detail" />
+      <SiteHeader actions="public-menu" className="site-header-shell--detail" />
       <GigDetailContent gig={gig} />
       <script
         dangerouslySetInnerHTML={{ __html: buildGigEventStructuredDataJson(gig) }}

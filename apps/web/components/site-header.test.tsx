@@ -34,16 +34,21 @@ describe("SiteHeader", () => {
     expect(html).not.toContain("Open account information");
   });
 
-  it("renders actions when requested", () => {
+  it("renders public menu actions when requested", () => {
     const html = renderWithMantine(
-      <SiteHeader actions className="site-header-shell--detail" />
+      <SiteHeader actions="public-menu" className="site-header-shell--detail" />
     );
 
     expect(html).toContain("site-header-shell--detail");
     expect(html).toContain("Gig Radar");
     expect(html).toContain("site-header__eyebrow");
     expect(html).not.toContain("Toggle color scheme");
-    expect(html).toContain("Open account information");
+    expect(html).toContain('aria-label="Choose city: Perth / Boorloo"');
+    expect(html).toContain("site-header__location");
+    expect(html).toContain('aria-label="Open account menu"');
+    expect(html).toContain("site-header__menu-button");
+    expect(html).toContain("site-header__menu-overlay");
+    expect(html).not.toContain("Open account information");
     expect(html).not.toContain("site-header__filter-toggle");
   });
 });
