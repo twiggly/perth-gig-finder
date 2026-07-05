@@ -664,8 +664,8 @@ code {
 }
 
 .top-panel__filters-layout[data-filter-panel-visible="false"] {
-  grid-template-areas: "shortcuts shortcuts";
-  padding-top: 0;
+  grid-template-areas: "shortcuts action";
+  padding-top: var(--homepage-filter-toggle-y-reserve);
 }
 
 .site-header__filter-toggle,
@@ -724,7 +724,7 @@ code {
   content: "";
 }
 
-.site-header__filter-toggle--header[data-state="open"] {
+.site-header__filter-toggle--header {
   display: none;
 }
 
@@ -1014,10 +1014,6 @@ code {
 
   .top-panel__filters > .top-panel__filters-layout {
     grid-area: shortcuts;
-  }
-
-  .top-panel__filters > .top-panel__filters-layout[data-filter-panel-visible="true"] {
-    grid-area: filters / filters / shortcuts / shortcuts;
   }
 
   .filter-panel {
@@ -1394,11 +1390,6 @@ code {
 }
 
 .top-panel__filters-layout > .site-header__filter-toggle--panel {
-  display: none;
-}
-
-.top-panel__filters-layout[data-filter-panel-visible="true"]
-  > .site-header__filter-toggle--panel {
   display: grid;
 }
 
@@ -1426,7 +1417,8 @@ body[data-filter-dropdown-open="true"] .empty-state {
 
 body[data-header-location-menu-open="true"] .top-panel__filters,
 body[data-header-location-menu-open="true"] .day-browser,
-body[data-header-location-menu-open="true"] .empty-state {
+body[data-header-location-menu-open="true"] .empty-state,
+body[data-header-location-menu-open="true"] .gig-detail {
   filter: blur(5px);
   opacity: 0.62;
   pointer-events: none;

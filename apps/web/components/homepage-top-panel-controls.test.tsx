@@ -10,14 +10,14 @@ import {
   HEADER_LOCATION_DISPLAY_NAME,
   HEADER_LOCATION_OPTIONS,
   HEADER_LOCATION_UNAVAILABLE_MARKER,
-  HomepageTopPanelControls,
-  getHeaderMenuButtonStates,
   getHeaderLocationOptionLabel,
   getHeaderLocationUnavailableMarker,
   isHeaderLocationAvailable,
   resolveHeaderLocationSelection,
-  syncHomepageHeaderLocationMenuOpenState
-} from "./homepage-top-panel-controls";
+  syncHeaderLocationMenuOpenState
+} from "./header-location-select";
+import { HomepageTopPanelControls } from "./homepage-top-panel-controls";
+import { getHeaderMenuButtonStates } from "./site-header-menu";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
@@ -69,16 +69,16 @@ describe("HomepageTopPanelControls", () => {
       }
     };
 
-    syncHomepageHeaderLocationMenuOpenState(true, targetDocument);
+    syncHeaderLocationMenuOpenState(true, targetDocument);
     expect(targetDocument.body.dataset.headerLocationMenuOpen).toBe("true");
 
-    syncHomepageHeaderLocationMenuOpenState(false, targetDocument);
+    syncHeaderLocationMenuOpenState(false, targetDocument);
     expect(targetDocument.body.dataset).not.toHaveProperty(
       "headerLocationMenuOpen"
     );
   });
 
-  it("renders closed filter toggles in the header and filters layout", () => {
+  it("renders the closed panel/date-row filter toggle alongside the hidden header placement", () => {
     const html = renderControls();
     const filterToggles = getButtonOpeningTags(
       html,
