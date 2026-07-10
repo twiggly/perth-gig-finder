@@ -889,6 +889,12 @@ code {
   vertical-align: baseline;
 }
 
+@media (min-width: 721px) {
+  .site-header__menu-item {
+    font-size: clamp(2.5rem, 4vw, 3.4rem);
+  }
+}
+
 .site-header__theme-icon--moon {
   display: none;
 }
@@ -1005,7 +1011,7 @@ code {
   }
 
   .site-header__title {
-    font-size: clamp(1.85rem, 3.2vw, 2.85rem);
+    font-size: clamp(1.85rem, 3vw, 2.65rem);
   }
 
   .top-panel__filters {
@@ -1099,8 +1105,45 @@ code {
   padding-inline-start: 2.75rem;
 }
 
-.filter-toolbar__search-clear {
+.filter-input--has-clear {
+  padding-inline-end: 2.75rem;
+}
+
+.filter-input--has-clear[type="search"]::-webkit-search-cancel-button {
   display: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.filter-toolbar__search-clear {
+  position: absolute;
+  top: 50%;
+  right: 0.45rem;
+  z-index: 2;
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.2rem;
+  line-height: 1;
+  transform: translateY(-50%);
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.filter-toolbar__search-clear:focus-visible,
+.filter-toolbar__search-clear:hover {
+  background: var(--soft-fill);
+  color: var(--text);
+  outline: none;
 }
 
 .venue-menu {
@@ -1508,8 +1551,9 @@ body[data-filter-dropdown-open="true"] .date-pills {
   border-radius: inherit;
   background: rgba(14, 11, 19, 0.86);
   background: color-mix(in srgb, var(--page-bg-fallback) 86%, transparent);
-  backdrop-filter: blur(14px);
+  /* Prefix first so production CSS retains both Safari and Chromium declarations. */
   -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
   content: "";
   opacity: 0;
   pointer-events: none;
@@ -1696,7 +1740,7 @@ body[data-filter-dropdown-open="true"] .date-pills {
   width: min(30rem, calc(100vw - 1rem));
   padding: 1.35rem;
   border-radius: 1.35rem;
-  background: var(--popover-bg);
+  background: var(--bg);
   color: var(--text);
   outline: 0;
   overscroll-behavior-x: contain;
@@ -2543,44 +2587,6 @@ body[data-filter-dropdown-open="true"] .date-pills {
   .search-menu__popover {
     left: 0;
     right: 0;
-  }
-
-  .filter-input--has-mobile-clear {
-    padding-inline-end: 2.75rem;
-  }
-
-  .filter-input--has-mobile-clear[type="search"]::-webkit-search-cancel-button {
-    display: none;
-    appearance: none;
-    -webkit-appearance: none;
-  }
-
-  .filter-toolbar__search-clear {
-    position: absolute;
-    top: 50%;
-    right: 0.45rem;
-    z-index: 2;
-    display: grid;
-    width: 2rem;
-    height: 2rem;
-    place-items: center;
-    padding: 0;
-    border: 0;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--muted);
-    cursor: pointer;
-    font-family: var(--font-display), sans-serif;
-    font-size: 1.2rem;
-    line-height: 1;
-    transform: translateY(-50%);
-  }
-
-  .filter-toolbar__search-clear:focus-visible,
-  .filter-toolbar__search-clear:hover {
-    background: var(--soft-fill);
-    color: var(--text);
-    outline: none;
   }
 
   .site-header__filter-toggle,
