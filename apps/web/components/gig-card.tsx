@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import Image from "next/image";
+import { getImageProps } from "next/image";
 import Link from "next/link";
 import { Anchor, Box, Text, Title, UnstyledButton } from "@mantine/core";
 
@@ -10,15 +10,102 @@ import { formatGigCardArtists } from "@/lib/gig-card-artists";
 import { recordCurrentGigDetailReturnState } from "@/lib/gig-detail-return";
 import {
   getRenderableGigImage,
-  type GigCardRecord
+  type GigCardRecord,
+  type RenderableGigImage
 } from "@/lib/gigs";
 import { buildGigDetailPath } from "@/lib/seo";
 
-const GIG_CARD_IMAGE_SIZES =
-  "(max-width: 480px) 88px, (max-width: 720px) 115px, 168px";
 const GIG_CARD_IMAGE_QUALITY = 72;
+const GIG_CARD_IMAGE_STYLE = { height: "auto", width: "100%" } as const;
+const GIG_CARD_IMAGE_WIDTHS = {
+  compact: 88,
+  desktop: 168,
+  medium: 115
+} as const;
 
 export type GigCardImageLoadingIntent = "eager" | "lazy";
+
+function getScaledImageHeight(
+  image: RenderableGigImage,
+  width: number
+): number {
+  return Math.max(1, Math.round((image.height / image.width) * width));
+}
+
+function getGigCardImageProps({
+  alt,
+  image,
+  loadingIntent,
+  width
+}: {
+  alt: string;
+  image: RenderableGigImage;
+  loadingIntent: GigCardImageLoadingIntent;
+  width: number;
+}) {
+  return getImageProps({
+    alt,
+    className: "gig-card__media-image",
+    height: getScaledImageHeight(image, width),
+    loading: loadingIntent,
+    quality: GIG_CARD_IMAGE_QUALITY,
+    src: image.url,
+    style: GIG_CARD_IMAGE_STYLE,
+    width
+  }).props;
+}
+
+function GigCardImage({
+  alt,
+  image,
+  loadingIntent
+}: {
+  alt: string;
+  image: RenderableGigImage;
+  loadingIntent: GigCardImageLoadingIntent;
+}) {
+  const compactImageProps = getGigCardImageProps({
+    alt,
+    image,
+    loadingIntent,
+    width: GIG_CARD_IMAGE_WIDTHS.compact
+  });
+  const mediumImageProps = getGigCardImageProps({
+    alt,
+    image,
+    loadingIntent,
+    width: GIG_CARD_IMAGE_WIDTHS.medium
+  });
+  const desktopImageProps = getGigCardImageProps({
+    alt,
+    image,
+    loadingIntent,
+    width: GIG_CARD_IMAGE_WIDTHS.desktop
+  });
+  const {
+    height: _generatedHeight,
+    width: _generatedWidth,
+    ...fallbackImageProps
+  } = desktopImageProps;
+
+  return (
+    <picture className="gig-card__picture">
+      <source
+        media="(max-width: 480px)"
+        srcSet={compactImageProps.srcSet}
+      />
+      <source
+        media="(max-width: 720px)"
+        srcSet={mediumImageProps.srcSet}
+      />
+      <img
+        {...fallbackImageProps}
+        height={image.height}
+        width={image.width}
+      />
+    </picture>
+  );
+}
 
 function formatGigDate(value: string): string {
   return new Intl.DateTimeFormat("en-AU", {
@@ -148,16 +235,10 @@ export function GigCard({
 
   const media = image ? (
     <Box className="gig-card__media">
-      <Image
+      <GigCardImage
         alt={`${gig.title} poster`}
-        className="gig-card__media-image"
-        height={image.height}
-        loading={imageLoadingIntent === "eager" ? "eager" : undefined}
-        quality={GIG_CARD_IMAGE_QUALITY}
-        sizes={GIG_CARD_IMAGE_SIZES}
-        src={image.url}
-        style={{ height: "auto", width: "100%" }}
-        width={image.width}
+        image={image}
+        loadingIntent={imageLoadingIntent}
       />
     </Box>
   ) : null;

@@ -4,7 +4,11 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { normalizeAbsoluteHttpUrl } from "@perth-gig-finder/shared";
+import {
+  buildContentAddressedGigImagePath,
+  type ContentAddressedGigImageExtension,
+  normalizeAbsoluteHttpUrl
+} from "@perth-gig-finder/shared";
 import sharp from "sharp";
 
 import type {
@@ -22,7 +26,10 @@ export const IMAGE_TRIM_THRESHOLD = 10;
 const IMAGE_OPTIMIZATION_SCALE_STEPS = [1, 0.85, 0.7, 0.55, 0.4, 0.25] as const;
 const IMAGE_OPTIMIZATION_QUALITY_STEPS = [84, 74, 64, 54, 44, 34] as const;
 
-const SUPPORTED_IMAGE_TYPES = new Map<string, string>([
+const SUPPORTED_IMAGE_TYPES = new Map<
+  string,
+  ContentAddressedGigImageExtension
+>([
   ["image/jpeg", "jpg"],
   ["image/png", "png"],
   ["image/webp", "webp"],
@@ -36,6 +43,12 @@ interface PreparedMirroredImage {
   height: number;
 }
 
+interface MirroredImageUploadError {
+  message: string;
+  status?: number;
+  statusCode?: string;
+}
+
 export type ImageHostResolver = (hostname: string) => Promise<readonly string[]>;
 
 interface SafeImageUrlResult {
@@ -43,8 +56,8 @@ interface SafeImageUrlResult {
   url: string | null;
 }
 
-function sha1Hex(value: string): string {
-  return createHash("sha1").update(value).digest("hex");
+function sha256Hex(value: Uint8Array): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 function normalizeContentType(value: string | null): string | null {
@@ -626,9 +639,7 @@ async function fetchImageWithRedirects(input: {
 }
 
 export function buildMirroredImagePath(input: {
-  sourceSlug: string;
-  identityKey: string;
-  sourceImageUrl: string;
+  bytes: Uint8Array;
   contentType: string;
 }): string {
   const extension = SUPPORTED_IMAGE_TYPES.get(input.contentType);
@@ -637,11 +648,20 @@ export function buildMirroredImagePath(input: {
     throw new Error(`Unsupported image content type: ${input.contentType}`);
   }
 
-  return [
-    input.sourceSlug,
-    input.identityKey,
-    `${sha1Hex(input.sourceImageUrl)}.${extension}`
-  ].join("/");
+  return buildContentAddressedGigImagePath({
+    extension,
+    sha256: sha256Hex(input.bytes)
+  });
+}
+
+function isDuplicateMirroredImageUploadError(
+  error: MirroredImageUploadError
+): boolean {
+  return (
+    error.status === 409 ||
+    error.statusCode?.toLowerCase() === "duplicate" ||
+    /(?:already exists|duplicate)/i.test(error.message)
+  );
 }
 
 export async function ensureImageBucket(client: SupabaseClient): Promise<void> {
@@ -672,7 +692,7 @@ export async function mirrorSourceImage(input: {
     path: string,
     bytes: Buffer,
     options: { contentType: string }
-  ) => Promise<{ error: { message: string } | null }>;
+  ) => Promise<{ error: MirroredImageUploadError | null }>;
   fetchImpl?: typeof fetch;
   now?: () => string;
   resolveHostname?: ImageHostResolver;
@@ -760,10 +780,8 @@ export async function mirrorSourceImage(input: {
     }
 
     const mirroredImagePath = buildMirroredImagePath({
-      contentType: preparedImage.contentType,
-      sourceSlug: input.sourceGig.sourceSlug,
-      identityKey: input.sourceGig.identityKey,
-      sourceImageUrl: input.sourceGig.sourceImageUrl
+      bytes: preparedImage.bytes,
+      contentType: preparedImage.contentType
     });
 
     const { error: uploadError } = await input.upload(
@@ -774,7 +792,7 @@ export async function mirrorSourceImage(input: {
       }
     );
 
-    if (uploadError) {
+    if (uploadError && !isDuplicateMirroredImageUploadError(uploadError)) {
       return toFailureResult(`Image upload failed: ${uploadError.message}`);
     }
 

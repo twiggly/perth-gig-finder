@@ -1,5 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { ImageConfigContext } from "next/dist/shared/lib/image-config-context.shared-runtime";
+import { imageConfigDefault } from "next/dist/shared/lib/image-config";
 import { describe, expect, it, vi } from "vitest";
 
 import type { GigCardRecord } from "@/lib/gigs";
@@ -38,9 +40,19 @@ function createGig(overrides: Partial<GigCardRecord> = {}): GigCardRecord {
   };
 }
 
+function renderGigDetail(gig: GigCardRecord): string {
+  return renderToStaticMarkup(
+    <ImageConfigContext.Provider
+      value={{ ...imageConfigDefault, qualities: [72] }}
+    >
+      <GigDetailContent gig={gig} />
+    </ImageConfigContext.Provider>
+  );
+}
+
 describe("GigDetailContent", () => {
   it("renders gig details, venue address, poster, and actions", () => {
-    const html = renderToStaticMarkup(<GigDetailContent gig={createGig()} />);
+    const html = renderGigDetail(createGig());
 
     expect(html).toContain("gig-detail");
     expect(html).toContain("gig-detail__panel--with-media");
@@ -67,21 +79,23 @@ describe("GigDetailContent", () => {
     expect(html).toContain("181 William Street, Northbridge WA 6003");
     expect(html).toContain("gig-detail__image");
     expect(html).toContain("https%3A%2F%2Fimages.example.com%2Falt.jpg");
+    expect(html).toContain('sizes="(max-width: 720px) 93vw, 14rem"');
+    expect(html).toContain('<link rel="preload" as="image"');
+    expect(html).toContain("q=72");
+    expect(html).not.toContain("q=75");
     expect(html).toContain("Buy tickets");
     expect(html).toContain("Listing @ The Bird");
   });
 
   it("renders no-poster gigs in the no-media panel variant", () => {
-    const html = renderToStaticMarkup(
-      <GigDetailContent
-        gig={createGig({
-          image_height: null,
-          image_width: null,
-          source_image_url: null,
-          venue_name: "Milk Bar",
-          venue_slug: "milk-bar"
-        })}
-      />
+    const html = renderGigDetail(
+      createGig({
+        image_height: null,
+        image_width: null,
+        source_image_url: null,
+        venue_name: "Milk Bar",
+        venue_slug: "milk-bar"
+      })
     );
 
     expect(html).toContain("gig-detail__panel--no-media");
@@ -95,15 +109,13 @@ describe("GigDetailContent", () => {
   });
 
   it("renders The Bird placeholder for image-less Bird gigs", () => {
-    const html = renderToStaticMarkup(
-      <GigDetailContent
-        gig={createGig({
-          image_height: null,
-          image_width: null,
-          source_image_url: null,
-          venue_slug: "the-bird"
-        })}
-      />
+    const html = renderGigDetail(
+      createGig({
+        image_height: null,
+        image_width: null,
+        source_image_url: null,
+        venue_slug: "the-bird"
+      })
     );
 
     expect(html).toContain("gig-detail__panel--with-media");
@@ -114,27 +126,23 @@ describe("GigDetailContent", () => {
   });
 
   it("keeps the venue suburb on the same line when no address exists", () => {
-    const html = renderToStaticMarkup(
-      <GigDetailContent
-        gig={createGig({
-          venue_address: null
-        })}
-      />
+    const html = renderGigDetail(
+      createGig({
+        venue_address: null
+      })
     );
 
     expect(html).toContain("The Bird, Northbridge");
   });
 
   it("removes a leading premise label from display addresses", () => {
-    const html = renderToStaticMarkup(
-      <GigDetailContent
-        gig={createGig({
-          venue_name: "Four5Nine Bar @ Rosemount",
-          venue_slug: "four5nine-bar-rosemount",
-          venue_suburb: "North Perth",
-          venue_address: "Rosemount Hotel, 459 Fitzgerald St"
-        })}
-      />
+    const html = renderGigDetail(
+      createGig({
+        venue_name: "Four5Nine Bar @ Rosemount",
+        venue_slug: "four5nine-bar-rosemount",
+        venue_suburb: "North Perth",
+        venue_address: "Rosemount Hotel, 459 Fitzgerald St"
+      })
     );
 
     expect(html).toContain("<p>Four5Nine Bar @ Rosemount,</p>");
@@ -143,15 +151,13 @@ describe("GigDetailContent", () => {
   });
 
   it("removes trailing Australia and collapses duplicate venue-name addresses", () => {
-    const html = renderToStaticMarkup(
-      <GigDetailContent
-        gig={createGig({
-          venue_name: "20 Thorogood St",
-          venue_slug: "20-thorogood-st",
-          venue_suburb: "Burswood",
-          venue_address: "20 Thorogood St, Burswood WA 6100, Australia"
-        })}
-      />
+    const html = renderGigDetail(
+      createGig({
+        venue_name: "20 Thorogood St",
+        venue_slug: "20-thorogood-st",
+        venue_suburb: "Burswood",
+        venue_address: "20 Thorogood St, Burswood WA 6100, Australia"
+      })
     );
 
     expect(html).toContain("<p>20 Thorogood St, Burswood WA 6100</p>");
@@ -160,20 +166,18 @@ describe("GigDetailContent", () => {
   });
 
   it("omits unavailable optional detail fields", () => {
-    const html = renderToStaticMarkup(
-      <GigDetailContent
-        gig={createGig({
-          artist_names: [],
-          image_height: null,
-          image_width: null,
-          source_image_url: null,
-          ticket_url: null,
-          venue_name: "Milk Bar",
-          venue_slug: "milk-bar",
-          venue_address: null,
-          venue_website_url: null
-        })}
-      />
+    const html = renderGigDetail(
+      createGig({
+        artist_names: [],
+        image_height: null,
+        image_width: null,
+        source_image_url: null,
+        ticket_url: null,
+        venue_name: "Milk Bar",
+        venue_slug: "milk-bar",
+        venue_address: null,
+        venue_website_url: null
+      })
     );
 
     expect(html).toContain("gig-detail__panel--no-media");

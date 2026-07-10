@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it, vi } from "vitest";
 import sharp from "sharp";
 
@@ -33,6 +35,14 @@ function createSourceGig(overrides: Partial<SourceGigRecord> = {}): SourceGigRec
     mirroredImageHeight: null,
     ...overrides
   };
+}
+
+function getExpectedMirroredImagePath(
+  bytes: Uint8Array,
+  extension: string
+): string {
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  return `sha256/${sha256.slice(0, 2)}/${sha256}.${extension}`;
 }
 
 async function createPngBuffer(width: number, height: number): Promise<Buffer> {
@@ -174,15 +184,64 @@ async function createTransparentPngBufferWithHiddenRgb(input: {
 }
 
 describe("image mirroring", () => {
-  it("builds a deterministic mirrored path from the source URL", () => {
+  it("builds a deterministic mirrored path from the final image bytes", () => {
+    const bytes = Buffer.from("final mirrored poster bytes");
+
+    expect(buildMirroredImagePath({ bytes, contentType: "image/png" })).toBe(
+      getExpectedMirroredImagePath(bytes, "png")
+    );
+  });
+
+  it("uses the same global path for identical bytes and a new path for changed bytes", () => {
+    const sharedBytes = Buffer.from("shared poster");
+    const changedBytes = Buffer.from("changed poster");
+    const firstPath = buildMirroredImagePath({
+      bytes: sharedBytes,
+      contentType: "image/jpeg"
+    });
+
     expect(
       buildMirroredImagePath({
-        sourceSlug: "oztix-wa",
-        identityKey: "doctor-jazz",
-        sourceImageUrl: "https://assets.oztix.com.au/image/doctor-jazz.png",
-        contentType: "image/png"
+        bytes: Buffer.from(sharedBytes),
+        contentType: "image/jpeg"
       })
-    ).toBe("oztix-wa/doctor-jazz/5943d2e0e12f27d05a36af1afca56326645f0dfe.png");
+    ).toBe(firstPath);
+    expect(
+      buildMirroredImagePath({
+        bytes: changedBytes,
+        contentType: "image/jpeg"
+      })
+    ).not.toBe(firstPath);
+  });
+
+  it("shares one path across different source gigs with identical final bytes", async () => {
+    const imageBuffer = await createPngBuffer(4, 2);
+    const mirrorForSourceGig = async (sourceGig: SourceGigRecord) => {
+      const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+        new Response(new Uint8Array(imageBuffer), {
+          status: 200,
+          headers: { "content-type": "image/png" }
+        })
+      );
+
+      return mirrorSourceImageForTest({
+        sourceGig,
+        fetchImpl: fetchMock,
+        upload: vi.fn().mockResolvedValue({ error: null })
+      });
+    };
+
+    const firstResult = await mirrorForSourceGig(createSourceGig());
+    const secondResult = await mirrorForSourceGig(
+      createSourceGig({
+        id: "source-gig-2",
+        identityKey: "another-gig",
+        sourceImageUrl: "https://images.example.com/another-gig.png",
+        sourceSlug: "another-source"
+      })
+    );
+
+    expect(firstResult.mirroredImagePath).toBe(secondResult.mirroredImagePath);
   });
 
   it("mirrors upcoming active gigs with incomplete image state", () => {
@@ -448,7 +507,7 @@ describe("image mirroring", () => {
     const [path, uploadedBytes, options] = upload.mock.calls[0]!;
     const metadata = await sharp(uploadedBytes).metadata();
 
-    expect(path).toMatch(/\.jpg$/);
+    expect(path).toBe(getExpectedMirroredImagePath(uploadedBytes, "jpg"));
     expect(options).toEqual({ contentType: "image/jpeg" });
     expect(uploadedBytes.byteLength).toBeLessThanOrEqual(IMAGE_MIRROR_MAX_BYTES);
     expect(metadata.format).toBe("jpeg");
@@ -487,7 +546,7 @@ describe("image mirroring", () => {
     const [path, uploadedBytes, options] = upload.mock.calls[0]!;
     const metadata = await sharp(uploadedBytes).metadata();
 
-    expect(path).toMatch(/\.webp$/);
+    expect(path).toBe(getExpectedMirroredImagePath(uploadedBytes, "webp"));
     expect(options).toEqual({ contentType: "image/webp" });
     expect(uploadedBytes.byteLength).toBeLessThanOrEqual(IMAGE_MIRROR_MAX_BYTES);
     expect(metadata.format).toBe("webp");
@@ -619,19 +678,77 @@ describe("image mirroring", () => {
       upload,
       now: () => "2026-04-06T08:00:00.000Z"
     });
+    const expectedPath = getExpectedMirroredImagePath(imageBuffer, "png");
 
     expect(result).toEqual({
       status: "ready",
-      mirroredImagePath: "oztix-wa/doctor-jazz/5943d2e0e12f27d05a36af1afca56326645f0dfe.png",
+      mirroredImagePath: expectedPath,
       errorMessage: null,
       mirroredAt: "2026-04-06T08:00:00.000Z",
       mirroredImageWidth: 4,
       mirroredImageHeight: 2
     });
     expect(upload).toHaveBeenCalledWith(
-      "oztix-wa/doctor-jazz/5943d2e0e12f27d05a36af1afca56326645f0dfe.png",
+      expectedPath,
       imageBuffer,
       { contentType: "image/png" }
     );
+  });
+
+  it("treats an existing content-addressed object as a successful upload", async () => {
+    const imageBuffer = await createPngBuffer(4, 2);
+    const upload = vi.fn().mockResolvedValue({
+      error: {
+        message: "The resource already exists",
+        status: 409,
+        statusCode: "Duplicate"
+      }
+    });
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(new Uint8Array(imageBuffer), {
+        status: 200,
+        headers: { "content-type": "image/png" }
+      })
+    );
+
+    const result = await mirrorSourceImageForTest({
+      sourceGig: createSourceGig(),
+      fetchImpl: fetchMock,
+      upload
+    });
+
+    expect(result.status).toBe("ready");
+    expect(result.mirroredImagePath).toBe(
+      getExpectedMirroredImagePath(imageBuffer, "png")
+    );
+  });
+
+  it("keeps non-duplicate upload errors as mirror failures", async () => {
+    const imageBuffer = await createPngBuffer(4, 2);
+    const upload = vi.fn().mockResolvedValue({
+      error: {
+        message: "Storage unavailable",
+        status: 503,
+        statusCode: "InternalError"
+      }
+    });
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(new Uint8Array(imageBuffer), {
+        status: 200,
+        headers: { "content-type": "image/png" }
+      })
+    );
+
+    const result = await mirrorSourceImageForTest({
+      sourceGig: createSourceGig(),
+      fetchImpl: fetchMock,
+      upload
+    });
+
+    expect(result).toMatchObject({
+      status: "failed",
+      mirroredImagePath: null,
+      errorMessage: "Image upload failed: Storage unavailable"
+    });
   });
 });
