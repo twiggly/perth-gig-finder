@@ -29,4 +29,24 @@ describe("global CSS compatibility", () => {
       /-webkit-backdrop-filter: blur\(14px\);\s+backdrop-filter: blur\(14px\);/,
     );
   });
+
+  it("reduces menu item typography only above the phone breakpoint", () => {
+    expect(globalCss).toMatch(
+      /\.site-header__menu-item \{\s+color: var\(--text\);\s+font-size: clamp\(2\.1rem, 9vw, 4\.8rem\);/,
+    );
+    expect(globalCss).toMatch(
+      /@media \(min-width: 721px\) \{\s+\.site-header__menu-item \{\s+font-size: clamp\(2\.5rem, 4vw, 3\.4rem\);\s+\}\s+\}/,
+    );
+  });
+
+  it("reduces the brand title only at the desktop breakpoint", () => {
+    const baseTitleRule = getRuleBody(".site-header__title");
+
+    expect(baseTitleRule).toContain(
+      "font-size: clamp(2rem, 5vw, 4rem);",
+    );
+    expect(globalCss).toMatch(
+      /@media \(min-width: 960px\) \{[\s\S]*?\.site-header__title \{\s+font-size: clamp\(1\.85rem, 3vw, 2\.65rem\);\s+\}/,
+    );
+  });
 });

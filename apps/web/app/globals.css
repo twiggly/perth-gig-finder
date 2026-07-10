@@ -889,6 +889,12 @@ code {
   vertical-align: baseline;
 }
 
+@media (min-width: 721px) {
+  .site-header__menu-item {
+    font-size: clamp(2.5rem, 4vw, 3.4rem);
+  }
+}
+
 .site-header__theme-icon--moon {
   display: none;
 }
@@ -1005,7 +1011,7 @@ code {
   }
 
   .site-header__title {
-    font-size: clamp(1.85rem, 3.2vw, 2.85rem);
+    font-size: clamp(1.85rem, 3vw, 2.65rem);
   }
 
   .top-panel__filters {
