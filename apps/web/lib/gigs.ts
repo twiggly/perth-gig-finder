@@ -1,4 +1,7 @@
-import type { GigStatus } from "@perth-gig-finder/shared";
+import {
+  isContentAddressedGigImagePath,
+  type GigStatus
+} from "@perth-gig-finder/shared";
 
 import { matchesGigQuery, type HomepageFilters } from "./homepage-filters";
 import {
@@ -297,7 +300,10 @@ export function getGigImageUrl(gig: GigImageRecord): string | null {
 
   if (gig.image_path && supabaseUrl) {
     const baseUrl = `${supabaseUrl}/storage/v1/object/public/gig-images/${encodeStoragePath(gig.image_path)}`;
-    const version = gig.image_version ? encodeURIComponent(gig.image_version) : null;
+    const version =
+      !isContentAddressedGigImagePath(gig.image_path) && gig.image_version
+        ? encodeURIComponent(gig.image_version)
+        : null;
     return version ? `${baseUrl}?v=${version}` : baseUrl;
   }
 

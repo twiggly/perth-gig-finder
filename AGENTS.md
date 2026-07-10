@@ -84,6 +84,7 @@ This file is for coding agents working in this repository. Keep it short, practi
 ## Image Mirroring
 
 - Image backfill exists to mirror third-party posters into Supabase Storage and record stable metadata.
+- New mirrored outputs use immutable global SHA-256 paths. Identical final bytes share one object; do not overwrite those paths or append cache-busting queries to them.
 - Current mirror limits are defined in [apps/scraper/src/image-mirror.ts](apps/scraper/src/image-mirror.ts):
   - source download limit: `32 MB`
   - mirrored output limit: `8 MB`

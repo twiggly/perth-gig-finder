@@ -2063,6 +2063,10 @@ body[data-filter-dropdown-open="true"] .date-pills {
   border-radius: inherit;
 }
 
+.gig-card__picture {
+  display: block;
+}
+
 .gig-card__media img,
 .gig-card__media-image {
   display: block;

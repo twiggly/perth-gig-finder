@@ -12,8 +12,8 @@ import {
 } from "@/lib/gigs";
 import { formatPerthDateTime } from "@/lib/gig-seo";
 
-const GIG_DETAIL_IMAGE_SIZES = "(max-width: 720px) 100vw, 360px";
-const GIG_DETAIL_IMAGE_QUALITY = 75;
+const GIG_DETAIL_IMAGE_SIZES = "(max-width: 720px) 93vw, 14rem";
+const GIG_DETAIL_IMAGE_QUALITY = 72;
 
 function VenueMapIcon() {
   return (

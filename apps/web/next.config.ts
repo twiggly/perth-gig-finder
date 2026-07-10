@@ -1,9 +1,32 @@
 import { networkInterfaces } from "node:os";
 import type { NextConfig } from "next";
-import type { RemotePattern } from "next/dist/shared/lib/image-config";
+import type {
+  LocalPattern,
+  RemotePattern
+} from "next/dist/shared/lib/image-config";
 
 const LOCAL_PREVIEW_ASSET_PREFIX =
   process.env.PERTH_GIG_FINDER_PREVIEW_ASSET_PREFIX;
+const GIG_IMAGE_STORAGE_PATHNAME =
+  "/storage/v1/object/public/gig-images/**";
+const LOOPBACK_IMAGE_HOSTNAMES = new Set([
+  "127.0.0.1",
+  "localhost",
+  "[::1]"
+]);
+const LOCAL_IMAGE_PATTERNS: LocalPattern[] = [
+  {
+    pathname: "/venue-placeholders/**",
+    search: ""
+  }
+];
+const OZTIX_IMAGE_PATTERN: RemotePattern = {
+  protocol: "https",
+  hostname: "assets.oztix.com.au",
+  port: "",
+  pathname: "/image/**",
+  search: ""
+};
 
 function getAllowedDevOrigins(): string[] {
   const origins = new Set<string>(["127.0.0.1", "localhost"]);
@@ -21,54 +44,57 @@ function getAllowedDevOrigins(): string[] {
   return [...origins];
 }
 
-function getImageRemotePatterns() {
-  const patterns: RemotePattern[] = [
-    {
-      protocol: "https",
-      hostname: "assets.oztix.com.au",
-      pathname: "/**"
-    },
-    {
-      protocol: "http",
-      hostname: "127.0.0.1",
-      port: "55321",
-      pathname: "/storage/v1/object/public/gig-images/**"
-    },
-    {
-      protocol: "http",
-      hostname: "localhost",
-      port: "55321",
-      pathname: "/storage/v1/object/public/gig-images/**"
-    }
-  ];
+export function getImageSourcePolicy(supabaseUrl?: string): {
+  dangerouslyAllowLocalIP: boolean;
+  remotePatterns: RemotePattern[];
+} {
+  const remotePatterns: RemotePattern[] = [{ ...OZTIX_IMAGE_PATTERN }];
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-
-  if (supabaseUrl) {
-    try {
-      const url = new URL(supabaseUrl);
-      const protocol = url.protocol.replace(":", "") as "http" | "https";
-      if (url.port) {
-        patterns.push({
-          protocol,
-          hostname: url.hostname,
-          port: url.port,
-          pathname: "/storage/v1/object/public/gig-images/**"
-        });
-      } else {
-        patterns.push({
-          protocol,
-          hostname: url.hostname,
-          pathname: "/storage/v1/object/public/gig-images/**"
-        });
-      }
-    } catch {
-      // Ignore invalid runtime config and fall back to the static patterns.
-    }
+  if (!supabaseUrl) {
+    return {
+      dangerouslyAllowLocalIP: false,
+      remotePatterns
+    };
   }
 
-  return patterns;
+  try {
+    const url = new URL(supabaseUrl);
+    const protocol =
+      url.protocol === "http:"
+        ? "http"
+        : url.protocol === "https:"
+          ? "https"
+          : null;
+
+    if (!protocol) {
+      return {
+        dangerouslyAllowLocalIP: false,
+        remotePatterns
+      };
+    }
+
+    remotePatterns.push({
+      protocol,
+      hostname: url.hostname,
+      port: url.port,
+      pathname: GIG_IMAGE_STORAGE_PATHNAME
+    });
+
+    return {
+      dangerouslyAllowLocalIP: LOOPBACK_IMAGE_HOSTNAMES.has(url.hostname),
+      remotePatterns
+    };
+  } catch {
+    return {
+      dangerouslyAllowLocalIP: false,
+      remotePatterns
+    };
+  }
 }
+
+const imageSourcePolicy = getImageSourcePolicy(
+  process.env.NEXT_PUBLIC_SUPABASE_URL
+);
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: getAllowedDevOrigins(),
@@ -77,12 +103,12 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ["@mantine/core", "@mantine/hooks"]
   },
   images: {
-    // Local Supabase Storage resolves to a private IP in development, so Next's
-    // image optimizer needs this enabled to serve mirrored gig artwork locally.
-    dangerouslyAllowLocalIP: true,
+    dangerouslyAllowLocalIP: imageSourcePolicy.dangerouslyAllowLocalIP,
+    deviceSizes: [640, 750, 828, 1080, 1200, 1440],
     imageSizes: [88, 115, 168, 176, 230, 336],
-    qualities: [72, 75],
-    remotePatterns: getImageRemotePatterns()
+    localPatterns: LOCAL_IMAGE_PATTERNS,
+    qualities: [72],
+    remotePatterns: imageSourcePolicy.remotePatterns
   },
   transpilePackages: ["@perth-gig-finder/shared"]
 };

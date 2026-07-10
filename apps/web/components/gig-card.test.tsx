@@ -12,20 +12,29 @@ vi.mock("next/image", async () => {
   const React = await import("react");
 
   return {
-    default: function MockImage({
-      alt,
-      quality: _quality,
+    getImageProps({
+      quality = 75,
       src,
-      ...props
+      width,
+      ...imageProps
     }: React.ImgHTMLAttributes<HTMLImageElement> & {
       quality?: number;
       src: string;
     }) {
-      return React.createElement("img", {
-        ...props,
-        alt,
-        src
-      });
+      const numericWidth = Number(width);
+      const separator = src.includes("?") ? "&" : "?";
+      const buildUrl = (targetWidth: number) =>
+        `${src}${separator}w=${targetWidth}&q=${quality}`;
+
+      return {
+        props: {
+          ...imageProps,
+          decoding: "async" as const,
+          src: buildUrl(numericWidth * 2),
+          srcSet: `${buildUrl(numericWidth)} 1x, ${buildUrl(numericWidth * 2)} 2x`,
+          width
+        }
+      };
     }
   };
 });
@@ -184,7 +193,27 @@ describe("GigCard", () => {
       </MantineProvider>
     );
 
+    const sourceTags = html.match(/<source [^>]+>/g) ?? [];
+    const imageTag = html.match(/<img [^>]*gig-card__media-image[^>]*>/)?.[0];
+
+    expect(html).toContain('<picture class="gig-card__picture">');
+    expect(sourceTags).toHaveLength(2);
+    expect(sourceTags[0]).toContain('media="(max-width: 480px)"');
+    expect(sourceTags[0]).toContain("w=88");
+    expect(sourceTags[0]).toContain("w=176");
+    expect(sourceTags[0]).not.toContain("w=115");
+    expect(sourceTags[1]).toContain('media="(max-width: 720px)"');
+    expect(sourceTags[1]).toContain("w=115");
+    expect(sourceTags[1]).toContain("w=230");
+    expect(sourceTags[1]).not.toContain("w=336");
+    expect(imageTag).toContain("w=168");
+    expect(imageTag).toContain("w=336");
+    expect(html).toContain("q=72");
+    expect(html).not.toContain("w=640");
     expect(html).toContain("gig-card__media-image");
+    expect(html).toContain('width="600"');
+    expect(html).toContain('height="900"');
+    expect(html).toContain('decoding="async"');
     expect(html).toContain('loading="eager"');
   });
 
@@ -206,6 +235,7 @@ describe("GigCard", () => {
 
     expect(html).toContain("gig-card__media-image");
     expect(html).not.toContain('loading="eager"');
+    expect(html).toContain('loading="lazy"');
   });
 
   it("renders The Bird placeholder when a Bird gig has no poster", () => {
@@ -226,7 +256,11 @@ describe("GigCard", () => {
     );
 
     expect(html).toContain("gig-card__media-image");
+    expect(html).toContain('<picture class="gig-card__picture">');
     expect(html).toContain("/venue-placeholders/the-bird.png");
+    expect(html).toContain("w=88");
+    expect(html).toContain("w=336");
+    expect(html).not.toContain("w=640");
     expect(html).toContain('width="1674"');
     expect(html).toContain('height="940"');
   });

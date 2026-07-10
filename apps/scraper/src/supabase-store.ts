@@ -1895,14 +1895,22 @@ export class SupabaseGigStore implements GigStore {
       fetchImpl,
       upload: async (path, bytes, options) => {
         const { error } = await this.client.storage
-          .from("gig-images")
+          .from(IMAGE_MIRROR_BUCKET)
           .upload(path, bytes, {
-            upsert: true,
+            upsert: false,
             cacheControl: "31536000",
             contentType: options.contentType
           });
 
-        return { error: error ? { message: error.message } : null };
+        return {
+          error: error
+            ? {
+                message: error.message,
+                status: error.status,
+                statusCode: error.statusCode
+              }
+            : null
+        };
       }
     });
 

@@ -707,9 +707,7 @@ class MemoryGigStore implements GigStore {
     }
 
     const mirroredImagePath = buildMirroredImagePath({
-      sourceSlug: sourceGig.sourceSlug,
-      identityKey: sourceGig.identityKey,
-      sourceImageUrl: sourceGig.sourceImageUrl,
+      bytes: Buffer.from(sourceGig.sourceImageUrl),
       contentType: "image/png"
     });
     const mirroredAt = new Date().toISOString();
@@ -1909,7 +1907,7 @@ describe("executeSourceRun", () => {
         sourceUrl: "https://www.moshtix.com.au/v2/event/regional-night/193083",
         title: "Regional Night",
         status: "active",
-        startsAt: "2026-07-01T12:00:00.000Z",
+        startsAt: "2099-07-01T12:00:00.000Z",
         venueName: "Busselton Pavilion",
         venueSuburb: "Busselton",
         venueAddress: "55 Queen St"
@@ -1962,7 +1960,7 @@ describe("executeSourceRun", () => {
         sourceUrl: "https://www.moshtix.com.au/v2/event/regional-night/193083",
         title: "Regional Night",
         status: "active",
-        startsAt: "2026-07-01T12:00:00.000Z",
+        startsAt: "2099-07-01T12:00:00.000Z",
         venueName: "Busselton Pavilion",
         venueSuburb: "Busselton",
         venueAddress: "55 Queen St"

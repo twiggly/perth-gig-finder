@@ -14,20 +14,29 @@ vi.mock("next/image", async () => {
   const React = await import("react");
 
   return {
-    default: function MockImage({
-      alt,
-      quality: _quality,
+    getImageProps({
+      quality = 75,
       src,
-      ...props
+      width,
+      ...imageProps
     }: React.ImgHTMLAttributes<HTMLImageElement> & {
       quality?: number;
       src: string;
     }) {
-      return React.createElement("img", {
-        ...props,
-        alt,
-        src
-      });
+      const numericWidth = Number(width);
+      const separator = src.includes("?") ? "&" : "?";
+      const buildUrl = (targetWidth: number) =>
+        `${src}${separator}w=${targetWidth}&q=${quality}`;
+
+      return {
+        props: {
+          ...imageProps,
+          decoding: "async" as const,
+          src: buildUrl(numericWidth * 2),
+          srcSet: `${buildUrl(numericWidth)} 1x, ${buildUrl(numericWidth * 2)} 2x`,
+          width
+        }
+      };
     }
   };
 });

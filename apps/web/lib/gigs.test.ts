@@ -1,14 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildAvailableGigDates,
   getAdjacentGigImagePreloadUrls,
+  getGigImageUrl,
   getGigImagePreloadUrls,
   getRenderableGigImage,
   getRenderableGigImageUrl,
   type HomepageDateAvailabilityRecord,
   type GigCardRecord
 } from "./gigs";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 function createGig(
   id: string,
@@ -128,6 +133,41 @@ describe("available gig date helpers", () => {
 });
 
 describe("gig image preload helpers", () => {
+  it("omits timestamp cache-busters from content-addressed image paths", () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://project.supabase.co/");
+    const sha256 =
+      "b2e1e2833bd5c8d4f9297f29b8695b5fdd2907c69376710118ad66a6260c5a50";
+
+    expect(
+      getGigImageUrl(
+        createGig("content-addressed", {
+          image_path: `sha256/b2/${sha256}.webp`,
+          image_version: "20260710120000.000",
+          source_image_url: null
+        })
+      )
+    ).toBe(
+      `https://project.supabase.co/storage/v1/object/public/gig-images/sha256/b2/${sha256}.webp`
+    );
+  });
+
+  it("keeps timestamp cache-busters on legacy mirrored image paths", () => {
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://project.supabase.co");
+
+    expect(
+      getGigImageUrl(
+        createGig("legacy-mirror", {
+          image_path:
+            "oztix-wa/doctor-jazz/5943d2e0e12f27d05a36af1afca56326645f0dfe.png",
+          image_version: "20260710120000.000",
+          source_image_url: null
+        })
+      )
+    ).toBe(
+      "https://project.supabase.co/storage/v1/object/public/gig-images/oztix-wa/doctor-jazz/5943d2e0e12f27d05a36af1afca56326645f0dfe.png?v=20260710120000.000"
+    );
+  });
+
   it("returns a renderable image url only when card metadata is valid", () => {
     expect(getRenderableGigImageUrl(createGig("renderable"))).toBe(
       "https://images.example.com/renderable.jpg"
