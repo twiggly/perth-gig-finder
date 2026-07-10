@@ -133,7 +133,7 @@ describe("HomepageFilters", () => {
 
     expect(html).toContain('value="spacey jane"');
     expect(html).toContain('aria-label="Clear search"');
-    expect(html).toContain("filter-input--has-mobile-clear");
+    expect(html).toContain("filter-input--has-clear");
     expect(html).toContain("Venues");
   });
 });

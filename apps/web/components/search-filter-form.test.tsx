@@ -78,11 +78,11 @@ describe("SearchFilterForm", () => {
     expect(html).not.toContain("search-menu__popover");
   });
 
-  it("renders the clear button and mobile-clear class when a query exists", () => {
+  it("renders the clear button and clear-input class when a query exists", () => {
     const html = renderSearchForm({ searchInput: "spacey jane" });
 
     expect(html).toContain('value="spacey jane"');
-    expect(html).toContain("filter-input--has-mobile-clear");
+    expect(html).toContain("filter-input--has-clear");
     expect(html).toContain('aria-label="Clear search"');
     expect(html).not.toContain("search-menu__popover");
   });

@@ -222,7 +222,7 @@ export function SearchFilterForm({
             aria-haspopup="listbox"
             classNames={{
               input: `filter-input filter-input--compact${
-                searchInput ? " filter-input--has-mobile-clear" : ""
+                searchInput ? " filter-input--has-clear" : ""
               }`
             }}
             onChange={handleInputChange}

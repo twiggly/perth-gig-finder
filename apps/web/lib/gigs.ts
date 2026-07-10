@@ -1,7 +1,5 @@
-import {
-  isContentAddressedGigImagePath,
-  type GigStatus
-} from "@perth-gig-finder/shared";
+import type { GigStatus } from "@perth-gig-finder/shared";
+import { isContentAddressedGigImagePath } from "@perth-gig-finder/shared/image-path";
 
 import { matchesGigQuery, type HomepageFilters } from "./homepage-filters";
 import {
