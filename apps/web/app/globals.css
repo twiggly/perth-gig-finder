@@ -1740,7 +1740,7 @@ body[data-filter-dropdown-open="true"] .date-pills {
   width: min(30rem, calc(100vw - 1rem));
   padding: 1.35rem;
   border-radius: 1.35rem;
-  background: var(--bg);
+  background: var(--popover-bg);
   color: var(--text);
   outline: 0;
   overscroll-behavior-x: contain;

@@ -49,4 +49,12 @@ describe("global CSS compatibility", () => {
       /@media \(min-width: 960px\) \{[\s\S]*?\.site-header__title \{\s+font-size: clamp\(1\.85rem, 3vw, 2\.65rem\);\s+\}/,
     );
   });
+
+  it("uses the venue popover surface for the calendar", () => {
+    const calendarRule = getRuleBody(".day-calendar");
+    const venuePopoverRule = getRuleBody(".venue-menu__popover");
+
+    expect(calendarRule).toContain("background: var(--popover-bg);");
+    expect(venuePopoverRule).toContain("background: var(--popover-bg);");
+  });
 });
