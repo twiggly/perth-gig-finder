@@ -26,7 +26,7 @@ const ARTIST_EXTRACTION_KIND_RANK: Record<ArtistExtractionKind, number> = {
 const LEADING_ARTIST_DECORATION = /^[`"'“”‘’•·●▪▫◆◇★☆*~_=|:;,./\\-]+/u;
 const TRAILING_ARTIST_DECORATION = /[`"'“”‘’•·●▪▫◆◇★☆*~_=|:;,./\\-]+$/u;
 const PLACEHOLDER_ARTIST_PATTERN =
-  /^(?:competition\s+winners?\s*(?:tba|tbc|to be announced)?|(?:(?:local|more|additional|special)\s+)*(?:guests?|supports?|support acts?|acts?|artists?)\s*(?:to be announced|tba|tbc)?|(?:secret|mystery)\s+(?:act|artist|guest|set)s?[!.]?|(?:more|more\s+(?:acts?|artists?|guests?))|(?:tba|tbc|to be announced|more\s+(?:tba|tbc|to be announced)|more to be announced))$/i;
+  /^(?:competition\s+winners?\s*(?:tba|tbc|to be announced)?|(?:(?:local|more|additional|specials?)\s+)*(?:guests?|supports?|support acts?|acts?|artists?)\s*(?:to be announced|tba|tbc)?|(?:secret|mystery)\s+(?:act|artist|guest|set)s?|(?:more|more\s+(?:acts?|artists?|guests?))|(?:tba|tbc|to be announced|more\s+(?:tba|tbc|to be announced)|more to be announced))[!.]?$/i;
 const TITLE_ARTIST_ENSEMBLE_SUFFIX_PATTERN =
   /^(?:jazz\s+band|quartet|quintet|trio|orchestra|ensemble|collective|choir)$/i;
 

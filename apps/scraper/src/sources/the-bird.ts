@@ -3,6 +3,7 @@ import * as cheerio from "cheerio";
 import {
   areCanonicalTitlesCompatible,
   buildGigChecksum,
+  normalizeCanonicalTitleForMatch,
   normalizeVenueAddress,
   normalizeVenueName,
   normalizeVenueSuburb,
@@ -685,7 +686,7 @@ function hasKnownLineupArtists(gig: NormalizedGig): boolean {
 }
 
 function normalizeTheBirdFeedMergeTitle(value: string): string {
-  return slugify(
+  return normalizeCanonicalTitleForMatch(
     normalizeWhitespace(value)
       .replace(/\s*(?:@|at)\s+the\s+bird\b/gi, " ")
       .replace(/\s+-\s+the\s+bird\b/gi, " ")
