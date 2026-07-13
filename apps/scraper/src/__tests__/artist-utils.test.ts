@@ -89,9 +89,13 @@ describe("artist utils", () => {
       normalizeArtistNames([
         "Competition winner TBA",
         "local guests TBC",
+        "Specials guests to be announced!",
+        "SPECIALS GUEST TBC.",
+        "The Specials",
+        "Specials",
         "Actual Artist"
       ])
-    ).toEqual(["Actual Artist"]);
+    ).toEqual(["The Specials", "Specials", "Actual Artist"]);
   });
 
   it("returns unknown when extraction produces no usable artists", () => {

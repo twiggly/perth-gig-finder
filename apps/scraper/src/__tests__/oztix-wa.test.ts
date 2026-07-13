@@ -289,6 +289,10 @@ describe("oztix wa source adapter", () => {
     ).toEqual(["Sleepy Soph", "Bella Dyer", "Jessica Blackley"]);
     expect(parseOztixSpecialGuests("with a special guest to be announced")).toEqual([]);
     expect(parseOztixSpecialGuests("special guest to be announced")).toEqual([]);
+    expect(parseOztixSpecialGuests("Specials guests to be announced!")).toEqual([]);
+    expect(
+      parseOztixSpecialGuests("with specials guests Actual Artist")
+    ).toEqual(["Actual Artist"]);
     expect(parseOztixSpecialGuests("guest TBA")).toEqual([]);
     expect(parseOztixSpecialGuests("Supports to be announced")).toEqual([]);
     expect(parseOztixSpecialGuests("support acts TBA")).toEqual([]);
@@ -309,6 +313,7 @@ describe("oztix wa source adapter", () => {
 
     expect(parseOztixSpecialGuests("with guests TBC")).toEqual([]);
     expect(parseOztixSpecialGuests("plus special guests")).toEqual([]);
+    expect(parseOztixSpecialGuests("The Specials")).toEqual(["The Specials"]);
     expect(parseOztixSpecialGuests("more TBC")).toEqual([]);
     expect(
       parseOztixSpecialGuests("Everything Around You Tour with Special Guest Codee-lee")

@@ -4,8 +4,12 @@ import { readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+import {
+  classifyFuzzyDuplicatePair,
+  normalizedTitleKey
+} from "./audit-gigs-duplicates.mjs";
+
 const DEFAULT_EXAMPLE_LIMIT = 10;
-const DEFAULT_FUZZY_THRESHOLD = 0.72;
 const AUDIT_HISTORY_NAME = "public_gig_cards";
 const AUDIT_HISTORY_TREND_LIMIT = 5;
 const EXPECTED_NO_IMAGE_SOURCE_NAMES = new Set(["The Bird"]);
@@ -599,26 +603,6 @@ function extractHomepagePayload(html) {
   return JSON.parse(extractJsonObjectAt(flightChunks, payloadStart));
 }
 
-function normalizeText(value) {
-  return String(value ?? "")
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(
-      /\b(the|and|with|special|guests?|guest|support|supports?|from|live|at|present|presents|tour|perth|wa|australian|australia|2026)\b/g,
-      " "
-    )
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function normalizedTitleKey(value) {
-  return normalizeText(value)
-    .split(" ")
-    .filter((token) => token.length > 1)
-    .join(" ");
-}
-
 function normalizeArtistVariantIdentity(value) {
   return String(value ?? "")
     .toLowerCase()
@@ -628,29 +612,6 @@ function normalizeArtistVariantIdentity(value) {
     .replace(/\b(the|tribute|show|set|act|band|dj|mc)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function tokenSet(value) {
-  return new Set(normalizedTitleKey(value).split(" ").filter(Boolean));
-}
-
-function jaccard(left, right) {
-  const leftTokens = tokenSet(left);
-  const rightTokens = tokenSet(right);
-
-  if (leftTokens.size === 0 || rightTokens.size === 0) {
-    return 0;
-  }
-
-  let intersection = 0;
-
-  for (const token of leftTokens) {
-    if (rightTokens.has(token)) {
-      intersection += 1;
-    }
-  }
-
-  return intersection / new Set([...leftTokens, ...rightTokens]).size;
 }
 
 function toGigRows(payload) {
@@ -705,18 +666,12 @@ function findFuzzyDuplicates(gigs) {
       for (let rightIndex = leftIndex + 1; rightIndex < group.length; rightIndex += 1) {
         const left = group[leftIndex];
         const right = group[rightIndex];
-        const score = jaccard(left.title, right.title);
-        const leftTitle = normalizedTitleKey(left.title);
-        const rightTitle = normalizedTitleKey(right.title);
-        const contains =
-          leftTitle &&
-          rightTitle &&
-          (leftTitle.includes(rightTitle) || rightTitle.includes(leftTitle));
+        const match = classifyFuzzyDuplicatePair(left, right);
 
-        if (score >= DEFAULT_FUZZY_THRESHOLD || contains) {
+        if (match) {
           duplicates.push({
             date: left.dateKey,
-            score: Number(score.toFixed(2)),
+            score: Number(match.score.toFixed(2)),
             venue: left.venue_name,
             items: [formatGigSummary(left), formatGigSummary(right)]
           });

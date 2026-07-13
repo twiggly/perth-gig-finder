@@ -117,12 +117,12 @@ const EXPLICIT_MUSIC_TEXT_PATTERNS = [
 ];
 
 const SPECIAL_GUEST_PREFIX_PATTERN =
-  /^(?:with|plus)?\s*special guests?[:,]?\s*|^(?:with|plus)\s+guests?[:,]?\s*|^w[/.]\s*|^(?:with|plus)\s+|^starring\s+|^featuring\s+|^feat\.?\s+|^ft\.?\s+/i;
+  /^(?:with|plus)?\s*specials? guests?[:,]?\s*|^(?:with|plus)\s+guests?[:,]?\s*|^w[/.]\s*|^(?:with|plus)\s+|^starring\s+|^featuring\s+|^feat\.?\s+|^ft\.?\s+/i;
 const GENERIC_SPECIAL_GUEST_PATTERN =
-  /^(?:(?:a|an)\s+)?(?:special\s+)?guests?\s*(?:to be announced|tba|tbc)?$|^(?:(?:local|more|additional|special)\s+)*(?:support|supports|support acts?)\s*(?:to be announced|tba|tbc)?$|^(?:(?:top\s+)?secret|mystery)\s+(?:act|artist|guest|set)s?[!.]?$|^(?:more|more\s+(?:acts?|artists?|guests?))[!.]?$|^(?:tba|tbc|to be announced|more\s+(?:tba|tbc|to be announced)|more to be announced)$|^(?:past|present(?:\s+members?)?)$/i;
+  /^(?:(?:a|an)\s+)?(?:specials?\s+)?guests?\s*(?:to be announced|tba|tbc)?[!.]?$|^(?:(?:local|more|additional|specials?)\s+)*(?:support|supports|support acts?)\s*(?:to be announced|tba|tbc)?[!.]?$|^(?:(?:top\s+)?secret|mystery)\s+(?:act|artist|guest|set)s?[!.]?$|^(?:more|more\s+(?:acts?|artists?|guests?))[!.]?$|^(?:tba|tbc|to be announced|more\s+(?:tba|tbc|to be announced)|more to be announced)[!.]?$|^(?:past|present(?:\s+members?)?)$/i;
 const SPECIAL_GUEST_SEPARATOR_PATTERN = /\s*(?:,|\+|\^|\||[•·]|\s-\s)\s*/u;
 const SPECIAL_GUEST_TOUR_LEAD_IN_PATTERN =
-  /^.+?\b(?:tour|single|album|ep|launch|show)\b\s+with\s+special guests?[:,]?\s+/i;
+  /^.+?\b(?:tour|single|album|ep|launch|show)\b\s+with\s+specials? guests?[:,]?\s+/i;
 const TITLE_FEATURED_ARTIST_PATTERN =
   /\b(?:ft\.?|feat\.?|featuring)\s+(.+)$/i;
 const TITLE_PRESENTED_ARTIST_PATTERN =

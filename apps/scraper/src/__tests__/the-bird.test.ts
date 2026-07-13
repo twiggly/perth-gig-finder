@@ -558,6 +558,151 @@ describe("the bird source adapter", () => {
     }
   });
 
+  it("merges weekly rows after removing venue and canonical title noise", async () => {
+    freezeTheBirdFixtureClock();
+
+    const comingUpRows: TheBirdFeedRow[] = [
+      {
+        Date: "15/07/2026",
+        Day: "WEDNESDAY",
+        "Event Title": "Sexton Live At The Bird",
+        Info: "Perth-born artist Sexton returns home for her first headline show.",
+        "Ticket Link":
+          "https://tickets.oztix.com.au/outlet/event/d3c80572-1d88-44ba-a881-d29599037107"
+      },
+      {
+        Date: "15/07/2026",
+        Day: "WEDNESDAY",
+        "Event Title": "Another Bird Show",
+        Info: "Doors 8pm",
+        "Ticket Link": ""
+      }
+    ];
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const url = String(input);
+
+      if (url.includes("AKfycbxdag")) {
+        return new Response(JSON.stringify(comingUpRows), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+
+      if (url.includes("AKfycbzzgyned")) {
+        return new Response(
+          JSON.stringify([
+            {
+              Date: "15.07.26",
+              Day: "Wednesday",
+              Time: "7pm",
+              Price: 34.7,
+              Vibe: "Hip-hop / pop rock",
+              Title: "SEXTON",
+              Featuring: "Mumnbass, Kenzohana",
+              Description:
+                "Sexton returns home with special guests Kenzohana and DjMumnBass.",
+              "Ticket Link": ""
+            }
+          ]),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          }
+        );
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    try {
+      const result = await theBirdSource.fetchListings(fetchMock);
+      const sexton = result.gigs.find(
+        (gig) => gig.title === "Sexton Live At The Bird"
+      );
+
+      expect(result.failedCount).toBe(0);
+      expect(result.gigs).toHaveLength(2);
+      expect(sexton).toMatchObject({
+        startsAt: "2026-07-15T11:00:00.000Z",
+        ticketUrl:
+          "https://tickets.oztix.com.au/outlet/event/d3c80572-1d88-44ba-a881-d29599037107",
+        artists: ["Mumnbass", "Kenzohana"],
+        artistExtractionKind: "explicit_lineup",
+        rawPayload: {
+          mergedWeeklyFeed: {
+            Title: "SEXTON"
+          }
+        }
+      });
+      expect(result.gigs.map((gig) => gig.title)).toContain("Another Bird Show");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps explicit early and late Bird sessions separate", async () => {
+    freezeTheBirdFixtureClock();
+
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const url = String(input);
+
+      if (url.includes("AKfycbxdag")) {
+        return new Response(
+          JSON.stringify([
+            {
+              Date: "16/07/2026",
+              Day: "THURSDAY",
+              "Event Title": "Bird Anniversary (Early Show)",
+              Info: "Doors 5pm",
+              "Ticket Link": "https://tickets.example.com/bird-anniversary-early"
+            }
+          ]),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          }
+        );
+      }
+
+      if (url.includes("AKfycbzzgyned")) {
+        return new Response(
+          JSON.stringify([
+            {
+              Date: "16.07.26",
+              Day: "Thursday",
+              Time: "8pm",
+              Price: 20,
+              Vibe: "live music",
+              Title: "Bird Anniversary (Late Show)",
+              Featuring: "Late Artist",
+              Description: "A separately ticketed late performance.",
+              "Ticket Link": "https://tickets.example.com/bird-anniversary-late"
+            }
+          ]),
+          {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          }
+        );
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    });
+
+    try {
+      const result = await theBirdSource.fetchListings(fetchMock);
+
+      expect(result.failedCount).toBe(0);
+      expect(result.gigs).toHaveLength(2);
+      expect(result.gigs.map((gig) => gig.title)).toEqual([
+        "Bird Anniversary (Early Show)",
+        "Bird Anniversary (Late Show)"
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("is registered in the shared source list", () => {
     expect(sources.map((source) => source.slug)).toContain("the-bird");
   });

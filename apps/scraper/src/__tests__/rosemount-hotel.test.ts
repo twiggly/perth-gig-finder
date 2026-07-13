@@ -204,6 +204,38 @@ describe("rosemount hotel source adapter", () => {
     expect(normalized.artistExtractionKind).toBe("unknown");
   });
 
+  it("drops the misspelled Killer Hipsters guest placeholder during normalization and repair", () => {
+    const hit = createRosemountHit({
+      EventGuid: "66d7c6a9-33a2-425e-808a-76499ad53974",
+      EventName: "The Killer Hipsters",
+      SpecialGuests: "Specials guests to be announced!",
+      EventDescription:
+        "The Killer Hipsters launch 13. Two support acts are to be announced.",
+      Categories: ["Rock"],
+      Bands: [],
+      Performances: []
+    });
+    const normalized = normalizeRosemountHit(hit);
+    const repaired = rosemountHotelSource.repairArtists?.(
+      JSON.parse(JSON.stringify(hit)) as JsonObject
+    );
+
+    expect(normalized.artists).toEqual([]);
+    expect(normalized.artistExtractionKind).toBe("unknown");
+    expect(repaired).toEqual({
+      artists: [],
+      artistExtractionKind: "unknown"
+    });
+
+    const structured = normalizeRosemountHit({
+      ...hit,
+      Bands: ["The Killer Hipsters"]
+    });
+
+    expect(structured.artists).toEqual(["The Killer Hipsters"]);
+    expect(structured.artistExtractionKind).toBe("structured");
+  });
+
   it("skips non-music, past, and off-venue rows while counting malformed music rows", () => {
     const parsed = parseRosemountHits([
       createRosemountHit({
