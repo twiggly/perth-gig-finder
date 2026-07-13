@@ -11,14 +11,20 @@ import {
   type NormalizedVenue
 } from "@perth-gig-finder/shared";
 
-import { createArtistExtraction } from "../artist-utils";
+import {
+  createArtistExtraction,
+  preferArtistDisplayNamesFromTitle
+} from "../artist-utils";
 import { queryAlgolia } from "../algolia";
 import type { SourceAdapter, SourceAdapterResult } from "../types";
 
 const SOURCE_URL = "https://milkbarperth.com.au/gigs/";
 const MILK_BAR_ARTIST_SEPARATOR_PATTERN = /\s*(?:,|\+|;|•)\s*/u;
 const MILK_BAR_FEATURE_PREFIX_PATTERN = /^(?:ft\.?|feat\.?|featuring)\s+/i;
-const MILK_BAR_NON_ARTIST_TOKEN_PATTERN = /^(?:friday fright night)$/i;
+const MILK_BAR_LINEUP_PREFIX_PATTERN =
+  /^(?:(?:ft\.?|feat\.?|featuring)|with\s+(?:special\s+guests?|support\s+from)|with)\s*[:,]?\s+/i;
+const MILK_BAR_NON_ARTIST_TOKEN_PATTERN =
+  /^(?:friday fright night|\((?:perth|wa|australian)\s+debut\))$/i;
 const MILK_BAR_STATUS_SUFFIX_PATTERN =
   /\s*[-–—:]?\s*\b(?:sold\s*out|waitlist(?:ed)?|selling\s*fast)\b[!.]?\s*$/i;
 
@@ -95,6 +101,72 @@ function toPlainText(html: string | null | undefined): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+function toPlainTextLines(html: string | null | undefined): string[] {
+  if (!html) {
+    return [];
+  }
+
+  const htmlWithLineBreaks = html
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/(?:blockquote|div|h[1-6]|li|p)>/gi, "\n");
+  const text = cheerio.load(`<div>${htmlWithLineBreaks}</div>`).text();
+
+  return text
+    .split(/\n+/)
+    .map((line) => normalizeWhitespace(line))
+    .filter(Boolean);
+}
+
+export function parseMilkBarDescriptionArtists(
+  descriptionHtml: string | null | undefined
+): string[] {
+  const artists: string[] = [];
+
+  for (const line of toPlainTextLines(descriptionHtml)) {
+    const tributeCredit = line.match(
+      /^[^\p{L}\p{N}]{0,8}(.{2,60}?)\s+[–—-]\s+(?:bringing|delivering|recreating)\b/iu
+    );
+
+    if (tributeCredit?.[1]) {
+      artists.push(tributeCredit[1]);
+    }
+
+    const starring = line.match(
+      /\bstarring\s+(?:the\s+\p{L}+\s+)?(.+?)\s+and\s+(?:the\s+\p{L}+\s+)?(.+?)[!.](?:\s|$)/iu
+    );
+
+    if (starring?.[1] && starring[2]) {
+      artists.push(starring[1], starring[2]);
+    }
+
+    const leadVocalist = line.match(
+      /\bfeaturing\s+(?:(?:internationally|nationally)\s+renowned\s+)?(?:lead\s+)?vocalist\s+([^,.!]{2,80})/iu
+    );
+
+    if (leadVocalist?.[1]) {
+      artists.push(leadVocalist[1]);
+    }
+
+    const battle = line.match(
+      /\bbattle\s+between\s+(?:two\s+[^,]{1,80},\s*)?([^,.]{2,60}?)\s+vs\.?\s+([^,.]{2,60})(?:[,!?.]|$)/iu
+    );
+
+    if (battle?.[1] && battle[2]) {
+      artists.push(battle[1], battle[2]);
+    }
+
+    const matchup = line.match(
+      /\bas\s+([^,.]{2,60}?)\s+takes\s+on\s+([^,.]{2,60})(?:[,!?.]|$)/iu
+    );
+
+    if (matchup?.[1] && matchup[2]) {
+      artists.push(matchup[1], matchup[2]);
+    }
+  }
+
+  return createArtistExtraction(artists, "explicit_lineup").artists;
+}
+
 function normalizeUtcDate(value: string | null | undefined): string | null {
   if (!value) {
     return null;
@@ -127,25 +199,48 @@ function normalizeVenue(hit: MilkBarHit): NormalizedVenue {
 }
 
 export function extractMilkBarArtists(hit: MilkBarHit) {
+  const descriptionArtists = parseMilkBarDescriptionArtists(hit.EventDescription);
+
+  if (descriptionArtists.length > 0) {
+    return createArtistExtraction(descriptionArtists, "explicit_lineup");
+  }
+
   const fromBands = Array.isArray(hit.Bands) ? hit.Bands : [];
   const fromPerformances = Array.isArray(hit.Performances)
     ? hit.Performances.map((performance) => performance.Name ?? "")
     : [];
   const structuredArtists = [...fromBands, ...fromPerformances]
-    .flatMap(splitMilkBarArtistToken)
+    .flatMap((artist) => splitMilkBarArtistToken(artist))
     .filter(Boolean);
-  const lineupArtists = splitMilkBarArtistToken(hit.SpecialGuests);
+  const lineupArtists = splitMilkBarArtistToken(hit.SpecialGuests, true);
+  const rawSpecialGuests = normalizeWhitespace(hit.SpecialGuests ?? "");
+  const hasExplicitLineupSignal =
+    MILK_BAR_LINEUP_PREFIX_PATTERN.test(rawSpecialGuests) ||
+    /[,;+•]/u.test(rawSpecialGuests);
+  const combinedArtists = preferArtistDisplayNamesFromTitle(
+    [
+      ...structuredArtists,
+      ...(structuredArtists.length === 0 || hasExplicitLineupSignal ? lineupArtists : [])
+    ],
+    hit.EventName
+  );
 
   if (structuredArtists.length > 0) {
-    return createArtistExtraction(structuredArtists, "structured");
+    return createArtistExtraction(combinedArtists, "structured");
   }
 
-  return createArtistExtraction(lineupArtists, "explicit_lineup");
+  return createArtistExtraction(combinedArtists, "explicit_lineup");
 }
 
-function splitMilkBarArtistToken(value: string | null | undefined): string[] {
-  const normalized = normalizeWhitespace(value ?? "").replace(
-    MILK_BAR_FEATURE_PREFIX_PATTERN,
+function splitMilkBarArtistToken(
+  value: string | null | undefined,
+  isExplicitLineup = false
+): string[] {
+  const rawValue = normalizeWhitespace(value ?? "");
+  const hasExplicitLineupPrefix =
+    isExplicitLineup && MILK_BAR_LINEUP_PREFIX_PATTERN.test(rawValue);
+  const normalized = rawValue.replace(
+    isExplicitLineup ? MILK_BAR_LINEUP_PREFIX_PATTERN : MILK_BAR_FEATURE_PREFIX_PATTERN,
     ""
   );
 
@@ -158,8 +253,16 @@ function splitMilkBarArtistToken(value: string | null | undefined): string[] {
     .flatMap((artist) => {
       const trimmed = normalizeWhitespace(artist);
 
-      if (/^[A-Z0-9 '&./-]+$/.test(trimmed) && /\s&\s/.test(trimmed)) {
-        return trimmed.split(/\s*&\s*/);
+      if (/\s&\s/.test(trimmed)) {
+        const parts = trimmed.split(/\s*&\s*/).map(normalizeWhitespace).filter(Boolean);
+        const rightPart = parts[parts.length - 1] ?? "";
+
+        if (
+          !/^the\s+/i.test(rightPart) &&
+          (hasExplicitLineupPrefix || /^[A-Z0-9 '&./-]+$/.test(trimmed))
+        ) {
+          return parts;
+        }
       }
 
       return [trimmed];

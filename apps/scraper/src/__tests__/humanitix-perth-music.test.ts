@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  extractHumanitixArtists,
   humanitixPerthMusicSource,
   normalizeHumanitixDetailPage,
   parseHumanitixDiscoveryPage
@@ -558,6 +559,94 @@ describe("humanitix perth music source adapter", () => {
     expect(gigs).toHaveLength(1);
     expect(gigs[0]?.artists).toEqual(["Diamond Platnumz"]);
     expect(gigs[0]?.artistExtractionKind).toBe("structured");
+  });
+
+  it("extracts explicit Humanitix billing while rejecting feature-credit prose", () => {
+    const extraction = extractHumanitixArtists({
+      title: "Diamond Platnumz Live in PERTH ft Mawhoo - Full Band",
+      description: "The Retro World Tour '26",
+      structuredEvent: {
+        performers: [{ name: "Diamond Platnumz" }]
+      },
+      meta: {
+        headings: ["Description"],
+        lineupText: [],
+        pageText: [
+          "Special Guest: MaWhoo",
+          "Her breakout hit Umshado ft. Heavy-K launched her into the spotlight, and she hasn't looked back since.",
+          "Stream Diamond's latest // Ft Juma Jux now."
+        ]
+      }
+    } as never);
+
+    expect(extraction).toEqual({
+      artists: ["Diamond Platnumz", "MaWhoo"],
+      artistExtractionKind: "structured"
+    });
+  });
+
+  it("parses narrow Humanitix session and explicitly billed ensemble phrases", () => {
+    expect(
+      extractHumanitixArtists({
+        title: "Livid Lounge Session: WorldMania",
+        description: "WorldMania blends jazz fusion and modern grooves.",
+        structuredEvent: {},
+        meta: { headings: [], lineupText: [], pageText: [] }
+      } as never)
+    ).toEqual({ artists: ["WorldMania"], artistExtractionKind: "parsed_text" });
+
+    expect(
+      extractHumanitixArtists({
+        title: "Hear Us Roar",
+        description:
+          "A festival finale bringing together Mirabilis Collective, Chimera Ensemble and Broken Record Quartet in a celebration of music by women.",
+        structuredEvent: {},
+        meta: { headings: [], lineupText: [], pageText: [] }
+      } as never)
+    ).toEqual({
+      artists: ["Mirabilis Collective", "Chimera Ensemble", "Broken Record Quartet"],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
+  it("normalizes Humanitix premiere credits and drops prose/composite duplicates", () => {
+    expect(
+      extractHumanitixArtists({
+        title: "Homegrown",
+        description:
+          "An opening night featuring world premieres by Katherine Potter and Mia Brine.",
+        structuredEvent: {},
+        meta: { headings: [], lineupText: [], pageText: [] }
+      } as never)
+    ).toEqual({
+      artists: ["Katherine Potter", "Mia Brine"],
+      artistExtractionKind: "parsed_text"
+    });
+
+    expect(
+      extractHumanitixArtists({
+        title: "Michel & Magno",
+        description:
+          "Michel & Magno presents music featuring Krista Low (Viole) and Matt Jones (Théorbe).",
+        structuredEvent: {
+          performers: [{ name: "Krista Low" }, { name: "Matt Jones" }]
+        },
+        meta: { headings: [], lineupText: [], pageText: [] }
+      } as never)
+    ).toEqual({
+      artists: ["Krista Low", "Matt Jones"],
+      artistExtractionKind: "structured"
+    });
+
+    expect(
+      extractHumanitixArtists({
+        title: "Open Stage",
+        description:
+          "Informal performances featuring music by women, performed by emerging and community musicians",
+        structuredEvent: {},
+        meta: { headings: [], lineupText: [], pageText: [] }
+      } as never)
+    ).toEqual({ artists: [], artistExtractionKind: "unknown" });
   });
 
   it("drops sentence-like Humanitix prose fragments from structured performer descriptions", () => {

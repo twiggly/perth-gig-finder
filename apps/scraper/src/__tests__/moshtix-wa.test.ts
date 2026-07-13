@@ -373,6 +373,46 @@ describe("moshtix wa source adapter", () => {
     });
   });
 
+  it("parses quoted release tours and uses exact title casing for Moshtix artists", () => {
+    const venue = {
+      name: "Rosemount Hotel",
+      slug: "rosemount-hotel",
+      suburb: "North Perth",
+      address: null,
+      websiteUrl: null
+    };
+
+    expect(
+      extractMoshtixArtists({
+        title: "ASH ‘1977’ 30th Anniversary Tour",
+        descriptionHtml: null,
+        structuredEvent: { performers: [] },
+        eventData: { artists: [], venue: { name: "Rosemount Hotel" } },
+        venue
+      })
+    ).toEqual({ artists: ["ASH"], artistExtractionKind: "parsed_text" });
+
+    expect(
+      extractMoshtixArtists({
+        title: 'MONO "Snowdrop" Australian Tour 2027',
+        descriptionHtml: null,
+        structuredEvent: { performers: [] },
+        eventData: { artists: [], venue: { name: "The Rechabite" } },
+        venue: { ...venue, name: "The Rechabite", slug: "the-rechabite" }
+      })
+    ).toEqual({ artists: ["MONO"], artistExtractionKind: "parsed_text" });
+
+    expect(
+      extractMoshtixArtists({
+        title: "Baker Boy",
+        descriptionHtml: null,
+        structuredEvent: { performers: [{ name: "baker boy" }] },
+        eventData: { artists: ["baker boy"], venue: { name: "Rosemount Hotel" } },
+        venue
+      }).artists
+    ).toEqual(["Baker Boy"]);
+  });
+
   it("uses title support marker order when Moshtix structured artists only name the support", () => {
     const extraction = extractMoshtixArtists({
       title: "Fever Dream W/ Alias Error + More",
@@ -687,7 +727,10 @@ describe("moshtix wa source adapter", () => {
       descriptionHtml: [
         "<p>Casey One - vocals and piano</p>",
         "<p>Casey Two – lead guitar / backing vocals</p>",
-        "<p>Casey Three — double bass, percussion &amp; flute</p>"
+        "<p>Casey Three — double bass, percussion &amp; flute</p>",
+        "<p>Casey Four - vocals drums</p>",
+        "<p>Casey Five – fiddle &amp; vocals</p>",
+        "<p>Casey Six - pedal steel guitar / vocals</p>"
       ].join(""),
       structuredEvent: null,
       eventData: {
@@ -706,7 +749,111 @@ describe("moshtix wa source adapter", () => {
     });
 
     expect(extraction).toEqual({
-      artists: ["Casey One", "Casey Two", "Casey Three"],
+      artists: [
+        "Casey One",
+        "Casey Two",
+        "Casey Three",
+        "Casey Four",
+        "Casey Five",
+        "Casey Six"
+      ],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
+  it("extracts complete Moshtix lineups from explicitly labelled blocks", () => {
+    const venue = {
+      name: "The Rechabite",
+      slug: "the-rechabite",
+      suburb: "Northbridge",
+      address: null,
+      websiteUrl: null
+    };
+    const eventData = {
+      name: "WAM Showcase 2026",
+      artists: ["BLUSH"],
+      venue: { name: "The Rechabite" },
+      client: { name: "WAM" }
+    };
+
+    expect(
+      extractMoshtixArtists({
+        title: "WAM Showcase 2026",
+        descriptionHtml:
+          "<p>2026 LINE UP:</p><p>BIRDLAND</p><p>BLUSH</p><p>BOOX KID</p><p>MEMBERS GET DISCOUNT TICKETS!</p>",
+        structuredEvent: null,
+        eventData,
+        venue
+      })
+    ).toEqual({
+      artists: ["BIRDLAND", "BLUSH", "BOOX KID"],
+      artistExtractionKind: "structured"
+    });
+    expect(
+      extractMoshtixArtists({
+        title: "Neko Nation Purrth (featuring S3RL)",
+        descriptionHtml:
+          "<p>🎼DJ LINEUP</p><ul><li>S3RL (QLD)</li><li>Percival (QLD)</li><li>Nompire (QLD)</li></ul><p>ADDITIONAL DJs &amp; PERFORMERS to be announced soon!</p>",
+        structuredEvent: null,
+        eventData: {
+          ...eventData,
+          name: "Neko Nation Purrth (featuring S3RL)",
+          artists: ["DJ S3RL (emfa) QLD"]
+        },
+        venue
+      })
+    ).toEqual({
+      artists: ["S3RL", "Percival", "Nompire"],
+      artistExtractionKind: "parsed_text"
+    });
+    expect(
+      extractMoshtixArtists({
+        title: "Billie Rogers",
+        descriptionHtml:
+          "<p>Billie Rogers</p><p>The Band</p><p>Billie Rogers • Dave Brewer • Elliot Smith</p>",
+        structuredEvent: null,
+        eventData: { ...eventData, name: "Billie Rogers", artists: [] },
+        venue
+      })
+    ).toEqual({
+      artists: ["Billie Rogers", "Dave Brewer", "Elliot Smith"],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
+  it("uses explicit Moshtix title presenters and exact credit-block headliners", () => {
+    const venue = {
+      name: "The Duke of George",
+      slug: "the-duke-of-george",
+      suburb: "East Fremantle",
+      address: null,
+      websiteUrl: null
+    };
+
+    expect(
+      extractMoshtixArtists({
+        title: "The Music of Steely Dan presented by No Static",
+        descriptionHtml:
+          "<p>The Music of Steely Dan presented by No Static</p><p>Bob Brisbane - Vocals Drums</p><p>Mike Collinson - Saxophone, Flute, vocals</p>",
+        structuredEvent: null,
+        eventData: null,
+        venue
+      })
+    ).toEqual({
+      artists: ["No Static", "Bob Brisbane", "Mike Collinson"],
+      artistExtractionKind: "parsed_text"
+    });
+    expect(
+      extractMoshtixArtists({
+        title: "Alma Zygier",
+        descriptionHtml:
+          "<p>Alma Zygier</p><p>Harry Mitchell - Piano</p><p>Karl Florisson - Bass</p>",
+        structuredEvent: null,
+        eventData: null,
+        venue
+      })
+    ).toEqual({
+      artists: ["Alma Zygier", "Harry Mitchell", "Karl Florisson"],
       artistExtractionKind: "parsed_text"
     });
   });

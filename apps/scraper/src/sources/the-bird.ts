@@ -490,14 +490,15 @@ export function normalizeTheBirdRow(row: TheBirdFeedRow): NormalizedGig | null {
   }
 
   const description = normalizeWhitespace(row.Info ?? "") || null;
+  const title = row["Event Title"] ?? "";
 
   return buildTheBirdGig({
-    title: row["Event Title"] ?? "",
+    title,
     description,
     dateText: row.Date ?? "",
     ticketUrl: normalizeTicketUrl(row["Ticket Link"]),
     timeText: description,
-    artists: [],
+    artists: parseTheBirdInfoArtists(row.Info, title),
     rawPayload: {
       Date: row.Date ?? "",
       Day: row.Day ?? "",
@@ -555,6 +556,40 @@ export function parseTheBirdFeaturingArtists(
   }
 
   return createArtistExtraction([...uniqueBySlug.values()], "explicit_lineup").artists;
+}
+
+export function parseTheBirdInfoArtists(
+  value: string | null | undefined,
+  title: string
+): string[] {
+  const info = value ?? "";
+  const candidates: string[] = [];
+  const headlinerMatch = info.match(
+    /\bheadlined by\s+[^,.\n]{1,100}?\baka\s+([^,.\n]{2,80})/i
+  );
+
+  if (headlinerMatch?.[1]) {
+    candidates.push(normalizeWhitespace(headlinerMatch[1]));
+  }
+
+  const featuringMatch = info.match(/\bfeaturing\s*:\s*([\s\S]+)$/i);
+
+  if (featuringMatch?.[1]) {
+    for (const rawLine of featuringMatch[1].split(/\n+/)) {
+      const artist = normalizeWhitespace(rawLine)
+        .replace(/^&\s*/, "")
+        .replace(/,?\s+on the 1s and 2s\b.*$/i, "")
+        .replace(/,\s+bringing\b.*$/i, "")
+        .replace(/,+$/, "")
+        .trim();
+
+      if (artist && artist !== "&" && artist.length <= 80 && !/[.!?]$/.test(artist)) {
+        candidates.push(artist);
+      }
+    }
+  }
+
+  return parseTheBirdFeaturingArtists(candidates.join(", "), title);
 }
 
 function isTheBirdWeeklyMusicRow(row: TheBirdWhatsOnRow): boolean {
@@ -874,6 +909,7 @@ export const theBirdSource: SourceAdapter = {
               Title?: string;
             };
             Featuring?: string;
+            Info?: string;
             Title?: string;
             "Event Title"?: string;
           })
@@ -891,7 +927,10 @@ export const theBirdSource: SourceAdapter = {
     }
 
     const title = normalizeWhitespace(payload.Title ?? payload["Event Title"] ?? "");
-    const artists = parseTheBirdFeaturingArtists(payload.Featuring, title);
+    const artists = [
+      ...parseTheBirdFeaturingArtists(payload.Featuring, title),
+      ...parseTheBirdInfoArtists(payload.Info, title)
+    ];
 
     return artists.length > 0
       ? createArtistExtraction(artists, "explicit_lineup")

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createArtistExtraction,
   normalizeArtistNames,
+  preferArtistDisplayNamesFromTitle,
   selectCanonicalArtistNames,
   selectPreferredArtistDisplayName,
   unknownArtistExtraction
@@ -54,6 +55,33 @@ describe("artist utils", () => {
   it("keeps all-caps artist names without mixed-case evidence", () => {
     expect(selectPreferredArtistDisplayName(null, "AMMIFY")).toBe("AMMIFY");
     expect(selectPreferredArtistDisplayName("AMMIFY", "AMMIFY")).toBe("AMMIFY");
+  });
+
+  it("uses exact title spelling and conservative ensemble extensions", () => {
+    expect(
+      preferArtistDisplayNamesFromTitle(
+        ["health", "bodyjar", "Tin Roof Jazz Band", "Black Swan"],
+        "HEALTH + Bodyjar, The Tin Roof Jazz Band and Black Swan Jazz Band"
+      )
+    ).toEqual(["HEALTH", "Bodyjar", "The Tin Roof Jazz Band", "Black Swan Jazz Band"]);
+  });
+
+  it("does not expand artist names from unrelated title words", () => {
+    expect(
+      preferArtistDisplayNamesFromTitle(
+        ["Black Swan", "Ash"],
+        "Black Swan Lake Party with Ashes of Autumn"
+      )
+    ).toEqual(["Black Swan", "Ash"]);
+  });
+
+  it("does not overwrite established uppercase or mixed-case branding from titles", () => {
+    expect(
+      preferArtistDisplayNamesFromTitle(
+        ["FLESHWATER", "LandSlide", "The Kid Fez"],
+        "Fleshwater with LANDSLIDE and The Kid fez"
+      )
+    ).toEqual(["FLESHWATER", "LandSlide", "The Kid Fez"]);
   });
 
   it("drops placeholder artist names before public artist sync", () => {

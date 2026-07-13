@@ -27,6 +27,12 @@ const LEADING_ARTIST_DECORATION = /^[`"'“”‘’•·●▪▫◆◇★☆*~
 const TRAILING_ARTIST_DECORATION = /[`"'“”‘’•·●▪▫◆◇★☆*~_=|:;,./\\-]+$/u;
 const PLACEHOLDER_ARTIST_PATTERN =
   /^(?:competition\s+winners?\s*(?:tba|tbc|to be announced)?|(?:(?:local|more|additional|special)\s+)*(?:guests?|supports?|support acts?|acts?|artists?)\s*(?:to be announced|tba|tbc)?|(?:secret|mystery)\s+(?:act|artist|guest|set)s?[!.]?|(?:more|more\s+(?:acts?|artists?|guests?))|(?:tba|tbc|to be announced|more\s+(?:tba|tbc|to be announced)|more to be announced))$/i;
+const TITLE_ARTIST_ENSEMBLE_SUFFIX_PATTERN =
+  /^(?:jazz\s+band|quartet|quintet|trio|orchestra|ensemble|collective|choir)$/i;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 function cleanArtistName(artist: string): string {
   let normalizedArtist = normalizeWhitespace(artist);
@@ -86,6 +92,11 @@ function isAllUppercaseName(value: string): boolean {
     value !== value.toLocaleLowerCase("en-AU");
 }
 
+function isAllLowercaseName(value: string): boolean {
+  return value === value.toLocaleLowerCase("en-AU") &&
+    value !== value.toLocaleUpperCase("en-AU");
+}
+
 export function selectPreferredArtistDisplayName(
   existingName: string | null | undefined,
   incomingName: string
@@ -112,6 +123,61 @@ export function selectPreferredArtistDisplayName(
   }
 
   return normalizedIncomingName;
+}
+
+export function preferArtistDisplayNamesFromTitle(
+  artists: string[],
+  title: string | null | undefined
+): string[] {
+  const normalizedTitle = normalizeWhitespace(title ?? "");
+
+  if (!normalizedTitle) {
+    return artists;
+  }
+
+  return artists.map((artist) => {
+    const normalizedArtist = cleanArtistName(artist);
+
+    if (!normalizedArtist) {
+      return artist;
+    }
+
+    const artistPattern = escapeRegExp(normalizedArtist).replace(/\s+/g, "\\s+");
+    const match = normalizedTitle.match(
+      new RegExp(
+        String.raw`(?:^|[^\p{L}\p{N}])((?:The\s+)?${artistPattern}(?:\s+(?:Jazz\s+Band|Band|Quartet|Quintet|Trio|Orchestra|Ensemble|Collective|Choir))?)(?=$|[^\p{L}\p{N}])`,
+        "iu"
+      )
+    );
+    const titleCandidate = normalizeWhitespace(match?.[1] ?? "");
+
+    if (!titleCandidate) {
+      return normalizedArtist;
+    }
+
+    const artistSlug = slugify(normalizedArtist);
+    const titleCandidateSlug = slugify(titleCandidate);
+
+    if (titleCandidateSlug === artistSlug) {
+      return isAllLowercaseName(normalizedArtist)
+        ? titleCandidate
+        : normalizedArtist;
+    }
+
+    if (
+      titleCandidateSlug === `the-${artistSlug}` &&
+      titleCandidate.startsWith("The ")
+    ) {
+      return titleCandidate;
+    }
+
+    const suffix = normalizeWhitespace(titleCandidate.slice(normalizedArtist.length));
+
+    return titleCandidateSlug.startsWith(`${artistSlug}-`) &&
+      TITLE_ARTIST_ENSEMBLE_SUFFIX_PATTERN.test(suffix)
+      ? titleCandidate
+      : normalizedArtist;
+  });
 }
 
 export function createArtistExtraction(

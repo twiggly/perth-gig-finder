@@ -162,6 +162,22 @@ describe("ticketmaster au source adapter", () => {
     expect(normalized.artistExtractionKind).toBe("unknown");
   });
 
+  it("uses exact Ticketmaster title spelling for matching performer identities", () => {
+    const normalized = normalizeTicketmasterEvent(
+      buildTicketmasterCityEvent({
+        id: "1300HUMANLEAGUE",
+        url: "https://www.ticketmaster.com.au/the-human-league-perth/event/1300HUMANLEAGUE",
+        title: "The Human League",
+        startDate: "2027-01-27T11:00:00Z",
+        venueName: "Kings Park",
+        locality: "West Perth",
+        performers: ["Human League"]
+      })
+    );
+
+    expect(normalized.artists).toEqual(["The Human League"]);
+  });
+
   it("fetches Ticketmaster city events, enriches from popular images, and skips partner entries", async () => {
     const cityEventsPage = {
       total: 3,

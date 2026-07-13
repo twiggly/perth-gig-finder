@@ -7,6 +7,7 @@ import {
   extractMilkBarArtists,
   extractMilkBarSearchConfig,
   milkBarSource,
+  parseMilkBarDescriptionArtists,
   parseMilkBarHits
 } from "../sources/milk-bar";
 
@@ -105,6 +106,114 @@ describe("milk bar source adapter", () => {
     ).toEqual({
       artists: [],
       artistExtractionKind: "unknown"
+    });
+  });
+
+  it("merges dedicated Milk Bar support fields with structured headliners", () => {
+    expect(
+      extractMilkBarArtists({
+        EventName: "PARK RD",
+        Bands: ["PARK RD"],
+        Performances: [],
+        SpecialGuests: "Navy June + Dolce Blue"
+      })
+    ).toEqual({
+      artists: ["PARK RD", "Navy June", "Dolce Blue"],
+      artistExtractionKind: "structured"
+    });
+
+    expect(
+      extractMilkBarArtists({
+        EventName: "The Volcanics album launch",
+        Bands: ["The Volcanics"],
+        Performances: [],
+        SpecialGuests: "with Legs Electric, The Pretty Skints & Simon/Gus (Never Never)"
+      })
+    ).toEqual({
+      artists: [
+        "The Volcanics",
+        "Legs Electric",
+        "The Pretty Skints",
+        "Simon/Gus (Never Never)"
+      ],
+      artistExtractionKind: "structured"
+    });
+
+    expect(
+      extractMilkBarArtists({
+        EventName: "Some Like It Yacht: A Spring Soirée",
+        Bands: ["Some Like It Yacht"],
+        Performances: [],
+        SpecialGuests: "with special guests Simone and Girlfunkle"
+      })
+    ).toEqual({
+      artists: ["Some Like It Yacht", "Simone and Girlfunkle"],
+      artistExtractionKind: "structured"
+    });
+  });
+
+  it("uses exact Milk Bar title spelling and removes standalone stage notes", () => {
+    expect(
+      extractMilkBarArtists({
+        EventName: "The Tin Roof Jazz Band",
+        Bands: ["Tin Roof Jazz Band"],
+        Performances: []
+      }).artists
+    ).toEqual(["The Tin Roof Jazz Band"]);
+    expect(
+      extractMilkBarArtists({
+        EventName: "Black Swan Jazz Band",
+        Bands: ["Black Swan"],
+        Performances: []
+      }).artists
+    ).toEqual(["Black Swan Jazz Band"]);
+    expect(
+      extractMilkBarArtists({
+        EventName: "BREAKNBREADS PRESENTS: WESTCOAST",
+        Bands: [],
+        Performances: [],
+        SpecialGuests: "(PERTH DEBUT)"
+      })
+    ).toEqual({ artists: [], artistExtractionKind: "unknown" });
+  });
+
+  it("extracts only explicit Milk Bar performer credits from descriptions", () => {
+    expect(
+      parseMilkBarDescriptionArtists(`
+        <p>Headlining the card is a special compliment battle between two heavy hitters, Greeley vs Cortex, flipping the format.</p>
+        <p>Also on the lineup, expect fire in the main battles as Charisma ATL takes on Smithy, alongside more matchups.</p>
+      `)
+    ).toEqual(["Greeley", "Cortex", "Charisma ATL", "Smithy"]);
+    expect(
+      parseMilkBarDescriptionArtists(
+        '<p>Starring the inimitable Mya Tension and the effervescent Dr Jae West!</p>'
+      )
+    ).toEqual(["Mya Tension", "Dr Jae West"]);
+    expect(
+      parseMilkBarDescriptionArtists(
+        "Come hear a band pay tribute, featuring internationally renowned lead vocalist Lisa Woodbrook."
+      )
+    ).toEqual(["Lisa Woodbrook"]);
+    expect(
+      parseMilkBarDescriptionArtists(`
+        <p>?? <strong>Sons of Beaches</strong> – bringing the classics to life</p>
+        <p>?? <strong>Shaved and Dangerous</strong> – delivering high-energy rock</p>
+        <p>?? <strong>Essential Oils</strong> – recreating powerful anthems</p>
+      `)
+    ).toEqual(["Sons of Beaches", "Shaved and Dangerous", "Essential Oils"]);
+  });
+
+  it("prefers explicit Milk Bar performer credits over show and tribute labels", () => {
+    expect(
+      extractMilkBarArtists({
+        EventName: "THE AMY WINEHOUSE SONGBOOK",
+        EventDescription:
+          "A band pays tribute to Amy Winehouse, featuring internationally renowned lead vocalist Lisa Woodbrook.",
+        Bands: ["The Amy Winehouse Songbook"]
+      })
+    ).toEqual({
+      artists: ["Lisa Woodbrook"],
+      artistExtractionKind: "explicit_lineup"
     });
   });
 

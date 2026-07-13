@@ -128,8 +128,8 @@ describe("the ellington source adapter", () => {
         address: "193 Beaufort St, Perth WA 6000",
         websiteUrl: "https://www.ellingtonjazz.com.au/"
       },
-      artists: [],
-      artistExtractionKind: "unknown"
+      artists: ["Sue Bluck", "WAYJO"],
+      artistExtractionKind: "explicit_lineup"
     });
     expect(normalized.rawPayload).toMatchObject({
       source: "wordpress-rest",

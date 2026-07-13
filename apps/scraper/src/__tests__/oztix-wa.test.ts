@@ -9,12 +9,14 @@ import {
   isPerthMetroHit,
   normalizeOztixHit,
   oztixWaSource,
+  parseOztixDescriptionArtists,
   parseOztixSpecialGuests,
   parseOztixTitleHeadlinerArtists,
   parseOztixHits,
   parseOztixTitleFeaturedArtists,
   parseOztixTitleLineupArtists,
-  parseOztixTitlePresentedArtists
+  parseOztixTitlePresentedArtists,
+  parseOztixTitleTrailingWithArtists
 } from "../sources/oztix-wa";
 
 const FIXTURE_DIR = resolve(import.meta.dirname, "fixtures");
@@ -348,6 +350,20 @@ describe("oztix wa source adapter", () => {
       "CoCo & The VOH Dancers"
     ]);
     expect(
+      parseOztixSpecialGuests("with special guests Ghost Care & Hey So Hungry")
+    ).toEqual(["Ghost Care", "Hey So Hungry"]);
+    expect(
+      parseOztixSpecialGuests("with special guest Rated R (Rammstein Tribute)")
+    ).toEqual(["Rated R"]);
+    expect(
+      parseOztixSpecialGuests("Cicada (Debut Show), Chalked, Top Secret Guest")
+    ).toEqual(["Cicada", "Chalked"]);
+    expect(
+      parseOztixSpecialGuests(
+        "Augmented Fifth. Brad F. BRGN. LOST ETHER. OTRUTA. Ríain"
+      )
+    ).toEqual(["Augmented Fifth", "Brad F", "BRGN", "LOST ETHER", "OTRUTA", "Ríain"]);
+    expect(
       parseOztixSpecialGuests(
         "Emotion Sickness & Chemically Disheartened with Phoenix Nights"
       )
@@ -371,6 +387,50 @@ describe("oztix wa source adapter", () => {
       "Maira Trindade",
       "DJ Glaucio"
     ]);
+  });
+
+  it("parses only explicitly labelled Oztix description lineups", () => {
+    expect(
+      parseOztixDescriptionArtists(`
+        <p>All shows will be supported by <strong>Sammi Heaney,</strong> with New Zealand's show featuring another local act.</p>
+        <p>Featuring live performances from <strong>Brian Finn, Keelan Rivers, and Foreign Sons</strong>, this promises to be a fantastic night.</p>
+        <p>With special guests CNTR &amp; Lefty</p>
+        <p>?? <strong>Live: Banda Candela + DJs</strong></p>
+      `)
+    ).toEqual([
+      "Sammi Heaney",
+      "Brian Finn",
+      "Keelan Rivers",
+      "Foreign Sons",
+      "CNTR",
+      "Lefty",
+      "Banda Candela"
+    ]);
+
+    expect(
+      parseOztixDescriptionArtists(
+        "Join Nyamaha, Magpie Senpai, No Motif, Chromakey and Kyawaii as they take over the stage."
+      )
+    ).toEqual(["Nyamaha", "Magpie Senpai", "No Motif", "Chromakey", "Kyawaii"]);
+    expect(
+      parseOztixDescriptionArtists(
+        "Join WAYJO in celebrating and supporting these artists as they develop their craft."
+      )
+    ).toEqual([]);
+    expect(
+      parseOztixDescriptionArtists(
+        "The tour was proudly supported by Double J and community partners."
+      )
+    ).toEqual([]);
+    expect(
+      extractOztixArtists({
+        EventName: "J-Rock Live House 2026",
+        EventDescription:
+          "Join Nyamaha, Magpie Senpai, No Motif, Chromakey and Kyawaii as they take over the stage.",
+        SpecialGuests:
+          "with special guests Magpie Senpai, No Motif, Chromakey & Kyawaii"
+      }).artists
+    ).toEqual(["Nyamaha", "Magpie Senpai", "No Motif", "Chromakey", "Kyawaii"]);
   });
 
   it("uses parsed special guests when Oztix has no structured artist arrays", () => {
@@ -612,6 +672,112 @@ describe("oztix wa source adapter", () => {
     });
   });
 
+  it("parses a trailing co-billed artist only from quoted tour titles", () => {
+    expect(
+      parseOztixTitleTrailingWithArtists(
+        "TO THE GRAVE 'NAIL AUSTRALIA TO THE WALLS' with NO CURE (USA)"
+      )
+    ).toEqual(["NO CURE"]);
+    expect(parseOztixTitleTrailingWithArtists("An Evening with Kristin Hersh")).toEqual(
+      []
+    );
+  });
+
+  it("reassembles title-exact band names split by structured Oztix metadata", () => {
+    expect(
+      extractOztixArtists({
+        EventName: "Michael Vdelli and the Art of Dysfunction + Blue Shaddy",
+        Bands: ["Blue Shaddy", "Art of Dysfunction", "Michael Vdelli"]
+      }).artists
+    ).toEqual(["Michael Vdelli and the Art of Dysfunction", "Blue Shaddy"]);
+  });
+
+  it("deduplicates title-corroborated short and full band aliases", () => {
+    expect(
+      extractOztixArtists({
+        EventName:
+          "John Farnham and Little River Band performed by Reminiscing Band",
+        Bands: ["Reminiscing", "Reminiscing Band"]
+      }).artists
+    ).toEqual(["Reminiscing Band"]);
+
+    expect(
+      extractOztixArtists({
+        EventName: "Matt Angell & the Gold Diggers w/ Klaxon Hymn",
+        Bands: ["Matt Angell", "Matt Angell & the Gold Diggers"],
+        SpecialGuests: "with Klaxon Hymn"
+      }).artists
+    ).toEqual(["Matt Angell & the Gold Diggers", "Klaxon Hymn"]);
+  });
+
+  it("parses narrow release-launch headliners and keeps explicit supports", () => {
+    expect(parseOztixTitleHeadlinerArtists('Diamond Sky "Outlaw City" Single Launch')).toEqual([
+      "Diamond Sky"
+    ]);
+    expect(parseOztixTitleHeadlinerArtists("Ben William - Imitate Album Launch")).toEqual([
+      "Ben William"
+    ]);
+    expect(
+      extractOztixArtists({
+        EventName: 'Diamond Sky "Outlaw City" Single Launch',
+        Bands: [],
+        Performances: [],
+        SpecialGuests: "ft. Electric State, Black Kanyon & Ashes of Autumn"
+      })
+    ).toEqual({
+      artists: ["Diamond Sky", "Electric State", "Black Kanyon", "Ashes of Autumn"],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
+  it("keeps structured conjunction names and orders exact co-headliners from titles", () => {
+    expect(
+      extractOztixArtists({
+        EventName: "Winston and the New Age",
+        Bands: ["Winston and the New Age"],
+        Performances: [],
+        SpecialGuests: "Jonny P, Crystal Maxwell"
+      }).artists
+    ).toEqual(["Winston and the New Age", "Jonny P", "Crystal Maxwell"]);
+
+    expect(
+      extractOztixArtists({
+        EventName: "Macseal + Prince Daddy & The Hyena Australian Tour 2026",
+        Bands: ["Prince Daddy & The Hyena", "Macseal"],
+        Performances: [],
+        SpecialGuests: "with About Yesterday"
+      }).artists
+    ).toEqual(["Macseal", "Prince Daddy & The Hyena", "About Yesterday"]);
+  });
+
+  it("prefers exact title display names and ignores broad title fragments when guests exist", () => {
+    expect(
+      extractOztixArtists({
+        EventName: "HEALTH AUSTRALIA 2.0.2.6.",
+        Bands: ["health"],
+        Performances: [],
+        SpecialGuests: "with PERTURBATOR & KING YOSEF"
+      }).artists
+    ).toEqual(["HEALTH", "PERTURBATOR", "KING YOSEF"]);
+    expect(
+      extractOztixArtists({
+        EventName:
+          "Rock Wax Thursdays - Stairway to Led Zeppelin - Spinning Zeppelin, Sabbath & More",
+        Bands: [],
+        Performances: [],
+        SpecialGuests: "with DJ SWEETMAN"
+      }).artists
+    ).toEqual(["DJ SWEETMAN"]);
+    expect(
+      extractOztixArtists({
+        EventName: "Buffalo Traffic Jam",
+        Bands: ["Buffalo Traffic Jam"],
+        Performances: [],
+        SpecialGuests: "Down Under Tour ‘26"
+      }).artists
+    ).toEqual(["Buffalo Traffic Jam"]);
+  });
+
   it("parses clear comma-separated title lineups when Oztix has no artist arrays", () => {
     expect(
       parseOztixTitleLineupArtists("Sonic Haze, Retromode, Mustard & Draz n' the Druzy")
@@ -798,7 +964,7 @@ describe("oztix wa source adapter", () => {
     expect(normalized.artistExtractionKind).toBe("unknown");
   });
 
-  it("drops local guest placeholders from Oztix artist extraction", () => {
+  it("drops local guest placeholders while retaining a title-billed artist", () => {
     expect(
       extractOztixArtists({
         EventName: "TO THE GRAVE 'NAIL AUSTRALIA TO THE WALLS' with NO CURE (USA)",
@@ -807,8 +973,8 @@ describe("oztix wa source adapter", () => {
         Performances: []
       })
     ).toEqual({
-      artists: [],
-      artistExtractionKind: "unknown"
+      artists: ["NO CURE"],
+      artistExtractionKind: "parsed_text"
     });
   });
 
