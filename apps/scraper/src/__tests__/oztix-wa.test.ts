@@ -438,6 +438,78 @@ describe("oztix wa source adapter", () => {
     ).toEqual(["Nyamaha", "Magpie Senpai", "No Motif", "Chromakey", "Kyawaii"]);
   });
 
+  it("extracts current performers from an explicit Oztix launch billing sentence", () => {
+    const EventDescription = [
+      "<p>Perth singer-songwriter Ben William will celebrate the release of his newest album.</p>",
+      "<p>The album launch will also feature Perth singer-songwriter Anna Dabbs and alternative R&amp;B/ electronic neo-soul band Shadow Planet, celebrating the diversity of Perth music.</p>"
+    ].join("");
+
+    expect(parseOztixDescriptionArtists(EventDescription)).toEqual([
+      "Anna Dabbs",
+      "Shadow Planet"
+    ]);
+    expect(
+      extractOztixArtists({
+        EventName: "Ben William - Imitate Album Launch",
+        EventDescription,
+        Bands: [],
+        Performances: []
+      })
+    ).toEqual({
+      artists: ["Ben William", "Anna Dabbs", "Shadow Planet"],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
+  it("extracts bounded event lineups without treating band-member rosters as artists", () => {
+    const EventDescription = [
+      "<p>ARMAGEDDOOM 8 LINE UP</p>",
+      "<p>Candlemass (SWE)</p>",
+      "<p>Mammons Throne (VIC) – First time ever in Perth</p>",
+      "<p>Twin Serpents</p>",
+      "<p>Ashen</p>",
+      "<p>Rockys Pride and Joy (SA) – First time ever in Perth</p>",
+      "<p>Guild</p>",
+      "<p>More About these bands below!</p>",
+      "<p>CANDLEMASS – Current Line-Up</p>",
+      "<p>Leif Edling – Bass</p>",
+      "<p>Johan Länquist – Vocals</p>"
+    ].join("");
+    const expectedExtraction = {
+      artists: [
+        "Candlemass",
+        "Mammons Throne",
+        "Twin Serpents",
+        "Ashen",
+        "Rockys Pride and Joy",
+        "Guild"
+      ],
+      artistExtractionKind: "structured" as const
+    };
+
+    expect(
+      parseOztixDescriptionArtists(
+        "<p>CANDLEMASS – Current Line-Up</p><p>Leif Edling – Bass</p><p>Johan Länquist – Vocals</p>"
+      )
+    ).toEqual([]);
+    expect(
+      extractOztixArtists({
+        EventName: "ARMAGEDOOM VIII ft. Candlemass (SWE)",
+        EventDescription,
+        Bands: ["Candlemass"],
+        Performances: []
+      })
+    ).toEqual(expectedExtraction);
+    expect(
+      oztixWaSource.repairArtists?.({
+        EventName: "ARMAGEDOOM VIII ft. Candlemass (SWE)",
+        EventDescription,
+        Bands: ["Candlemass"],
+        Performances: []
+      })
+    ).toEqual(expectedExtraction);
+  });
+
   it("uses parsed special guests when Oztix has no structured artist arrays", () => {
     expect(
       extractOztixArtists({

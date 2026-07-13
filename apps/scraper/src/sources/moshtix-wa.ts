@@ -123,6 +123,12 @@ const MOSHTIX_NON_ARTIST_SCHEDULE_LABEL_PATTERN =
   /^(?:band|doors?|event|music|show|tickets?)$/i;
 const MOSHTIX_HEADLINED_BY_PATTERN = /\bheadlined by\s+(.+?)(?:\s+with\b|[.!]|$)/i;
 const MOSHTIX_DESCRIPTION_LINEUP_PATTERN = /^w(?:[/.]|['’])\s*(.+)$/i;
+const MOSHTIX_JOINED_SPECIAL_GUESTS_PATTERN =
+  /(?<!\bwas\s)(?<!\bwere\s)(?<!\bbeen\s)\bjoined by special guests?\s+(.+?)(?:,\s+(?:the|this)\b|[.!]|$)/i;
+const MOSHTIX_FEATURED_ROLE_ROSTER_PATTERN =
+  /\bfull band performance featuring the added talents of\s+(.+?)\s+as they\b/i;
+const MOSHTIX_ROLE_PREFIXED_ARTIST_PATTERN =
+  /^(?:(?:lead|rhythm)\s+)?(?:drummer|bassist|keyboard(?:\s+player|ist)?|brass\s+arranger|guitarist|vocalist|singer|percussionist|saxophonist|trumpeter|trombonist|violinist|cellist)\s+(.+)$/i;
 const MOSHTIX_DJ_LAUNCHES_PATTERN = /\b(DJ\s+.+?)\s+launches\b/i;
 const MOSHTIX_DJ_LINE_PATTERN = /\bDJS?\s*:\s*(.+)$/i;
 const MOSHTIX_DJ_SEGMENT_SEPARATOR_PATTERN = /\s*[🖤🌹•·●▪▫◆◇★☆*]\s*/u;
@@ -143,6 +149,7 @@ const MOSHTIX_PERFORMER_CREDIT_LINE_PATTERN = new RegExp(
 );
 const MOSHTIX_LABELLED_LINEUP_HEADING_PATTERN =
   /^(?:(?:\d{4}\s+)?line\s*up|djs?\s+lineup|the\s+band)\s*:?$/i;
+const MOSHTIX_SUPPORT_LINEUP_HEADING_PATTERN = /^with support from\s*:?$/i;
 const MOSHTIX_LABELLED_SINGLE_ARTIST_HEADING_PATTERN = /^presented by\s*:?$/i;
 const MOSHTIX_LABELLED_LINEUP_STOP_PATTERN =
   /\b(?:doors?|tickets?|members?|venue|to be announced|ticketing info)\b/i;
@@ -626,13 +633,16 @@ function isLikelyMoshtixLabelledArtistLine(value: string): boolean {
 
 function parseMoshtixLabelledLineupBlocks(
   descriptionHtml: string | null | undefined
-): string[] {
+): { artists: string[]; hasSupportBlock: boolean } {
   const lines = extractMoshtixPerformerCreditLines(descriptionHtml);
   const artists: string[] = [];
+  let hasSupportBlock = false;
 
   for (let index = 0; index < lines.length; index += 1) {
     const heading = normalizeMoshtixLineupHeading(lines[index] ?? "");
-    const isLineupBlock = MOSHTIX_LABELLED_LINEUP_HEADING_PATTERN.test(heading);
+    const isSupportBlock = MOSHTIX_SUPPORT_LINEUP_HEADING_PATTERN.test(heading);
+    const isLineupBlock =
+      isSupportBlock || MOSHTIX_LABELLED_LINEUP_HEADING_PATTERN.test(heading);
     const isSingleArtistBlock = MOSHTIX_LABELLED_SINGLE_ARTIST_HEADING_PATTERN.test(
       heading
     );
@@ -641,6 +651,7 @@ function parseMoshtixLabelledLineupBlocks(
       continue;
     }
 
+    hasSupportBlock ||= isSupportBlock;
     const maximumLines = isSingleArtistBlock ? 1 : 50;
 
     for (
@@ -662,7 +673,37 @@ function parseMoshtixLabelledLineupBlocks(
     }
   }
 
-  return artists;
+  return { artists, hasSupportBlock };
+}
+
+function parseMoshtixRolePrefixedArtistList(value: string): string[] {
+  const tokens = normalizeWhitespace(value)
+    .replace(/\s+\band\b\s+/gi, ", ")
+    .split(/\s*,\s*/)
+    .filter(Boolean);
+  const artists = tokens
+    .map((token) => token.match(MOSHTIX_ROLE_PREFIXED_ARTIST_PATTERN)?.[1] ?? null)
+    .map((artist) => (artist ? normalizeMoshtixArtistToken(artist) : null));
+
+  if (artists.length < 2 || artists.some((artist) => !artist)) {
+    return [];
+  }
+
+  return artists.filter((artist): artist is string => Boolean(artist));
+}
+
+function parseMoshtixCurrentBillingArtists(line: string): string[] {
+  const specialGuestsMatch = line.match(MOSHTIX_JOINED_SPECIAL_GUESTS_PATTERN);
+
+  if (specialGuestsMatch?.[1]) {
+    return splitMoshtixArtistList(specialGuestsMatch[1]);
+  }
+
+  const roleRosterMatch = line.match(MOSHTIX_FEATURED_ROLE_ROSTER_PATTERN);
+
+  return roleRosterMatch?.[1]
+    ? parseMoshtixRolePrefixedArtistList(roleRosterMatch[1])
+    : [];
 }
 
 function parseMoshtixPerformerCreditLine(line: string): string | null {
@@ -789,12 +830,13 @@ function parseMoshtixDescriptionArtists(
   title: string | null | undefined
 ): string[] {
   const lines = extractProminentDescriptionLines(descriptionHtml);
+  const labelledLineup = parseMoshtixLabelledLineupBlocks(descriptionHtml);
   const performerCreditArtists = extractMoshtixPerformerCreditLines(descriptionHtml)
     .map(parseMoshtixPerformerCreditLine)
     .filter((artist): artist is string => Boolean(artist));
   const normalizedTitle = normalizeTitle(title);
   const hasStandaloneTitleCredit =
-    performerCreditArtists.length >= 2 &&
+    (performerCreditArtists.length >= 2 || labelledLineup.hasSupportBlock) &&
     normalizedTitle.split(/\s+/).length >= 2 &&
     normalizedTitle.split(/\s+/).length <= 5 &&
     !/["“”‘’:+|]/u.test(normalizedTitle) &&
@@ -804,7 +846,7 @@ function parseMoshtixDescriptionArtists(
     );
   const candidates: string[] = [
     ...(hasStandaloneTitleCredit ? [normalizedTitle] : []),
-    ...parseMoshtixLabelledLineupBlocks(descriptionHtml)
+    ...labelledLineup.artists
   ];
 
   for (const line of lines.slice(0, 12)) {
@@ -818,6 +860,8 @@ function parseMoshtixDescriptionArtists(
     if (lineupMatch?.[1]) {
       candidates.push(...splitMoshtixArtistList(lineupMatch[1]));
     }
+
+    candidates.push(...parseMoshtixCurrentBillingArtists(line));
 
     const isDjLine = MOSHTIX_DJ_LINE_PATTERN.test(line);
 
