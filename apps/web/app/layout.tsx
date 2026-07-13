@@ -13,6 +13,7 @@ import {
 } from "@/lib/color-scheme";
 import {
   buildSiteStructuredDataJson,
+  HOMEPAGE_TITLE,
   SITE_DESCRIPTION,
   SITE_FAVICON_PATH,
   SITE_LOGO_HEIGHT,
@@ -56,16 +57,16 @@ export const metadata: Metadata = {
       }
     ],
     siteName: SITE_TITLE,
-    title: SITE_TITLE,
+    title: HOMEPAGE_TITLE,
     type: "website",
     url: "/"
   },
-  title: SITE_TITLE,
+  title: HOMEPAGE_TITLE,
   twitter: {
     card: "summary",
     description: SITE_DESCRIPTION,
     images: [SITE_LOGO_PATH],
-    title: SITE_TITLE
+    title: HOMEPAGE_TITLE
   }
 };
 
