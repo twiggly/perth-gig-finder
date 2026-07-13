@@ -518,6 +518,17 @@ interface OztixDescriptionLineupPattern {
   minimumCommaCount?: number;
 }
 
+const OZTIX_EVENT_LINEUP_HEADING_PATTERN =
+  /^(?!.*\bcurrent\s+line\s*up\b)(?:[\p{L}\p{N}][\p{L}\p{N} '&-]{0,60}\s+)?line\s*up\s*:?$/iu;
+const OZTIX_EVENT_LINEUP_STOP_PATTERN =
+  /\b(?:about these|more about|current line\s*up|doors?|presented by|set times?|tickets?|venue)\b/i;
+const OZTIX_EVENT_LINEUP_DESCRIPTOR_SUFFIX_PATTERN =
+  /\s+[-–—]\s+first time ever in perth\b.*$/i;
+const OZTIX_ROLE_CREDIT_SUFFIX_PATTERN =
+  /\s+[-–—]\s+(?:bass|drums?|guitars?|keys?|keyboards?|vocals?)\b/i;
+const OZTIX_ALBUM_LAUNCH_FEATURE_PATTERN =
+  /\bthe album launch will also feature\s+(?:perth\s+)?singer-songwriter\s+(.+?)\s+and\s+(?:alternative\s+r&b\s*\/\s*electronic\s+neo-soul\s+)?band\s+(.+?)(?:,\s+celebrating\b|[.!]|$)/i;
+
 const OZTIX_DESCRIPTION_LINEUP_PATTERNS: OztixDescriptionLineupPattern[] = [
   {
     pattern:
@@ -544,10 +555,86 @@ const OZTIX_DESCRIPTION_LINEUP_PATTERNS: OztixDescriptionLineupPattern[] = [
   }
 ];
 
+function normalizeOztixEventLineupArtist(value: string): string {
+  return cleanOztixArtistToken(
+    normalizeWhitespace(
+      value.replace(OZTIX_EVENT_LINEUP_DESCRIPTOR_SUFFIX_PATTERN, "")
+    ).replace(ARTIST_LOCATION_SUFFIX_PATTERN, "")
+  );
+}
+
+function isLikelyOztixEventLineupArtist(value: string): boolean {
+  const normalized = normalizeOztixEventLineupArtist(value);
+
+  return Boolean(
+    normalized &&
+      normalized.length <= 80 &&
+      normalized.split(/\s+/).length <= 10 &&
+      !/[.!?]$/.test(normalized) &&
+      !OZTIX_EVENT_LINEUP_STOP_PATTERN.test(normalized) &&
+      !OZTIX_ROLE_CREDIT_SUFFIX_PATTERN.test(value) &&
+      !GENERIC_SPECIAL_GUEST_PATTERN.test(normalized) &&
+      isLikelyOztixArtistName(normalized)
+  );
+}
+
+function parseOztixEventLineupBlocks(
+  descriptionHtml: string | null | undefined
+): string[] {
+  const lines = toPlainTextLines(descriptionHtml);
+  const artists: string[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!OZTIX_EVENT_LINEUP_HEADING_PATTERN.test(lines[index] ?? "")) {
+      continue;
+    }
+
+    const blockArtists: string[] = [];
+
+    for (
+      let candidateIndex = index + 1;
+      candidateIndex < lines.length && candidateIndex <= index + 30;
+      candidateIndex += 1
+    ) {
+      const candidateLine = lines[candidateIndex] ?? "";
+
+      if (!isLikelyOztixEventLineupArtist(candidateLine)) {
+        break;
+      }
+
+      blockArtists.push(normalizeOztixEventLineupArtist(candidateLine));
+    }
+
+    if (blockArtists.length >= 2) {
+      artists.push(...blockArtists);
+    }
+  }
+
+  return artists;
+}
+
+function parseOztixAlbumLaunchBillingArtists(
+  descriptionHtml: string | null | undefined
+): string[] {
+  const description = toPlainText(descriptionHtml);
+  const match = description?.match(OZTIX_ALBUM_LAUNCH_FEATURE_PATTERN);
+
+  if (!match?.[1] || !match[2]) {
+    return [];
+  }
+
+  return [match[1], match[2]]
+    .map(cleanOztixArtistToken)
+    .filter((artist) => isLikelyOztixArtistName(artist));
+}
+
 export function parseOztixDescriptionArtists(
   descriptionHtml: string | null | undefined
 ): string[] {
-  const artists: string[] = [];
+  const artists: string[] = [
+    ...parseOztixEventLineupBlocks(descriptionHtml),
+    ...parseOztixAlbumLaunchBillingArtists(descriptionHtml)
+  ];
 
   for (const line of toPlainTextLines(descriptionHtml)) {
     for (const {

@@ -821,6 +821,112 @@ describe("moshtix wa source adapter", () => {
     });
   });
 
+  it("extracts a headliner and supports from an explicit Moshtix support block", () => {
+    const descriptionHtml = [
+      "<p>EDDY CURRENT SUPPRESSION RING</p>",
+      "<p>Formed in the front room of a vinyl pressing plant, ECSR are an Australian band.</p>",
+      "<p>With support from:</p>",
+      "<p>Lyndon Blue Band</p>",
+      "<p>Sooks</p>",
+      "<p>DOORS: 8PM</p>"
+    ].join("");
+    const venue = {
+      name: "The Rechabite",
+      slug: "the-rechabite",
+      suburb: "Northbridge",
+      address: null,
+      websiteUrl: null
+    };
+    const eventData = {
+      name: "EDDY CURRENT SUPPRESSION RING",
+      artists: [],
+      venue: { name: "The Rechabite" }
+    };
+    const expectedExtraction = {
+      artists: ["EDDY CURRENT SUPPRESSION RING", "Lyndon Blue Band", "Sooks"],
+      artistExtractionKind: "parsed_text" as const
+    };
+
+    expect(
+      extractMoshtixArtists({
+        title: "EDDY CURRENT SUPPRESSION RING",
+        descriptionHtml,
+        structuredEvent: { performers: [], location: { name: "The Rechabite" } },
+        eventData,
+        venue
+      })
+    ).toEqual(expectedExtraction);
+    expect(
+      moshtixWaSource.repairArtists?.({
+        eventData,
+        structuredEvent: {
+          name: "EDDY CURRENT SUPPRESSION RING",
+          performers: [],
+          location: { name: "The Rechabite" }
+        },
+        descriptionHtml
+      })
+    ).toEqual(expectedExtraction);
+  });
+
+  it("extracts only explicitly current Moshtix guest and role rosters", () => {
+    const venue = {
+      name: "The Rechabite",
+      slug: "the-rechabite",
+      suburb: "Northbridge",
+      address: null,
+      websiteUrl: null
+    };
+
+    expect(
+      extractMoshtixArtists({
+        title: "Ninajirachi",
+        descriptionHtml:
+          "<p>Ninajirachi announces her headline dates. Joined by special guests Lucy Bedroque and daine, the tour follows a monumental year.</p>",
+        structuredEvent: { performers: [{ name: "Ninajirachi" }] },
+        eventData: { name: "Ninajirachi", artists: ["Ninajirachi"] },
+        venue
+      })
+    ).toEqual({
+      artists: ["Ninajirachi", "Lucy Bedroque", "daine"],
+      artistExtractionKind: "structured"
+    });
+
+    expect(
+      extractMoshtixArtists({
+        title: "The Exploding Universe of Ed Kuepper",
+        descriptionHtml:
+          "<p>A full band performance featuring the added talents of drummer Mark Dawson, bassist Peter Oxley, keyboard player Alister Spence and brass arranger Eamon Dilworth as they tackle material from across Ed’s career.</p>",
+        structuredEvent: { performers: [{ name: "Ed Kuepper" }] },
+        eventData: {
+          name: "The Exploding Universe of Ed Kuepper",
+          artists: ["Ed Kuepper"]
+        },
+        venue
+      })
+    ).toEqual({
+      artists: [
+        "Ed Kuepper",
+        "Mark Dawson",
+        "Peter Oxley",
+        "Alister Spence",
+        "Eamon Dilworth"
+      ],
+      artistExtractionKind: "structured"
+    });
+
+    expect(
+      extractMoshtixArtists({
+        title: "Archive Retrospective",
+        descriptionHtml:
+          "<p>The group was joined by special guests Past Collaborator and Former Member in 2019.</p><p>The artist has collaborated with drummer Biography Name and bassist Another Name.</p>",
+        structuredEvent: null,
+        eventData: null,
+        venue
+      })
+    ).toEqual({ artists: [], artistExtractionKind: "unknown" });
+  });
+
   it("uses explicit Moshtix title presenters and exact credit-block headliners", () => {
     const venue = {
       name: "The Duke of George",
