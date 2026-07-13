@@ -413,6 +413,7 @@ function normalizeSpecialGuestToken(value: string): string {
   return stripOztixArtistPrefix(
     value
       .replace(SPECIAL_GUEST_TOUR_LEAD_IN_PATTERN, "")
+      .replace(/\s*;\s*/g, ", ")
       .replace(/\s*(?:\.|;)\s*(?:with\s+)?supports?\s+from\s+/gi, ", ")
       .replace(/\b(?:with\s+)?supports?\s+from\s+/gi, ", ")
       .replace(
@@ -490,12 +491,28 @@ function splitOztixArtistList(value: string): string[] {
     .split(SPECIAL_GUEST_SEPARATOR_PATTERN)
     .flatMap((token) => token.split(/\s*,\s*/))
     .flatMap((token) =>
-      splitOztixAmpersandArtistToken(token, hasExplicitListSeparator)
+      splitOztixAmpersandArtistToken(
+        stripOztixLineupConjunctionPrefix(token, hasExplicitListSeparator),
+        hasExplicitListSeparator
+      )
     )
     .map(cleanOztixArtistToken)
     .filter(Boolean)
     .filter(isLikelyOztixArtistName)
     .filter((token) => !GENERIC_SPECIAL_GUEST_PATTERN.test(token));
+}
+
+function stripOztixLineupConjunctionPrefix(
+  value: string,
+  hasExplicitListSeparator: boolean
+): string {
+  const normalized = normalizeWhitespace(value);
+
+  if (!hasExplicitListSeparator) {
+    return normalized;
+  }
+
+  return normalizeWhitespace(normalized.replace(/^(?:&|and)\s+/i, ""));
 }
 
 function splitOztixAmpersandArtistToken(

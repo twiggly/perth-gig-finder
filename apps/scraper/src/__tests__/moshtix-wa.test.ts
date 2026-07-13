@@ -405,6 +405,146 @@ describe("moshtix wa source adapter", () => {
     });
   });
 
+  it("parses standalone Moshtix description lineups with malformed quote markers", () => {
+    const extraction = extractMoshtixArtists({
+      title: "Gloss Bitter and Insolent EP Launch",
+      descriptionHtml:
+        "<p>w' Flora Road, Dreamspeed + Special Beam Cannon</p><p>Fresh off the back of their debut single, local shoegaze powerhouse Gloss are back to launch their debut EP.</p><p>Support from loved ones Flora Road, Dreamspeed, and Special Beam Cannon!</p>",
+      structuredEvent: {
+        location: {
+          name: "Mojos Bar, North Fremantle"
+        },
+        performers: [
+          { name: "Mojos Bar Homepage Gallery" },
+          { name: "mojosbarwa" },
+          { name: "Mojos Bar" }
+        ]
+      },
+      eventData: {
+        name: "Gloss Bitter and Insolent EP Launch",
+        artists: ["Mojos Bar Homepage Gallery", "mojosbarwa", "Mojos Bar"],
+        venue: {
+          name: "Mojos Bar, North Fremantle"
+        },
+        client: {
+          name: "Mojo's Bar"
+        }
+      },
+      venue: {
+        name: "Mojos Bar",
+        slug: "mojos-bar",
+        suburb: "North Fremantle",
+        address: null,
+        websiteUrl: null
+      }
+    });
+
+    expect(extraction).toEqual({
+      artists: ["Flora Road", "Dreamspeed", "Special Beam Cannon"],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
+  it.each(["w/ No Bride", "W. No Bride", "w' No Bride", "w’ No Bride"])(
+    "parses the standalone Moshtix description marker in %s",
+    (lineupLine) => {
+      const extraction = extractMoshtixArtists({
+        title: "Late Show",
+        descriptionHtml: `<p>${lineupLine}</p>`,
+        structuredEvent: null,
+        eventData: {
+          name: "Late Show",
+          artists: [],
+          venue: {
+            name: "Mojos Bar, North Fremantle"
+          },
+          client: {
+            name: "Mojo's Bar"
+          }
+        },
+        venue: {
+          name: "Mojos Bar",
+          slug: "mojos-bar",
+          suburb: "North Fremantle",
+          address: null,
+          websiteUrl: null
+        }
+      });
+
+      expect(extraction).toEqual({
+        artists: ["No Bride"],
+        artistExtractionKind: "parsed_text"
+      });
+    }
+  );
+
+  it("does not parse embedded shorthand or broad sponsor wording from Moshtix descriptions", () => {
+    const extraction = extractMoshtixArtists({
+      title: "Community Showcase",
+      descriptionHtml:
+        "<p>Tickets include entry w/ a complimentary drink.</p><p>Supported by Double J</p>",
+      structuredEvent: null,
+      eventData: {
+        name: "Community Showcase",
+        artists: [],
+        venue: {
+          name: "Mojos Bar, North Fremantle"
+        },
+        client: {
+          name: "Mojo's Bar"
+        }
+      },
+      venue: {
+        name: "Mojos Bar",
+        slug: "mojos-bar",
+        suburb: "North Fremantle",
+        address: null,
+        websiteUrl: null
+      }
+    });
+
+    expect(extraction).toEqual({
+      artists: [],
+      artistExtractionKind: "unknown"
+    });
+  });
+
+  it("repairs Moshtix artists from stored standalone description lineups", () => {
+    const extraction = moshtixWaSource.repairArtists?.({
+      listing: {
+        name: "Gloss Bitter and Insolent EP Launch"
+      },
+      eventData: {
+        name: "Gloss Bitter and Insolent EP Launch",
+        artists: ["Mojos Bar Homepage Gallery", "mojosbarwa", "Mojos Bar"],
+        venue: {
+          name: "Mojos Bar, North Fremantle"
+        },
+        client: {
+          name: "Mojo's Bar"
+        }
+      },
+      structuredEvent: {
+        name: "Gloss Bitter and Insolent EP Launch",
+        location: {
+          name: "Mojos Bar, North Fremantle"
+        },
+        performers: [
+          { name: "Mojos Bar Homepage Gallery" },
+          { name: "mojosbarwa" },
+          { name: "Mojos Bar" }
+        ]
+      },
+      descriptionHtml:
+        "<p>w' Flora Road, Dreamspeed + Special Beam Cannon</p><p>Fresh off the back of their debut single.</p>"
+    });
+
+    expect(extraction).toEqual({
+      artists: ["Flora Road", "Dreamspeed", "Special Beam Cannon"],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
   it("strips Moshtix special-guest labels while preserving headliner order", () => {
     const extraction = extractMoshtixArtists({
       title: "Stereolab | with special guests Mick Harvey & Amanda Acevedo",
@@ -473,6 +613,131 @@ describe("moshtix wa source adapter", () => {
     });
   });
 
+  it("extracts role-qualified Moshtix performers and dedupes terminal entities", () => {
+    const title = "Georgie Aué: A Norah Jones Tribute";
+    const descriptionHtml = [
+      "<p>Get taken away with the melodies of Norah Jones</p>",
+      "<p>Doors 6 pm, Band at 7.30 pm</p>",
+      "<p>Duke of George presents</p>",
+      `<p>${title}</p>`,
+      "<p>Jazz vocalist, pianist and songwriter, Georgie Aué, presents a tribute.</p>",
+      "<p>Charming audiences with a soulful performance.</p>",
+      "<p>The show has played to sold-out audiences.</p>",
+      "<p>Hear Georgie Aué and her band perform.<br><br>Featuring:</p>",
+      "<p>Georgie Aué - vocals and piano</p>",
+      "<p>Dan Garner - guitar</p>",
+      "<p>Zac Grafton - bass</p>",
+      '<p>Alex Reid - drums<br><br>"Elegant costuming and a beautiful setting." - 5 stars</p>'
+    ].join("");
+    const eventData = {
+      name: title,
+      artists: ["Duke Of George", "The Duke of George", "Georgie Aué"],
+      venue: {
+        name: "The Duke of George"
+      },
+      client: {
+        name: "The Duke of George"
+      }
+    };
+    const structuredEvent = {
+      name: title,
+      location: {
+        name: "The Duke of George"
+      },
+      performers: [
+        { name: "Duke Of George" },
+        { name: "The Duke of George" },
+        { name: "Georgie Au&#233;" }
+      ]
+    };
+    const venue = {
+      name: "The Duke of George",
+      slug: "the-duke-of-george",
+      suburb: "East Fremantle",
+      address: "135 Duke St, East Fremantle WA 6158",
+      websiteUrl: null
+    };
+    const expectedExtraction = {
+      artists: ["Georgie Aué", "Dan Garner", "Zac Grafton", "Alex Reid"],
+      artistExtractionKind: "structured" as const
+    };
+
+    expect(
+      extractMoshtixArtists({
+        title,
+        descriptionHtml,
+        structuredEvent,
+        eventData,
+        venue
+      })
+    ).toEqual(expectedExtraction);
+    expect(
+      moshtixWaSource.repairArtists?.({
+        listing: { name: title },
+        eventData,
+        structuredEvent,
+        descriptionHtml
+      })
+    ).toEqual(expectedExtraction);
+  });
+
+  it("accepts common performer-credit dash and role-list variants", () => {
+    const extraction = extractMoshtixArtists({
+      title: "Quartet Showcase",
+      descriptionHtml: [
+        "<p>Casey One - vocals and piano</p>",
+        "<p>Casey Two – lead guitar / backing vocals</p>",
+        "<p>Casey Three — double bass, percussion &amp; flute</p>"
+      ].join(""),
+      structuredEvent: null,
+      eventData: {
+        name: "Quartet Showcase",
+        artists: [],
+        venue: { name: "The Duke of George" },
+        client: { name: "The Duke of George" }
+      },
+      venue: {
+        name: "The Duke of George",
+        slug: "the-duke-of-george",
+        suburb: "East Fremantle",
+        address: null,
+        websiteUrl: null
+      }
+    });
+
+    expect(extraction).toEqual({
+      artists: ["Casey One", "Casey Two", "Casey Three"],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
+  it("does not treat ordinary dash-separated Moshtix prose as performer credits", () => {
+    const extraction = extractMoshtixArtists({
+      title: "Community Showcase",
+      descriptionHtml:
+        "<p>Doors - 6pm</p><p>Tickets — available now</p><p>The review - vocals were exceptional.</p><p>Jordan plays guitar throughout.</p>",
+      structuredEvent: null,
+      eventData: {
+        name: "Community Showcase",
+        artists: [],
+        venue: { name: "The Duke of George" },
+        client: { name: "The Duke of George" }
+      },
+      venue: {
+        name: "The Duke of George",
+        slug: "the-duke-of-george",
+        suburb: "East Fremantle",
+        address: null,
+        websiteUrl: null
+      }
+    });
+
+    expect(extraction).toEqual({
+      artists: [],
+      artistExtractionKind: "unknown"
+    });
+  });
+
   it("dedupes parenthetical tribute variants in Moshtix artist arrays", () => {
     const extraction = extractMoshtixArtists({
       title: "The Buzz Lovers (Nirvana Tribute) (Spain)",
@@ -504,6 +769,125 @@ describe("moshtix wa source adapter", () => {
 
     expect(extraction).toEqual({
       artists: ["The Buzz Lovers"],
+      artistExtractionKind: "structured"
+    });
+  });
+
+  it("keeps only the performer from Moshtix presenter-led tribute metadata", () => {
+    const input = {
+      title: "Howie Morgan presents Rodriguez Unplugged",
+      descriptionHtml:
+        "<p>Howie Morgan presents Rodriguez Unplugged</p><p>Join us for a celebration of Rodriguez.</p>",
+      structuredEvent: {
+        location: { name: "The Duke of George" },
+        performers: [
+          { name: "Duke Of George" },
+          { name: "Howie Morgan presents Sugarman - The Best of Rodriguez" },
+          { name: "Howie Morgan" },
+          { name: "Sugarman" },
+          { name: "The Duke of George" }
+        ]
+      },
+      eventData: {
+        name: "Howie Morgan presents Rodriguez Unplugged",
+        artists: [
+          "Duke Of George",
+          "Howie Morgan presents Sugarman - The Best of Rodriguez  ",
+          "Howie Morgan",
+          "Sugarman",
+          "The Duke of George"
+        ],
+        venue: { name: "The Duke of George" },
+        client: { name: "The Duke Of George" }
+      },
+      venue: {
+        name: "The Duke of George",
+        slug: "the-duke-of-george",
+        suburb: "East Fremantle",
+        address: null,
+        websiteUrl: null
+      }
+    };
+
+    expect(extractMoshtixArtists(input)).toEqual({
+      artists: ["Howie Morgan"],
+      artistExtractionKind: "structured"
+    });
+    expect(
+      moshtixWaSource.repairArtists?.({
+        listing: { name: input.title },
+        eventData: input.eventData,
+        structuredEvent: input.structuredEvent,
+        descriptionHtml: input.descriptionHtml
+      })
+    ).toEqual({
+      artists: ["Howie Morgan"],
+      artistExtractionKind: "structured"
+    });
+  });
+
+  it.each([
+    [
+      "Courtney Murphy presents Boz ’n’ Billy: Silk Degrees and The Stranger - Live!",
+      "Courtney Murphy"
+    ],
+    ["Darren Coggan presents \"Campfire\"", "Darren Coggan"],
+    ["Louis Rebeiro presents 3 + 1", "Louis Rebeiro"]
+  ])("parses person-led Moshtix show title %s", (title, artist) => {
+    expect(
+      extractMoshtixArtists({
+        title,
+        descriptionHtml: null,
+        structuredEvent: {
+          location: { name: "The Duke of George" },
+          performers: [{ name: "The Duke of George" }]
+        },
+        eventData: {
+          name: title,
+          artists: ["Duke Of George", "The Duke of George"],
+          venue: { name: "The Duke of George" },
+          client: { name: "The Duke Of George" }
+        },
+        venue: {
+          name: "The Duke of George",
+          slug: "the-duke-of-george",
+          suburb: "East Fremantle",
+          address: null,
+          websiteUrl: null
+        }
+      })
+    ).toEqual({
+      artists: [artist],
+      artistExtractionKind: "parsed_text"
+    });
+  });
+
+  it("does not treat an organization presenter as a Moshtix artist", () => {
+    expect(
+      extractMoshtixArtists({
+        title:
+          "WAYJO Presents Queer Anthems featuring Queency with the Resonance Jazz Orchestra",
+        descriptionHtml: null,
+        structuredEvent: {
+          performers: [{ name: "Queency" }, { name: "Resonance Jazz Orchestra" }]
+        },
+        eventData: {
+          name:
+            "WAYJO Presents Queer Anthems featuring Queency with the Resonance Jazz Orchestra",
+          artists: ["Queency", "Resonance Jazz Orchestra"],
+          venue: { name: "The Rechabite" },
+          client: { name: "WAYJO" }
+        },
+        venue: {
+          name: "The Rechabite",
+          slug: "the-rechabite",
+          suburb: "Northbridge",
+          address: null,
+          websiteUrl: null
+        }
+      })
+    ).toEqual({
+      artists: ["Queency", "Resonance Jazz Orchestra"],
       artistExtractionKind: "structured"
     });
   });

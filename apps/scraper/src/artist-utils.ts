@@ -76,6 +76,44 @@ export function normalizeArtistNames(artists: string[]): string[] {
   return [...uniqueArtistsBySlug.values()];
 }
 
+function hasMixedCaseLetters(value: string): boolean {
+  return value !== value.toLocaleUpperCase("en-AU") &&
+    value !== value.toLocaleLowerCase("en-AU");
+}
+
+function isAllUppercaseName(value: string): boolean {
+  return value === value.toLocaleUpperCase("en-AU") &&
+    value !== value.toLocaleLowerCase("en-AU");
+}
+
+export function selectPreferredArtistDisplayName(
+  existingName: string | null | undefined,
+  incomingName: string
+): string {
+  const normalizedIncomingName = cleanArtistName(incomingName);
+  const normalizedExistingName = cleanArtistName(existingName ?? "");
+
+  if (!normalizedExistingName) {
+    return normalizedIncomingName;
+  }
+
+  if (
+    hasMixedCaseLetters(normalizedExistingName) &&
+    isAllUppercaseName(normalizedIncomingName)
+  ) {
+    return normalizedExistingName;
+  }
+
+  if (
+    isAllUppercaseName(normalizedExistingName) &&
+    hasMixedCaseLetters(normalizedIncomingName)
+  ) {
+    return normalizedIncomingName;
+  }
+
+  return normalizedIncomingName;
+}
+
 export function createArtistExtraction(
   artists: string[],
   preferredKind: Exclude<ArtistExtractionKind, "unknown">
