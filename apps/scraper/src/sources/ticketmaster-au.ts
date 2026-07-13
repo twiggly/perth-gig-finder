@@ -13,7 +13,11 @@ import {
   type StartsAtPrecision
 } from "@perth-gig-finder/shared";
 
-import { createArtistExtraction, unknownArtistExtraction } from "../artist-utils";
+import {
+  createArtistExtraction,
+  preferArtistDisplayNamesFromTitle,
+  unknownArtistExtraction
+} from "../artist-utils";
 import type { SourceAdapter, SourceAdapterResult } from "../types";
 
 const SOURCE_ORIGIN = "https://www.ticketmaster.com.au";
@@ -259,7 +263,10 @@ function getPerformerNames(event: TicketmasterCityEvent): string[] {
 }
 
 export function extractTicketmasterArtists(event: TicketmasterCityEvent) {
-  return createArtistExtraction(getPerformerNames(event), "structured");
+  return createArtistExtraction(
+    preferArtistDisplayNamesFromTitle(getPerformerNames(event), event.title),
+    "structured"
+  );
 }
 
 function inferStatus(event: TicketmasterCityEvent): GigStatus {

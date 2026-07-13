@@ -7,6 +7,7 @@ import {
   normalizeVenueSuburb,
   normalizeVenueWebsiteUrl,
   normalizeWhitespace,
+  slugify,
   slugifyVenueName,
   type GigStatus,
   type JsonObject,
@@ -214,21 +215,25 @@ const HUMANITIX_TITLE_LAUNCH_PATTERN = /^(.+?)\s+(?:single|ep|album)\s+launch\b/
 const HUMANITIX_TITLE_SUPPORT_PATTERN =
   /^(.+?)\s+(?:with|w\/)\s+support\s+from\s+(.+)$/i;
 const HUMANITIX_TITLE_WITH_LINEUP_PATTERN = /\bw[/.]\s+(.+)$/i;
+const HUMANITIX_TITLE_SESSION_ARTIST_PATTERN =
+  /\b(?:session|showcase):\s*(.+)$/i;
 const HUMANITIX_EXPLICIT_ARTIST_PATTERNS = [
+  /^special guests?\s*[:\-]\s*(.+)$/i,
   /\b(?:featuring|feat\.?|ft\.?)\s+(.+?)(?:\s+\/\/|[.!?]|$)/i,
   /\bwith support from\s+(.+?)(?:\s+\/\/|[.!?]|$)/i,
   /\bsupport from\s+(.+?)(?:\s+\/\/|[.!?]|$)/i,
   /\bsupported by\s+(.+?)(?:\s+\/\/|[.!?]|$)/i,
   /\bheadlined by\s+(.+?)(?:\s+\/\/|[.!?]|$)/i,
+  /\bbringing together\s+(.+?)\s+in\s+(?:a|an)\s+(?:celebration|concert|performance)\b/i,
   /^lineup\s*[:\-]\s*(.+)$/i,
   /^artists?\s*[:\-]\s*(.+)$/i
 ];
 const HUMANITIX_ARTIST_LABEL_PREFIX_PATTERN =
-  /^(?:featuring|feat\.?|ft\.?|with support from|support from|supported by|lineup|artists?)\s*[:\-]?\s*/i;
+  /^(?:special guests?|featuring|feat\.?|ft\.?|with support from|support from|supported by|lineup|artists?)\s*[:\-]?\s*/i;
 const HUMANITIX_ARTIST_TRAILING_NOISE_PATTERN =
-  /\s+(?:and more!?|plus more!?|more to be announced|tba|tbc)$/i;
+  /\s+(?:and more!?|plus more!?|more to be announced|tba|tbc)$|\s*[-–—]\s*full\s+band$/i;
 const HUMANITIX_SONG_CREDIT_CONTEXT_PATTERN =
-  /\b(?:catalogue|catalog|hits?|songs?|singles?|tracks?)\b.{0,90}\bincluding\b/i;
+  /\b(?:catalogue|catalog)\b.{0,140}$|\b(?:hits?|songs?|singles?|tracks?)\b.{0,90}\bincluding\b|\b(?:hit|song|single|track)\b.{0,100}$|\b(?:stream|listen\s+to)\b.{0,100}$/i;
 const HUMANITIX_GENERIC_ARTIST_WORDS = new Set([
   "plus",
   "band",
@@ -959,7 +964,7 @@ function isLikelyArtistName(value: string): boolean {
   }
 
   if (
-    /^(?:at|her|his|their|making|listen|tune|style|shows?|music\s+by|carried\s+by)\b/i.test(
+    /^(?:at|she|he|they|it|who|whose|her|his|their|making|listen|tune|style|shows?|music\s+by|performed\s+by|carried\s+by|values\s+)\b/i.test(
       normalized
     )
   ) {
@@ -967,7 +972,7 @@ function isLikelyArtistName(value: string): boolean {
   }
 
   if (
-    /\b(?:annual tribute festivals|music blends|gentle guitars|warm harmonies|vivid lyricism|songs explore|heartbreak|healing|popular choice|voice that|town of|city of|wine|coffee|dinner service|bakery|wearables|puzzles|lunch|culture ireland|small projects|liquid architecture|audio foundation|frontrunner av|sponsor|soundwalk|pre-gathering|gathering|playlists|late night set|whimsy|spiralling|bar)\b/i.test(
+    /\b(?:annual tribute festivals|music blends|gentle guitars|warm harmonies|vivid lyricism|songs explore|heartbreak|healing|popular choice|voice that|town of|city of|wine|coffee|dinner service|bakery|wearables|puzzles|lunch|culture ireland|small projects|liquid architecture|audio foundation|frontrunner av|sponsor|soundwalk|pre-gathering|gathering|playlists|late night set|whimsy|spiralling|bar|community musicians|jazz and theatre settings)\b/i.test(
       normalized
     )
   ) {
@@ -980,7 +985,7 @@ function isLikelyArtistName(value: string): boolean {
     return false;
   }
 
-  return !/\b(is|are|from|with|and carried|writing|performs|presents?|present|hosts?|launch(?:es)?|supported|building|offering|reflects|creating|co-creates|beyond the stage|crowned|journey|grounded|audiences|acclaimed|contemporary|orchestra presents|wide-ranging|repertoire|spanning|classical)\b/i.test(
+  return !/\b(is|are|from|with|and carried|writing|performs|presents?|present|hosts?|launch(?:ed|es)?|supported|building|offering|reflects|creating|co-creates|beyond the stage|crowned|journey|grounded|audiences|acclaimed|contemporary|orchestra presents|wide-ranging|repertoire|spanning|classical)\b/i.test(
     normalized
   );
 }
@@ -1060,6 +1065,16 @@ function parseHumanitixTitleArtists(title: string): string[] {
     );
   }
 
+  const sessionArtistMatch = normalized.match(HUMANITIX_TITLE_SESSION_ARTIST_PATTERN);
+
+  if (sessionArtistMatch?.[1]) {
+    const sessionArtist = normalizeHumanitixArtistToken(sessionArtistMatch[1]);
+
+    if (isLikelyArtistName(sessionArtist)) {
+      candidates.push(sessionArtist);
+    }
+  }
+
   candidates.push(...parseHumanitixExplicitTextArtists([normalized]));
 
   return candidates;
@@ -1131,12 +1146,52 @@ function parseHumanitixExplicitTextArtists(
           continue;
         }
 
-        candidates.push(...splitHumanitixArtistLine(match[1]));
+        const worldPremiereMatch = match[1].match(
+          /^(?:world\s+)?premieres?\s+by\s+(.+)$/i
+        );
+
+        if (worldPremiereMatch?.[1]) {
+          candidates.push(
+            ...worldPremiereMatch[1]
+              .split(/\s+(?:and|&)\s+/i)
+              .flatMap(splitHumanitixArtistLine)
+          );
+        } else {
+          candidates.push(...splitHumanitixArtistLine(match[1]));
+        }
       }
     }
   }
 
   return candidates;
+}
+
+function mergeHumanitixArtistCandidates(
+  primaryArtists: string[],
+  explicitTextArtists: string[]
+): string[] {
+  const explicitDisplayBySlug = new Map(
+    explicitTextArtists.map((artist) => [slugify(artist), artist] as const)
+  );
+  const primarySlugs = new Set(primaryArtists.map(slugify));
+
+  return [
+    ...primaryArtists.map((artist) => explicitDisplayBySlug.get(slugify(artist)) ?? artist),
+    ...explicitTextArtists.filter((artist) => !primarySlugs.has(slugify(artist)))
+  ];
+}
+
+function isCompositeOfKnownHumanitixArtists(
+  artist: string,
+  knownArtists: string[]
+): boolean {
+  const knownSlugs = new Set(knownArtists.map(slugify));
+  const parts = artist
+    .split(/\s+(?:and|&)\s+/i)
+    .map((part) => normalizeWhitespace(part.replace(/\s*\([^)]*\)\s*$/g, "")))
+    .filter(Boolean);
+
+  return parts.length > 1 && parts.every((part) => knownSlugs.has(slugify(part)));
 }
 
 export function extractHumanitixArtists(input: {
@@ -1146,11 +1201,21 @@ export function extractHumanitixArtists(input: {
   meta: Pick<HumanitixPageMeta, "pageText" | "headings" | "lineupText">;
 }) {
   const structuredExtraction = extractStructuredHumanitixArtists(input.structuredEvent);
-  const parsedArtists = [
+  const primaryParsedArtists = [
     ...parseHumanitixTitleArtists(input.title),
-    ...parseHumanitixLineupArtists(input.meta.lineupText),
-    ...parseHumanitixExplicitTextArtists([input.description, ...input.meta.pageText])
+    ...parseHumanitixLineupArtists(input.meta.lineupText)
   ];
+  const explicitTextArtists = parseHumanitixExplicitTextArtists([
+    input.description,
+    ...input.meta.pageText
+  ]);
+  const parsedArtists = mergeHumanitixArtistCandidates(
+    primaryParsedArtists,
+    explicitTextArtists
+  ).filter(
+    (artist) =>
+      !isCompositeOfKnownHumanitixArtists(artist, structuredExtraction.artists)
+  );
 
   if (hasKnownArtists(structuredExtraction)) {
     return createArtistExtraction(

@@ -6,6 +6,7 @@ import {
   normalizeTheBirdRow,
   normalizeTheBirdWhatsOnRow,
   parseTheBirdFeedRows,
+  parseTheBirdInfoArtists,
   parseTheBirdWhatsOnRows,
   parseTheBirdStartTime,
   theBirdSource,
@@ -19,6 +20,29 @@ function freezeTheBirdFixtureClock(): void {
 }
 
 describe("the bird source adapter", () => {
+  it("parses explicit coming-up feed headliners and featuring blocks", () => {
+    const info = `
+      MDMC: The Boom Bap Head is headlined by Ian de Mello aka MDMC.
+
+      Come be part of the culture featuring:
+      Southern Future,
+      Reed Lew,
+      VERONIKKA,
+      DJ Disco Dyl on the 1s and 2s
+      &
+      RHung, bringing a Hip Hop dance set!
+    `;
+
+    expect(parseTheBirdInfoArtists(info, "MDMC: The Boom Bap Head")).toEqual([
+      "MDMC",
+      "Southern Future",
+      "Reed Lew",
+      "VERONIKKA",
+      "DJ Disco Dyl",
+      "RHung"
+    ]);
+  });
+
   it("extracts exact times from doors text before later times", () => {
     expect(parseTheBirdStartTime("Doors 8pm | Music until 11:45pm")).toEqual({
       hour: 20,

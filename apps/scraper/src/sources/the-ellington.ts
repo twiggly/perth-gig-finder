@@ -9,7 +9,7 @@ import {
   type NormalizedVenue
 } from "@perth-gig-finder/shared";
 
-import { unknownArtistExtraction } from "../artist-utils";
+import { extractEllingtonArtists } from "./the-ellington-artists";
 import type { SourceAdapter, SourceAdapterResult } from "../types";
 
 const SOURCE_ORIGIN = "https://www.ellingtonjazz.com.au";
@@ -480,7 +480,10 @@ export function normalizeEllingtonEvent(
   const description = toPlainText(event.content?.rendered);
   const imageUrl = extractImageUrl(event, detailHtml);
   const categories = extractCategories(event);
-  const artistExtraction = unknownArtistExtraction();
+  const artistExtraction = extractEllingtonArtists({
+    title,
+    contentHtml: event.content?.rendered
+  });
   const rawPayload: JsonObject = {
     source: "wordpress-rest",
     eventId,
@@ -662,5 +665,16 @@ export const theEllingtonSource: SourceAdapter = {
       gigs: parsed.gigs,
       failedCount: failedCount + parsed.failedCount
     };
+  },
+  repairArtists(rawPayload) {
+    const payload =
+      rawPayload && typeof rawPayload === "object" && !Array.isArray(rawPayload)
+        ? (rawPayload as { title?: string; contentHtml?: string | null })
+        : {};
+
+    return extractEllingtonArtists({
+      title: normalizeEllingtonTitle(payload.title),
+      contentHtml: payload.contentHtml
+    });
   }
 };
