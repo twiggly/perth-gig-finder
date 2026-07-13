@@ -99,6 +99,9 @@ const MOSHTIX_TITLE_FEATURE_PATTERN =
 const MOSHTIX_TITLE_TRAILING_FEATURE_PATTERN =
   /^(.+?)\s+(?:featuring|feat\.?|ft\.?)\s+(.+)$/i;
 const MOSHTIX_TITLE_SUPPORT_PATTERN = /^(.+?)\s+(w[/.]\s*|with\s+)(.+)$/i;
+const MOSHTIX_TITLE_PRESENTS_PATTERN = /^(.+?)\s+presents\s+(.+)$/i;
+const MOSHTIX_NON_ARTIST_PRESENTER_PATTERN =
+  /\b(?:association|club|collective|entertainment|events?|festival|management|orchestra|productions?|promotions?|records?|society|touring|venue)\b/i;
 const MOSHTIX_TITLE_WITH_LABEL_LINEUP_PATTERN =
   /\bwith\s+(?:the\s+)?(?:trio|band|artists?|performers?)\s*:\s*(.+)$/i;
 const MOSHTIX_TITLE_PLAYED_BY_PATTERN =
@@ -110,7 +113,10 @@ const MOSHTIX_TITLE_COUNTRY_SUFFIX_PATTERN =
   /^(.+?)\s+\((?:[A-Z]{2,}|UK|USA|NZ|DK|GER|SWE(?:DEN)?|SWEDEN)\)$/i;
 const MOSHTIX_TIME_SUFFIX_PATTERN =
   /\s*[|–-]\s*\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)\b.*$/i;
+const MOSHTIX_NON_ARTIST_SCHEDULE_LABEL_PATTERN =
+  /^(?:band|doors?|event|music|show|tickets?)$/i;
 const MOSHTIX_HEADLINED_BY_PATTERN = /\bheadlined by\s+(.+?)(?:\s+with\b|[.!]|$)/i;
+const MOSHTIX_DESCRIPTION_LINEUP_PATTERN = /^w(?:[/.]|['’])\s*(.+)$/i;
 const MOSHTIX_DJ_LAUNCHES_PATTERN = /\b(DJ\s+.+?)\s+launches\b/i;
 const MOSHTIX_DJ_LINE_PATTERN = /\bDJS?\s*:\s*(.+)$/i;
 const MOSHTIX_DJ_SEGMENT_SEPARATOR_PATTERN = /\s*[🖤🌹•·●▪▫◆◇★☆*]\s*/u;
@@ -124,12 +130,22 @@ const MOSHTIX_DESCRIPTION_STOP_WORDS = new Set([
   "under 18",
   "valid form of id"
 ]);
+const MOSHTIX_MUSICIAN_ROLE_PATTERN_SOURCE = String.raw`(?:(?:acoustic|backing|electric|lead|rhythm)\s+)?(?:vocals?|voice|piano|keys?|keyboards?|guitars?|bass(?:\s+guitar)?|double\s+bass|drums?|percussion|sax(?:ophone)?|trumpet|trombone|violin|viola|cello|flute|clarinet|organ|synth(?:esizer)?|mandolin|banjo|harp)`;
+const MOSHTIX_PERFORMER_CREDIT_LINE_PATTERN = new RegExp(
+  String.raw`^(.+?)\s+[-–—]\s+${MOSHTIX_MUSICIAN_ROLE_PATTERN_SOURCE}(?:\s*(?:,|\/|&|\band\b)\s*${MOSHTIX_MUSICIAN_ROLE_PATTERN_SOURCE})*\.?$`,
+  "i"
+);
 
 interface MoshtixStructuredAddress {
   streetAddress?: string;
   addressLocality?: string;
   addressRegion?: string;
   postalCode?: string;
+}
+
+interface MoshtixPresentedShow {
+  presenter: string;
+  showTitle: string;
 }
 
 interface MoshtixStructuredPlace {
@@ -360,8 +376,10 @@ function getMoshtixIdentityVariants(value: string | null | undefined): string[] 
 }
 
 function normalizeMoshtixArtistToken(value: string): string {
+  const decoded = normalizeWhitespace(value);
+
   return normalizeWhitespace(
-    value
+    decoded
       .replace(/^w[/.]\s*/i, "")
       .replace(MOSHTIX_ARTIST_LABEL_PREFIX_PATTERN, "")
       .replace(MOSHTIX_TIME_SUFFIX_PATTERN, "")
@@ -437,6 +455,99 @@ function parseMoshtixDjLine(line: string): string[] {
     .filter((artist) => !MOSHTIX_PLACEHOLDER_ARTIST_PATTERN.test(artist));
 }
 
+function parseMoshtixPresentedShow(title: string): MoshtixPresentedShow | null {
+  const match = normalizeTitle(title).match(MOSHTIX_TITLE_PRESENTS_PATTERN);
+
+  if (!match?.[1] || !match[2]) {
+    return null;
+  }
+
+  const presenter = normalizeMoshtixArtistToken(match[1]);
+  const showTitle = normalizeWhitespace(match[2]);
+  const presenterWords = presenter.split(/\s+/).filter(Boolean);
+  const hasUppercaseLetter = /\p{Lu}/u.test(presenter);
+  const hasLowercaseLetter = /\p{Ll}/u.test(presenter);
+
+  if (
+    presenterWords.length < 2 ||
+    presenterWords.length > 4 ||
+    !hasUppercaseLetter ||
+    !hasLowercaseLetter ||
+    MOSHTIX_NON_ARTIST_PRESENTER_PATTERN.test(presenter)
+  ) {
+    return null;
+  }
+
+  return { presenter, showTitle };
+}
+
+function addMoshtixShowTitleIdentities(
+  identities: Set<string>,
+  value: string
+): void {
+  const normalized = normalizeWhitespace(value);
+
+  if (!normalized) {
+    return;
+  }
+
+  identities.add(normalizeMoshtixIdentity(normalized));
+
+  const bestOfMatch = normalized.match(
+    /^(.+?)\s*[-–—:]\s*(?:the\s+)?best\s+of\s+(.+)$/i
+  );
+
+  if (bestOfMatch?.[1]) {
+    identities.add(normalizeMoshtixIdentity(bestOfMatch[1]));
+  }
+
+  if (bestOfMatch?.[2]) {
+    identities.add(normalizeMoshtixIdentity(bestOfMatch[2]));
+  }
+
+  const descriptorStripped = normalizeWhitespace(
+    normalized.replace(
+      /\s+(?:unplugged|tribute(?:\s+show)?|show|experience|story|celebration)\b.*$/i,
+      ""
+    )
+  );
+
+  if (descriptorStripped && descriptorStripped !== normalized) {
+    identities.add(normalizeMoshtixIdentity(descriptorStripped));
+  }
+}
+
+function filterMoshtixPresentedShowArtists(
+  artists: string[],
+  presentedShow: MoshtixPresentedShow | null
+): string[] {
+  if (!presentedShow) {
+    return artists;
+  }
+
+  const presenterIdentity = normalizeMoshtixIdentity(presentedShow.presenter);
+  const promotionalIdentities = new Set<string>();
+  addMoshtixShowTitleIdentities(promotionalIdentities, presentedShow.showTitle);
+
+  for (const artist of artists) {
+    const match = artist.match(MOSHTIX_TITLE_PRESENTS_PATTERN);
+
+    if (
+      match?.[1] &&
+      match[2] &&
+      normalizeMoshtixIdentity(match[1]) === presenterIdentity
+    ) {
+      promotionalIdentities.add(normalizeMoshtixIdentity(artist));
+      addMoshtixShowTitleIdentities(promotionalIdentities, match[2]);
+    }
+  }
+
+  return artists.filter((artist) => {
+    const identity = normalizeMoshtixIdentity(artist);
+    return identity === presenterIdentity || !promotionalIdentities.has(identity);
+  });
+}
+
 function extractProminentDescriptionLines(descriptionHtml: string | null | undefined): string[] {
   if (!descriptionHtml) {
     return [];
@@ -451,7 +562,47 @@ function extractProminentDescriptionLines(descriptionHtml: string | null | undef
     .filter(Boolean);
 }
 
-function parseMoshtixTitleArtists(title: string): string[] {
+function extractMoshtixPerformerCreditLines(
+  descriptionHtml: string | null | undefined
+): string[] {
+  if (!descriptionHtml) {
+    return [];
+  }
+
+  const $ = cheerio.load(`<div data-moshtix-description-root>${descriptionHtml}</div>`);
+  const root = $("[data-moshtix-description-root]").first();
+  const lines: string[] = [];
+
+  root.find("br").replaceWith("\n");
+  root.children().each((_, element) => {
+    for (const value of $(element).text().split(/\n+/)) {
+      const line = normalizeWhitespace(value);
+
+      if (line) {
+        lines.push(line);
+      }
+    }
+  });
+
+  return lines;
+}
+
+function parseMoshtixPerformerCreditLine(line: string): string | null {
+  const match = line.match(MOSHTIX_PERFORMER_CREDIT_LINE_PATTERN);
+
+  if (!match?.[1]) {
+    return null;
+  }
+
+  const artist = normalizeMoshtixArtistToken(match[1]);
+
+  return artist && !MOSHTIX_PLACEHOLDER_ARTIST_PATTERN.test(artist) ? artist : null;
+}
+
+function parseMoshtixTitleArtists(
+  title: string,
+  presentedShow: MoshtixPresentedShow | null = null
+): string[] {
   const normalized = normalizeTitle(title);
 
   if (!normalized) {
@@ -471,6 +622,10 @@ function parseMoshtixTitleArtists(title: string): string[] {
   if (playedByMatch?.[1]) {
     candidates.push(...splitMoshtixArtistList(playedByMatch[1]));
     return candidates;
+  }
+
+  if (presentedShow) {
+    return [presentedShow.presenter];
   }
 
   const supportMatch = normalized.match(MOSHTIX_TITLE_SUPPORT_PATTERN);
@@ -550,12 +705,21 @@ function parseMoshtixDescriptionArtists(descriptionHtml: string | null | undefin
       break;
     }
 
+    const lineupMatch = line.match(MOSHTIX_DESCRIPTION_LINEUP_PATTERN);
+    if (lineupMatch?.[1]) {
+      candidates.push(...splitMoshtixArtistList(lineupMatch[1]));
+    }
+
     const isDjLine = MOSHTIX_DJ_LINE_PATTERN.test(line);
 
     if (!isDjLine && line !== line.replace(MOSHTIX_TIME_SUFFIX_PATTERN, "")) {
-      candidates.push(
-        ...splitMoshtixArtistList(line.replace(MOSHTIX_TIME_SUFFIX_PATTERN, ""))
+      const timedArtistLine = normalizeMoshtixArtistToken(
+        line.replace(MOSHTIX_TIME_SUFFIX_PATTERN, "")
       );
+
+      if (!MOSHTIX_NON_ARTIST_SCHEDULE_LABEL_PATTERN.test(timedArtistLine)) {
+        candidates.push(...splitMoshtixArtistList(timedArtistLine));
+      }
     }
 
     candidates.push(...parseMoshtixDjLine(line));
@@ -582,6 +746,14 @@ function parseMoshtixDescriptionArtists(descriptionHtml: string | null | undefin
     const djLaunchesMatch = line.match(MOSHTIX_DJ_LAUNCHES_PATTERN);
     if (djLaunchesMatch) {
       candidates.push(normalizeMoshtixArtistToken(djLaunchesMatch[1]));
+    }
+  }
+
+  for (const line of extractMoshtixPerformerCreditLines(descriptionHtml)) {
+    const artist = parseMoshtixPerformerCreditLine(line);
+
+    if (artist) {
+      candidates.push(artist);
     }
   }
 
@@ -791,7 +963,7 @@ export function extractMoshtixArtists(input: {
     return isVenueArtist(artist) || normalized.includes("homepage gallery");
   };
 
-  const candidates = [
+  const rawCandidates = [
     ...(input.eventData?.artists ?? []),
     ...((input.structuredEvent?.performers ?? []).map((performer) => performer.name ?? ""))
   ]
@@ -799,7 +971,25 @@ export function extractMoshtixArtists(input: {
     .filter(Boolean)
     .filter((artist) => !isNoisyArtist(artist));
 
-  const parsedTitleCandidates = parseMoshtixTitleArtists(input.title);
+  const parsedPresentedShow = parseMoshtixPresentedShow(input.title);
+  const acceptedPresentedShow =
+    parsedPresentedShow &&
+    (rawCandidates.length === 0 ||
+      rawCandidates.some(
+        (artist) =>
+          normalizeMoshtixIdentity(artist) ===
+          normalizeMoshtixIdentity(parsedPresentedShow.presenter)
+      ))
+      ? parsedPresentedShow
+      : null;
+  const candidates = filterMoshtixPresentedShowArtists(
+    rawCandidates,
+    acceptedPresentedShow
+  );
+  const parsedTitleCandidates = parseMoshtixTitleArtists(
+    input.title,
+    acceptedPresentedShow
+  );
   const parsedDescriptionCandidates = parseMoshtixDescriptionArtists(input.descriptionHtml);
   const parsedCandidates = [...parsedTitleCandidates, ...parsedDescriptionCandidates]
     .map((artist) => normalizeWhitespace(artist))

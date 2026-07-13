@@ -22,7 +22,8 @@ import {
 } from "./image-mirror";
 import {
   normalizeArtistNames,
-  selectCanonicalArtistNames
+  selectCanonicalArtistNames,
+  selectPreferredArtistDisplayName
 } from "./artist-utils";
 import { retryTransientSupabaseOperation } from "./supabase-retry";
 import type {
@@ -2044,6 +2045,26 @@ export class SupabaseGigStore implements GigStore {
         uniqueArtistsBySlug.set(artistSlug, artist);
       }
 
+      const artistSlugs = [...uniqueArtistsBySlug.keys()];
+      const existingArtistNamesBySlug = new Map<string, string>();
+
+      if (artistSlugs.length > 0) {
+        const { data, error } = await this.client
+          .from("artists")
+          .select("name, slug")
+          .in("slug", artistSlugs);
+
+        if (error) {
+          throw new Error(
+            `Unable to load existing artists: ${error.message ?? "unknown error"}`
+          );
+        }
+
+        for (const artist of (data as ArtistNameRow[] | null) ?? []) {
+          existingArtistNamesBySlug.set(artist.slug, artist.name);
+        }
+      }
+
       const { error: deleteError } = await this.client
         .from("gig_artists")
         .delete()
@@ -2060,11 +2081,15 @@ export class SupabaseGigStore implements GigStore {
       const artistRows: ArtistRow[] = [];
 
       for (const [artistSlug, artistName] of uniqueArtistsBySlug.entries()) {
+        const preferredArtistName = selectPreferredArtistDisplayName(
+          existingArtistNamesBySlug.get(artistSlug),
+          artistName
+        );
         const { data, error } = await this.client
           .from("artists")
           .upsert(
             {
-              name: artistName,
+              name: preferredArtistName,
               slug: artistSlug
             },
             { onConflict: "slug" }

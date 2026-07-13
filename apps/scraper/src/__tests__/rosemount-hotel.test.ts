@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { JsonObject } from "@perth-gig-finder/shared";
+
 import {
   extractRosemountSearchConfig,
   normalizeRosemountHit,
@@ -127,6 +129,63 @@ describe("rosemount hotel source adapter", () => {
       "GR33DY GR33N",
       "Lill Miss JoJo"
     ]);
+  });
+
+  it("normalizes and repairs semicolon-separated Rosemount support lineups", () => {
+    const hit = createRosemountHit({
+      EventGuid: "e6bd9f3c-80c3-4419-b308-8065fe1d01c0",
+      EventName: "Jessica Blackley More Than This Single Launch",
+      Bands: ["Jessica Blackley"],
+      Performances: [],
+      SpecialGuests: "Sleepy Soph; Bella Dyer; Jessica Blackley",
+      Venue: {
+        Name: "Four5Nine Bar",
+        Address: "Rosemount Hotel, 459 Fitzgerald St",
+        Locality: "North Perth",
+        State: "WA"
+      }
+    });
+
+    expect(normalizeRosemountHit(hit).artists).toEqual([
+      "Jessica Blackley",
+      "Sleepy Soph",
+      "Bella Dyer"
+    ]);
+    const storedPayload = JSON.parse(JSON.stringify(hit)) as JsonObject;
+
+    expect(rosemountHotelSource.repairArtists?.(storedPayload)).toEqual({
+      artists: ["Jessica Blackley", "Sleepy Soph", "Bella Dyer"],
+      artistExtractionKind: "structured"
+    });
+  });
+
+  it("normalizes and repairs Oxford-conjunction Rosemount lineups", () => {
+    const hit = createRosemountHit({
+      EventGuid: "3f60aad9-759c-480f-a160-08c523da136c",
+      EventName: "Jam Night Anthems",
+      Bands: [],
+      Performances: [],
+      SpecialGuests:
+        "With Chaos Surfers, Jewels and Bullets, Awkward Moments, Urban Hymns, & Bat Soup"
+    });
+    const expectedArtists = [
+      "Chaos Surfers",
+      "Jewels",
+      "Bullets",
+      "Awkward Moments",
+      "Urban Hymns",
+      "Bat Soup"
+    ];
+
+    expect(normalizeRosemountHit(hit).artists).toEqual(expectedArtists);
+    expect(
+      rosemountHotelSource.repairArtists?.(
+        JSON.parse(JSON.stringify(hit)) as JsonObject
+      )
+    ).toEqual({
+      artists: expectedArtists,
+      artistExtractionKind: "parsed_text"
+    });
   });
 
   it("drops Rosemount placeholder artist names from Oztix payloads", () => {

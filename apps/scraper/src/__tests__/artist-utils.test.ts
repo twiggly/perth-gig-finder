@@ -4,6 +4,7 @@ import {
   createArtistExtraction,
   normalizeArtistNames,
   selectCanonicalArtistNames,
+  selectPreferredArtistDisplayName,
   unknownArtistExtraction
 } from "../artist-utils";
 
@@ -39,6 +40,20 @@ describe("artist utils", () => {
       "AC/DC",
       "The Aquabats!"
     ]);
+  });
+
+  it("prefers mixed-case display names over all-caps variants", () => {
+    expect(
+      selectPreferredArtistDisplayName("Adam Lebransky", "ADAM LEBRANSKY")
+    ).toBe("Adam Lebransky");
+    expect(
+      selectPreferredArtistDisplayName("ADAM LEBRANSKY", "Adam Lebransky")
+    ).toBe("Adam Lebransky");
+  });
+
+  it("keeps all-caps artist names without mixed-case evidence", () => {
+    expect(selectPreferredArtistDisplayName(null, "AMMIFY")).toBe("AMMIFY");
+    expect(selectPreferredArtistDisplayName("AMMIFY", "AMMIFY")).toBe("AMMIFY");
   });
 
   it("drops placeholder artist names before public artist sync", () => {

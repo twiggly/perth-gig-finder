@@ -282,6 +282,9 @@ describe("oztix wa source adapter", () => {
     expect(parseOztixSpecialGuests("with DJ SWEETMAN")).toEqual(["DJ SWEETMAN"]);
     expect(parseOztixSpecialGuests("w/ Saving Face")).toEqual(["Saving Face"]);
     expect(parseOztixSpecialGuests("w/Saving Face")).toEqual(["Saving Face"]);
+    expect(
+      parseOztixSpecialGuests("Sleepy Soph; Bella Dyer; Jessica Blackley")
+    ).toEqual(["Sleepy Soph", "Bella Dyer", "Jessica Blackley"]);
     expect(parseOztixSpecialGuests("with a special guest to be announced")).toEqual([]);
     expect(parseOztixSpecialGuests("special guest to be announced")).toEqual([]);
     expect(parseOztixSpecialGuests("guest TBA")).toEqual([]);
@@ -318,6 +321,24 @@ describe("oztix wa source adapter", () => {
       "Misery Inc",
       "Zaria"
     ]);
+    expect(
+      parseOztixSpecialGuests(
+        "With Chaos Surfers, Jewels and Bullets, Awkward Moments, Urban Hymns, & Bat Soup"
+      )
+    ).toEqual([
+      "Chaos Surfers",
+      "Jewels",
+      "Bullets",
+      "Awkward Moments",
+      "Urban Hymns",
+      "Bat Soup"
+    ]);
+    expect(
+      parseOztixSpecialGuests("Artist One, Artist Two, & Artist Three")
+    ).toEqual(["Artist One", "Artist Two", "Artist Three"]);
+    expect(
+      parseOztixSpecialGuests("Artist One, Artist Two, and Artist Three")
+    ).toEqual(["Artist One", "Artist Two", "Artist Three"]);
     expect(parseOztixSpecialGuests("CNTR & Somerly")).toEqual(["CNTR", "Somerly"]);
     expect(parseOztixSpecialGuests("with Pontianak & MOT1SS")).toEqual([
       "Pontianak",
@@ -370,6 +391,21 @@ describe("oztix wa source adapter", () => {
       ],
       artistExtractionKind: "parsed_text"
     });
+
+    expect(
+      extractOztixArtists({
+        EventName: '"Velvet Grooves"',
+        SpecialGuests:
+          "feat. Slack Rapids + Adam Lebransky + Clean Tones + Spatula City",
+        EventDescription:
+          "Velvet Grooves featuring Slack Rapids, Adam Lebransky, Clean Tones and Spatula City.",
+        Bands: [],
+        Performances: []
+      })
+    ).toEqual({
+      artists: ["Slack Rapids", "Adam Lebransky", "Clean Tones", "Spatula City"],
+      artistExtractionKind: "parsed_text"
+    });
   });
 
   it("does not treat Oztix theme labels as artists", () => {
@@ -412,6 +448,88 @@ describe("oztix wa source adapter", () => {
     ).toEqual({
       artists: ["Felicity Urquhart", "Josh Cunningham", "Codee-lee"],
       artistExtractionKind: "structured"
+    });
+
+    expect(
+      extractOztixArtists({
+        EventName: "Jessica Blackley More Than This Single Launch",
+        Bands: ["Jessica Blackley"],
+        Performances: [],
+        SpecialGuests: "Sleepy Soph; Bella Dyer; Jessica Blackley"
+      })
+    ).toEqual({
+      artists: ["Jessica Blackley", "Sleepy Soph", "Bella Dyer"],
+      artistExtractionKind: "structured"
+    });
+
+    expect(
+      extractOztixArtists({
+        EventName: "(Artificial) Nights band launch",
+        Bands: ["(Artificial) Nights"],
+        Performances: [],
+        SpecialGuests:
+          "(Artificial) Nights; Lake Mammoth; Stack of Bibles; Indi Steedman"
+      })
+    ).toEqual({
+      artists: [
+        "(Artificial) Nights",
+        "Lake Mammoth",
+        "Stack of Bibles",
+        "Indi Steedman"
+      ],
+      artistExtractionKind: "structured"
+    });
+  });
+
+  it("does not split semicolon-delimited event description prose into artists", () => {
+    expect(
+      extractOztixArtists({
+        EventName: "Community Showcase",
+        Bands: [],
+        Performances: [],
+        SpecialGuests: "",
+        EventDescription:
+          "Doors open at seven; food is available; arrive early for the best seats."
+      })
+    ).toEqual({
+      artists: [],
+      artistExtractionKind: "unknown"
+    });
+  });
+
+  it("repairs semicolon-separated Oztix special guests from stored payloads", () => {
+    expect(
+      oztixWaSource.repairArtists?.({
+        EventName: "Jessica Blackley More Than This Single Launch",
+        Bands: ["Jessica Blackley"],
+        Performances: [],
+        SpecialGuests: "Sleepy Soph; Bella Dyer; Jessica Blackley"
+      })
+    ).toEqual({
+      artists: ["Jessica Blackley", "Sleepy Soph", "Bella Dyer"],
+      artistExtractionKind: "structured"
+    });
+  });
+
+  it("repairs Oxford-conjunction Oztix lineups from stored payloads", () => {
+    expect(
+      oztixWaSource.repairArtists?.({
+        EventName: "Jam Night Anthems",
+        Bands: [],
+        Performances: [],
+        SpecialGuests:
+          "With Chaos Surfers, Jewels and Bullets, Awkward Moments, Urban Hymns, & Bat Soup"
+      })
+    ).toEqual({
+      artists: [
+        "Chaos Surfers",
+        "Jewels",
+        "Bullets",
+        "Awkward Moments",
+        "Urban Hymns",
+        "Bat Soup"
+      ],
+      artistExtractionKind: "parsed_text"
     });
   });
 
