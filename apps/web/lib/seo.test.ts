@@ -6,6 +6,8 @@ import {
   buildSitemap,
   buildSiteStructuredData,
   buildSiteStructuredDataJson,
+  HOMEPAGE_TITLE,
+  SITE_DESCRIPTION,
   SITE_LOGO_URL,
   SITE_SEARCH_URL_TEMPLATE,
   SITE_SITEMAP_URL,
@@ -14,6 +16,14 @@ import {
 } from "./seo";
 
 describe("SEO helpers", () => {
+  it("defines the preferred homepage search metadata without changing the brand", () => {
+    expect(HOMEPAGE_TITLE).toBe("Live Music in Perth (Boorloo)");
+    expect(SITE_DESCRIPTION).toBe(
+      "Discover upcoming live music events across Perth (Boorloo)."
+    );
+    expect(SITE_TITLE).toBe("Gig Radar");
+  });
+
   it("builds robots config for public crawl with API routes excluded", () => {
     expect(buildRobotsConfig()).toEqual({
       rules: {
@@ -53,6 +63,7 @@ describe("SEO helpers", () => {
       expect.objectContaining({
         "@id": `${SITE_URL}/#website`,
         "@type": "WebSite",
+        description: SITE_DESCRIPTION,
         name: SITE_TITLE,
         potentialAction: expect.objectContaining({
           "@type": "SearchAction",

@@ -5,8 +5,9 @@ import { serializeJsonLd } from "./json-ld";
 
 export const SITE_URL = "https://gigradar.com.au";
 export const SITE_TITLE = "Gig Radar";
+export const HOMEPAGE_TITLE = "Live Music in Perth (Boorloo)";
 export const SITE_DESCRIPTION =
-  "A local-first gig guide for Perth, built from normalized venue listings.";
+  "Discover upcoming live music events across Perth (Boorloo).";
 export const SITE_LOGO_PATH = "/logo.png";
 export const SITE_FAVICON_PATH = "/favicon.svg";
 export const SITE_LOGO_WIDTH = 196;
