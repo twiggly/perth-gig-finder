@@ -1,0 +1,921 @@
+import { normalizeWhitespace } from "@perth-gig-finder/shared";
+
+import {
+  createArtistExtraction,
+  preferArtistDisplayNamesFromTitle
+} from "../../artist-utils";
+import {
+  createBlockHtmlTextContext,
+  type HtmlTextContext
+} from "../../source-utils/html-text";
+import { normalizeOztixTitle } from "./title";
+import type { OztixHit } from "./types";
+
+const SPECIAL_GUEST_PREFIX_PATTERN =
+  /^(?:with|plus)?\s*specials? guests?[:,]?\s*|^(?:with|plus)\s+guests?[:,]?\s*|^w[/.]\s*|^(?:with|plus)\s+|^starring\s+|^featuring\s+|^feat\.?\s+|^ft\.?\s+/i;
+const GENERIC_SPECIAL_GUEST_PATTERN =
+  /^(?:(?:a|an)\s+)?(?:specials?\s+)?guests?\s*(?:to be announced|tba|tbc)?[!.]?$|^(?:(?:local|more|additional|specials?)\s+)*(?:support|supports|support acts?)\s*(?:to be announced|tba|tbc)?[!.]?$|^(?:(?:top\s+)?secret|mystery)\s+(?:act|artist|guest|set)s?[!.]?$|^(?:more|more\s+(?:acts?|artists?|guests?))[!.]?$|^(?:tba|tbc|to be announced|more\s+(?:tba|tbc|to be announced)|more to be announced)[!.]?$|^(?:past|present(?:\s+members?)?)$/i;
+const SPECIAL_GUEST_SEPARATOR_PATTERN = /\s*(?:,|\+|\^|\||[•·]|\s-\s)\s*/u;
+const SPECIAL_GUEST_TOUR_LEAD_IN_PATTERN =
+  /^.+?\b(?:tour|single|album|ep|launch|show)\b\s+with\s+specials? guests?[:,]?\s+/i;
+const TITLE_FEATURED_ARTIST_PATTERN =
+  /\b(?:ft\.?|feat\.?|featuring)\s+(.+)$/i;
+const TITLE_PRESENTED_ARTIST_PATTERN =
+  /^.{1,80}?\bpresents:\s+(.+)$/i;
+const TITLE_QUOTED_TOUR_HEADLINER_PATTERN =
+  /^(.+?)\s+(?:"[^"]+"|'[^']+'|“[^”]+”|‘[^’]+’)$/;
+const TITLE_DASH_RELEASE_LAUNCH_HEADLINER_PATTERN =
+  /^(.+?)\s+[-–—]\s+.+?\b(?:single|album|ep|cd)\s+launch$/i;
+const TITLE_QUOTED_RELEASE_LAUNCH_HEADLINER_PATTERN =
+  /^(.+?)\s+(?:"[^"]+"|'[^']+'|“[^”]+”|‘[^’]+’)\s+(?:(?:single|album|ep|cd)\s+)?launch$/i;
+const TITLE_QUOTED_TRAILING_WITH_ARTIST_PATTERN =
+  /^.+?\s+(?:"[^"]+"|'[^']+'|“[^”]+”|‘[^’]+’)\s+with\s+(.+)$/i;
+const TITLE_TRIBUTE_SUBJECT_PATTERN =
+  /^(.+?)\s+the\s+australian\s+tribute\b/i;
+const TITLE_TRIBUTE_TO_SUBJECT_PATTERN =
+  /\b(?:a\s+)?tribute\s+to\s+(.+?)(?:\s+(?:ft\.?|feat\.?|featuring|with)\b|$)/i;
+const TITLE_SLASH_TRIBUTE_SUBJECT_PATTERN =
+  /^(.+?)\s+tribute(?:\s+(?:night|show))?\b/i;
+const TITLE_HEADLINER_SEPARATOR_PATTERN = /\s[-–—:]\s|[,+]/;
+const OZTIX_NOISY_ARTIST_FRAGMENT_PATTERN =
+  /^(?:djs?\s+playing\s+the\s+best\s+of\b.*|support\s+set\s+of\b.*|the\s+greatest\s+emo|metalcore|alternative\s+tracks\s+of\s+all\s+time\b.*|hlh\/dod\s+after\s+party!?|friday\s+fright\s+night|past|present(?:\s+members?)?|.+\btour\b\s*[‘’'"\d].*)$/i;
+const OZTIX_GENERIC_ARTIST_TOKEN_PATTERN =
+  /^(?:djs?|band|live\s+abba\s+tribute\s+act|.+\btribute\s+set)$/i;
+const OZTIX_TITLE_LINEUP_NOISE_PATTERN =
+  /\b(?:party|night|brunch|rave|session|sessions|tribute|show|festival|all-?dayer|experience|appreciation|karaoke|worship|launch|single|album|tour|tickets?|pres\.?|presented|presents?|vs)\b/i;
+const ARTIST_LOCATION_SUFFIX_PATTERN =
+  /\s*\((?:wa|nsw|vic|qld|sa|tas|nt|act|australia|aus|nz|usa|uk|eng|swe|ger|deu|jpn|can|ire|irl|sco|fra|ita|esp|nl|nld)\)\s*$/gi;
+const OZTIX_ARTIST_DESCRIPTOR_PARENTHESES_PATTERN =
+  /\s*\((?:(?:solo|performing|tribute|acoustic|dj\s*set|support|debut(?:\s+show)?)\b[^)]*|[^)]{1,50}\btribute)\)\s*/gi;
+const OZTIX_ARTIST_MUSIC_OF_SUFFIX_PATTERN =
+  /\s+(?:&|and)\s+the\s+music\s+of\b.*$/i;
+const LEETSPEAK_ARTIST_CHARACTERS: Record<string, string> = {
+  "0": "o",
+  "1": "i",
+  "3": "e",
+  "4": "a",
+  "5": "s",
+  "7": "t"
+};
+
+export function collectNamedArtists(
+  hit: OztixHit,
+  descriptionArtists: string[]
+): string[] {
+  const fromBands = Array.isArray(hit.Bands) ? hit.Bands : [];
+  const fromPerformances = Array.isArray(hit.Performances)
+    ? hit.Performances.map((performance) => performance.Name ?? "")
+    : [];
+  const fromTourName = hit.TourName ? [hit.TourName] : [];
+  const fromSpecialGuests = parseOztixSpecialGuests(hit.SpecialGuests);
+  const fromTitleFeatured = parseOztixTitleFeaturedArtists(hit.EventName);
+  const fromTitlePresented = parseOztixTitlePresentedArtists(hit.EventName);
+  const fromTitleTrailingWith = parseOztixTitleTrailingWithArtists(hit.EventName);
+  const fromTitleHeadliner =
+    fromBands.length === 0 && fromPerformances.length === 0
+      ? parseOztixTitleHeadlinerArtists(hit.EventName)
+      : [];
+
+  return [
+    ...[...fromBands, ...fromPerformances, ...fromTourName].flatMap(splitOztixStructuredArtist),
+    ...fromTitleHeadliner,
+    ...fromTitlePresented,
+    ...fromTitleTrailingWith,
+    ...fromSpecialGuests,
+    ...descriptionArtists,
+    ...fromTitleFeatured
+  ]
+    .map((artist) => normalizeWhitespace(artist))
+    .filter(Boolean);
+}
+export function collectStructuredArtists(hit: OztixHit): string[] {
+  const fromBands = Array.isArray(hit.Bands) ? hit.Bands : [];
+  const fromPerformances = Array.isArray(hit.Performances)
+    ? hit.Performances.map((performance) => performance.Name ?? "")
+    : [];
+
+  return [...fromBands, ...fromPerformances]
+    .flatMap(splitOztixStructuredArtist)
+    .filter(Boolean);
+}
+
+function stripOztixArtistPrefix(value: string): string {
+  let normalized = normalizeWhitespace(value);
+
+  while (SPECIAL_GUEST_PREFIX_PATTERN.test(normalized)) {
+    normalized = normalizeWhitespace(normalized.replace(SPECIAL_GUEST_PREFIX_PATTERN, ""));
+  }
+
+  return normalized;
+}
+
+function cleanOztixArtistToken(value: string): string {
+  let normalized = stripOztixArtistPrefix(value)
+    .replace(OZTIX_ARTIST_MUSIC_OF_SUFFIX_PATTERN, "")
+    .replace(OZTIX_ARTIST_DESCRIPTOR_PARENTHESES_PATTERN, "")
+    .replace(/^["'“”‘’]+|["'“”‘’]+$/g, "");
+  const performedByMatch = normalized.match(/^performed\s+by\s+(.+?)(?:\s*\/\s*.+)?$/i);
+
+  if (performedByMatch?.[1]) {
+    normalized = performedByMatch[1];
+  }
+
+  return normalizeWhitespace(normalized);
+}
+
+function normalizeSpecialGuestToken(value: string): string {
+  const periodSeparators = value.match(/\.\s+(?=[\p{L}\d])/gu) ?? [];
+  const periodNormalized =
+    periodSeparators.length >= 2
+      ? value.replace(/\.\s+(?=[\p{L}\d])/gu, ", ")
+      : value;
+
+  return stripOztixArtistPrefix(
+    periodNormalized
+      .replace(SPECIAL_GUEST_TOUR_LEAD_IN_PATTERN, "")
+      .replace(/\s*;\s*/g, ", ")
+      .replace(/\s*(?:\.|;)\s*(?:with\s+)?supports?\s+from\s+/gi, ", ")
+      .replace(/\b(?:with\s+)?supports?\s+from\s+/gi, ", ")
+      .replace(
+        /\s+-\s+(?:a\s+)?tribute\s+to\s+[^,&+|]+?\s+(?:&|and)\s+/gi,
+        ", "
+      )
+      .replace(/\s+-\s+(?:a\s+)?tribute\s+to\s+[^,&+|]+$/gi, "")
+  ).replace(/\s+and\s+/gi, ", ");
+}
+
+function removeExactStructuredArtistTokens(
+  value: string | null | undefined,
+  structuredArtists: string[]
+): string {
+  const normalized = normalizeWhitespace(value ?? "");
+
+  if (!normalized || structuredArtists.length === 0) {
+    return normalized;
+  }
+
+  const structuredIdentities = new Set(structuredArtists.map(normalizeArtistIdentity));
+  const segments = normalized.split(SPECIAL_GUEST_SEPARATOR_PATTERN);
+
+  if (segments.length < 2) {
+    return normalized;
+  }
+
+  const filteredSegments = segments.filter(
+      (segment) =>
+        !structuredIdentities.has(
+          normalizeArtistIdentity(cleanOztixArtistToken(segment))
+        )
+    );
+
+  if (filteredSegments.length === segments.length) {
+    return normalized;
+  }
+
+  return filteredSegments.length > 0
+    ? `with special guests ${filteredSegments.join(", ")}`
+    : "";
+}
+
+export function parseOztixSpecialGuests(value: string | null | undefined): string[] {
+  const rawValue = normalizeWhitespace(value ?? "");
+  const hasExplicitLineupPrefix =
+    SPECIAL_GUEST_PREFIX_PATTERN.test(rawValue) ||
+    SPECIAL_GUEST_TOUR_LEAD_IN_PATTERN.test(rawValue);
+  const normalized = normalizeSpecialGuestToken(rawValue).replace(
+    /\)\s+(?=[A-Z0-9][A-Z0-9 "'&!./:-]{0,80}\([A-Z]{2,}\))/g,
+    "), "
+  );
+
+  if (!normalized) {
+    return [];
+  }
+
+  return createArtistExtraction(
+    splitOztixArtistList(normalized, { forceAmpersandSplit: hasExplicitLineupPrefix }),
+    "parsed_text"
+  ).artists;
+}
+
+interface OztixDescriptionLineupPattern {
+  pattern: RegExp;
+  forceAmpersandSplit?: boolean;
+  minimumCommaCount?: number;
+}
+
+const OZTIX_EVENT_LINEUP_HEADING_PATTERN =
+  /^(?!.*\bcurrent\s+line\s*up\b)(?:[\p{L}\p{N}][\p{L}\p{N} '&-]{0,60}\s+)?line\s*up\s*:?$/iu;
+const OZTIX_EVENT_LINEUP_STOP_PATTERN =
+  /\b(?:about these|more about|current line\s*up|doors?|presented by|set times?|tickets?|venue)\b/i;
+const OZTIX_EVENT_LINEUP_DESCRIPTOR_SUFFIX_PATTERN =
+  /\s+[-–—]\s+first time ever in perth\b.*$/i;
+const OZTIX_ROLE_CREDIT_SUFFIX_PATTERN =
+  /\s+[-–—]\s+(?:bass|drums?|guitars?|keys?|keyboards?|vocals?)\b/i;
+const OZTIX_ALBUM_LAUNCH_FEATURE_PATTERN =
+  /\bthe album launch will also feature\s+(?:perth\s+)?singer-songwriter\s+(.+?)\s+and\s+(?:alternative\s+r&b\s*\/\s*electronic\s+neo-soul\s+)?band\s+(.+?)(?:,\s+celebrating\b|[.!]|$)/i;
+
+const OZTIX_DESCRIPTION_LINEUP_PATTERNS: OztixDescriptionLineupPattern[] = [
+  {
+    pattern:
+      /\ball shows will be supported by\s+(.+?)(?:,\s+with\s+new zealand\b|[.!]|$)/i
+  },
+  {
+    pattern:
+      /\bfeaturing live performances? from\s+(.+?)(?:,\s+this\b|[.!]|$)/i
+  },
+  {
+    pattern: /\bjoin\s+(.+?)\s+as they\b/i,
+    minimumCommaCount: 2
+  },
+  {
+    pattern:
+      /\bsupported by (?:incredible local bands?|the wonderful)\s+(.+?)(?:,\s+(?:this|troubadour)\b|[.!]|$)/i
+  },
+  {
+    pattern: /(?:^|[.!?]\s+)with special guests?\s+(.+?)(?:[.!]|$)/i,
+    forceAmpersandSplit: true
+  },
+  {
+    pattern: /^[^\p{L}\p{N}]{0,8}live:\s*(.+)$/iu
+  }
+];
+
+function normalizeOztixEventLineupArtist(value: string): string {
+  return cleanOztixArtistToken(
+    normalizeWhitespace(
+      value.replace(OZTIX_EVENT_LINEUP_DESCRIPTOR_SUFFIX_PATTERN, "")
+    ).replace(ARTIST_LOCATION_SUFFIX_PATTERN, "")
+  );
+}
+
+function isLikelyOztixEventLineupArtist(value: string): boolean {
+  const normalized = normalizeOztixEventLineupArtist(value);
+
+  return Boolean(
+    normalized &&
+      normalized.length <= 80 &&
+      normalized.split(/\s+/).length <= 10 &&
+      !/[.!?]$/.test(normalized) &&
+      !OZTIX_EVENT_LINEUP_STOP_PATTERN.test(normalized) &&
+      !OZTIX_ROLE_CREDIT_SUFFIX_PATTERN.test(value) &&
+      !GENERIC_SPECIAL_GUEST_PATTERN.test(normalized) &&
+      isLikelyOztixArtistName(normalized)
+  );
+}
+
+function parseOztixEventLineupBlocks(
+  descriptionContext: HtmlTextContext
+): string[] {
+  const lines = descriptionContext.lines;
+  const artists: string[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!OZTIX_EVENT_LINEUP_HEADING_PATTERN.test(lines[index] ?? "")) {
+      continue;
+    }
+
+    const blockArtists: string[] = [];
+
+    for (
+      let candidateIndex = index + 1;
+      candidateIndex < lines.length && candidateIndex <= index + 30;
+      candidateIndex += 1
+    ) {
+      const candidateLine = lines[candidateIndex] ?? "";
+
+      if (!isLikelyOztixEventLineupArtist(candidateLine)) {
+        break;
+      }
+
+      blockArtists.push(normalizeOztixEventLineupArtist(candidateLine));
+    }
+
+    if (blockArtists.length >= 2) {
+      artists.push(...blockArtists);
+    }
+  }
+
+  return artists;
+}
+
+function parseOztixAlbumLaunchBillingArtists(
+  descriptionContext: HtmlTextContext
+): string[] {
+  const description = descriptionContext.plainText;
+  const match = description?.match(OZTIX_ALBUM_LAUNCH_FEATURE_PATTERN);
+
+  if (!match?.[1] || !match[2]) {
+    return [];
+  }
+
+  return [match[1], match[2]]
+    .map(cleanOztixArtistToken)
+    .filter((artist) => isLikelyOztixArtistName(artist));
+}
+
+export function parseOztixDescriptionArtists(
+  descriptionHtml: string | null | undefined
+): string[] {
+  return parseOztixDescriptionArtistsFromContext(
+    createBlockHtmlTextContext(descriptionHtml)
+  );
+}
+
+export function parseOztixDescriptionArtistsFromContext(
+  descriptionContext: HtmlTextContext
+): string[] {
+  const artists: string[] = [
+    ...parseOztixEventLineupBlocks(descriptionContext),
+    ...parseOztixAlbumLaunchBillingArtists(descriptionContext)
+  ];
+
+  for (const line of descriptionContext.lines) {
+    for (const {
+      pattern,
+      forceAmpersandSplit,
+      minimumCommaCount = 0
+    } of OZTIX_DESCRIPTION_LINEUP_PATTERNS) {
+      const match = line.match(pattern);
+      const lineup = normalizeWhitespace(match?.[1] ?? "");
+      const commaCount = lineup.match(/,/g)?.length ?? 0;
+
+      if (!lineup || commaCount < minimumCommaCount) {
+        continue;
+      }
+
+      const hasListSeparator = /[,;+]/u.test(lineup);
+      artists.push(
+        ...splitOztixArtistList(lineup, {
+          forceAmpersandSplit: forceAmpersandSplit || hasListSeparator,
+          splitWordConjunctions: hasListSeparator
+        })
+      );
+    }
+  }
+
+  return createArtistExtraction(artists, "parsed_text").artists;
+}
+
+function normalizeArtistIdentity(value: string): string {
+  return normalizeWhitespace(value)
+    .replace(ARTIST_LOCATION_SUFFIX_PATTERN, "")
+    .toLowerCase()
+    .replace(/[013457]/g, (character) => LEETSPEAK_ARTIST_CHARACTERS[character] ?? character)
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function isDuplicateOrCompositeOztixArtist(
+  artist: string,
+  knownArtists: string[]
+): boolean {
+  const knownArtistIdentities = new Set(
+    knownArtists
+      .map((knownArtist) => normalizeArtistIdentity(knownArtist))
+      .filter(Boolean)
+  );
+  const artistIdentity = normalizeArtistIdentity(artist);
+
+  if (!artistIdentity) {
+    return true;
+  }
+
+  if (knownArtistIdentities.has(artistIdentity)) {
+    return true;
+  }
+
+  const compositeParts = artist
+    .split(/\s+(?:&|and)\s+/i)
+    .map((part) => normalizeArtistIdentity(part))
+    .filter(Boolean);
+
+  return (
+    compositeParts.length > 1 &&
+    compositeParts.every((part) => knownArtistIdentities.has(part))
+  );
+}
+
+function splitOztixArtistList(
+  value: string,
+  options: {
+    forceAmpersandSplit?: boolean;
+    splitWordConjunctions?: boolean;
+  } = {}
+): string[] {
+  const normalized = value
+    .replace(OZTIX_ARTIST_DESCRIPTOR_PARENTHESES_PATTERN, " ")
+    .replace(/\s+plus\s+the\s+electric\s+energy\s+of\s+/gi, ", ")
+    .replace(/\s+with\s+percussion\s+by\s+/gi, ", ")
+    .replace(/\s+with\s+(?=[A-Z0-9])/gi, ", ");
+  const normalizedWithConjunctions =
+    options.splitWordConjunctions === false
+      ? normalized
+      : normalized.replace(/\s+and\s+/gi, ", ");
+  const hasExplicitListSeparator = /(?:,|\+|\^|\||[•·]|\s-\s)/u.test(
+    normalizedWithConjunctions
+  );
+
+  return normalizedWithConjunctions
+    .split(SPECIAL_GUEST_SEPARATOR_PATTERN)
+    .flatMap((token) => token.split(/\s*,\s*/))
+    .flatMap((token) =>
+      splitOztixAmpersandArtistToken(
+        stripOztixLineupConjunctionPrefix(token, hasExplicitListSeparator),
+        hasExplicitListSeparator,
+        options.forceAmpersandSplit ?? false
+      )
+    )
+    .map(cleanOztixArtistToken)
+    .filter(Boolean)
+    .filter(isLikelyOztixArtistName)
+    .filter((token) => !GENERIC_SPECIAL_GUEST_PATTERN.test(token));
+}
+
+function stripOztixLineupConjunctionPrefix(
+  value: string,
+  hasExplicitListSeparator: boolean
+): string {
+  const normalized = normalizeWhitespace(value);
+
+  if (!hasExplicitListSeparator) {
+    return normalized;
+  }
+
+  return normalizeWhitespace(normalized.replace(/^(?:&|and)\s+/i, ""));
+}
+
+function splitOztixAmpersandArtistToken(
+  value: string,
+  hasExplicitListSeparator: boolean,
+  forceAmpersandSplit: boolean
+): string[] {
+  const normalized = normalizeWhitespace(value);
+
+  if (!/\s&\s/.test(normalized)) {
+    return [normalized];
+  }
+
+  const parts = normalized
+    .split(/\s*&\s*/)
+    .map((part) => normalizeWhitespace(part))
+    .filter(Boolean);
+
+  if (parts.length < 2) {
+    return [normalized];
+  }
+
+  if (/^[A-Z0-9 '&./-]+$/.test(normalized)) {
+    return parts;
+  }
+
+  const rightPart = parts[parts.length - 1] ?? "";
+
+  if (/^the\s+/i.test(rightPart)) {
+    return [normalized];
+  }
+
+  if (forceAmpersandSplit || hasExplicitListSeparator) {
+    return parts;
+  }
+
+  const leftPart = parts[0] ?? "";
+
+  const hasStandaloneAcronymPart = parts.some((part) => /^[A-Z0-9]{2,}$/.test(part));
+
+  if (hasStandaloneAcronymPart && parts.every((part) => /^[A-Z0-9]/.test(part))) {
+    return parts;
+  }
+
+  return [normalized];
+}
+
+function splitOztixStructuredArtist(value: string | null | undefined): string[] {
+  const normalized = normalizeWhitespace(value ?? "")
+    .replace(/\s+plus\s+the\s+electric\s+energy\s+of\s+/i, ", ")
+    .replace(/\s+with\s+percussion\s+by\s+/i, ", ");
+
+  return splitOztixArtistList(normalized, { splitWordConjunctions: false });
+}
+
+function isLikelyOztixArtistName(value: string): boolean {
+  const normalized = normalizeWhitespace(value);
+
+  if (!normalized || normalized.length > 90) {
+    return false;
+  }
+
+  if (
+    OZTIX_NOISY_ARTIST_FRAGMENT_PATTERN.test(normalized) ||
+    OZTIX_GENERIC_ARTIST_TOKEN_PATTERN.test(normalized)
+  ) {
+    return false;
+  }
+
+  return !/\ball\.?\s+night\.?\s+long\b/i.test(normalized);
+}
+
+export function parseOztixTitleFeaturedArtists(
+  title: string | null | undefined
+): string[] {
+  const normalized = normalizeOztixTitle(title);
+  const match = normalized.match(TITLE_FEATURED_ARTIST_PATTERN);
+
+  if (!match?.[1]) {
+    return [];
+  }
+
+  return createArtistExtraction(splitOztixArtistList(match[1]), "parsed_text").artists;
+}
+
+export function parseOztixTitlePresentedArtists(
+  title: string | null | undefined
+): string[] {
+  const normalized = normalizeOztixTitle(title);
+  const match = normalized.match(TITLE_PRESENTED_ARTIST_PATTERN);
+
+  if (!match?.[1]) {
+    return [];
+  }
+
+  return createArtistExtraction(splitOztixArtistList(match[1]), "parsed_text").artists;
+}
+
+export function parseOztixTitleHeadlinerArtists(
+  title: string | null | undefined
+): string[] {
+  const normalized = normalizeOztixTitle(title);
+  const match =
+    normalized.match(TITLE_DASH_RELEASE_LAUNCH_HEADLINER_PATTERN) ??
+    normalized.match(TITLE_QUOTED_RELEASE_LAUNCH_HEADLINER_PATTERN) ??
+    normalized.match(TITLE_QUOTED_TOUR_HEADLINER_PATTERN);
+
+  if (!match?.[1]) {
+    return [];
+  }
+
+  const headliner = normalizeWhitespace(match[1]);
+
+  if (!headliner || TITLE_HEADLINER_SEPARATOR_PATTERN.test(headliner)) {
+    return [];
+  }
+
+  return createArtistExtraction([headliner], "parsed_text").artists;
+}
+
+export function parseOztixTitleTrailingWithArtists(
+  title: string | null | undefined
+): string[] {
+  const normalized = normalizeOztixTitle(title);
+  const match = normalized.match(TITLE_QUOTED_TRAILING_WITH_ARTIST_PATTERN);
+
+  if (!match?.[1]) {
+    return [];
+  }
+
+  return createArtistExtraction(
+    splitOztixArtistList(match[1], { forceAmpersandSplit: true }).map((artist) =>
+      normalizeWhitespace(artist.replace(ARTIST_LOCATION_SUFFIX_PATTERN, ""))
+    ),
+    "parsed_text"
+  ).artists;
+}
+
+export function parseOztixTitleLineupArtists(
+  title: string | null | undefined
+): string[] {
+  const normalized = normalizeOztixTitle(title);
+
+  if (
+    !normalized ||
+    normalized.length > 120 ||
+    !normalized.includes(",") ||
+    OZTIX_TITLE_LINEUP_NOISE_PATTERN.test(normalized)
+  ) {
+    return [];
+  }
+
+  const artists = splitOztixArtistList(normalized);
+
+  return artists.length >= 2
+    ? createArtistExtraction(artists, "parsed_text").artists
+    : [];
+}
+
+function getOztixTributeSubject(title: string | null | undefined): string | null {
+  const normalized = normalizeOztixTitle(title);
+  const match = normalized.match(TITLE_TRIBUTE_SUBJECT_PATTERN);
+
+  return match?.[1] ? normalizeWhitespace(match[1]) : null;
+}
+
+function getOztixTributeSubjects(title: string | null | undefined): string[] {
+  const subjects = [];
+  const australianTributeSubject = getOztixTributeSubject(title);
+
+  if (australianTributeSubject) {
+    subjects.push(australianTributeSubject);
+  }
+
+  const normalized = normalizeOztixTitle(title);
+  const tributeToMatch = normalized.match(TITLE_TRIBUTE_TO_SUBJECT_PATTERN);
+
+  if (tributeToMatch?.[1]) {
+    subjects.push(
+      ...tributeToMatch[1]
+        .split(/\s*(?:\/|,|\+|&|\band\b)\s*/i)
+        .map((subject) => normalizeWhitespace(subject))
+        .filter(Boolean)
+    );
+  }
+
+  const slashTributeMatch = normalized.match(TITLE_SLASH_TRIBUTE_SUBJECT_PATTERN);
+
+  if (slashTributeMatch?.[1] && slashTributeMatch[1].includes("/")) {
+    subjects.push(
+      ...slashTributeMatch[1]
+        .split(/\s*\/\s*/)
+        .map((subject) => normalizeWhitespace(subject))
+        .filter(Boolean)
+    );
+  }
+
+  return subjects;
+}
+
+function dedupeOztixArtistsByIdentity(artists: string[]): string[] {
+  const seenIdentities = new Set<string>();
+  const dedupedArtists = [];
+
+  for (const artist of artists) {
+    const identity = normalizeArtistIdentity(artist);
+
+    if (!identity || seenIdentities.has(identity)) {
+      continue;
+    }
+
+    seenIdentities.add(identity);
+    dedupedArtists.push(artist);
+  }
+
+  return dedupedArtists;
+}
+
+function orderOztixArtistsByTitleLineup(artists: string[], title: string): string[] {
+  const titleSegments = normalizeOztixTitle(title)
+    .split(/\s+\+\s+/)
+    .map((segment) =>
+      normalizeWhitespace(
+        segment.replace(
+          /\s+(?:(?:australian|world|national)\s+)?tour\b.*$/i,
+          ""
+        )
+      )
+    )
+    .filter(Boolean);
+
+  if (titleSegments.length < 2) {
+    return artists;
+  }
+
+  const artistIndexByIdentity = new Map(
+    artists.map((artist, index) => [normalizeArtistIdentity(artist), index] as const)
+  );
+  const orderedIndexes = titleSegments.map((segment) =>
+    artistIndexByIdentity.get(normalizeArtistIdentity(segment))
+  );
+
+  if (
+    orderedIndexes.some((index) => index === undefined) ||
+    new Set(orderedIndexes).size !== orderedIndexes.length
+  ) {
+    return artists;
+  }
+
+  const orderedIndexSet = new Set(orderedIndexes as number[]);
+
+  return [
+    ...(orderedIndexes as number[]).map((index) => artists[index] as string),
+    ...artists.filter((_, index) => !orderedIndexSet.has(index))
+  ];
+}
+
+function orderOztixArtistsByCompleteDescriptionLineup(
+  artists: string[],
+  descriptionArtists: string[]
+): string[] {
+  if (artists.length < 2 || artists.length !== descriptionArtists.length) {
+    return artists;
+  }
+
+  const artistsByIdentity = new Map(
+    artists.map((artist) => [normalizeArtistIdentity(artist), artist] as const)
+  );
+  const orderedArtists = descriptionArtists
+    .map((artist) => artistsByIdentity.get(normalizeArtistIdentity(artist)))
+    .filter((artist): artist is string => Boolean(artist));
+
+  return orderedArtists.length === artists.length ? orderedArtists : artists;
+}
+
+function coalesceOztixTitleBandNames(artists: string[], title: string): string[] {
+  const artistIndexByIdentity = new Map(
+    artists.map((artist, index) => [normalizeArtistIdentity(artist), index] as const)
+  );
+  const consumedIndexes = new Set<number>();
+  const replacements = new Map<number, string>();
+
+  for (const titleSegment of normalizeOztixTitle(title).split(/\s+\+\s+/)) {
+    const match = normalizeWhitespace(titleSegment).match(/^(.+?)\s+and\s+the\s+(.+)$/i);
+
+    if (!match?.[1] || !match[2]) {
+      continue;
+    }
+
+    const leftIndex = artistIndexByIdentity.get(normalizeArtistIdentity(match[1]));
+    const rightIndex = artistIndexByIdentity.get(normalizeArtistIdentity(match[2]));
+
+    if (
+      leftIndex === undefined ||
+      rightIndex === undefined ||
+      leftIndex === rightIndex ||
+      consumedIndexes.has(leftIndex) ||
+      consumedIndexes.has(rightIndex)
+    ) {
+      continue;
+    }
+
+    const replacementIndex = Math.min(leftIndex, rightIndex);
+    consumedIndexes.add(leftIndex);
+    consumedIndexes.add(rightIndex);
+    replacements.set(replacementIndex, normalizeWhitespace(titleSegment));
+  }
+
+  if (replacements.size === 0) {
+    return artists;
+  }
+
+  return artists.flatMap((artist, index) => {
+    const replacement = replacements.get(index);
+
+    if (replacement) {
+      return [replacement];
+    }
+
+    return consumedIndexes.has(index) ? [] : [artist];
+  });
+}
+
+function removeOztixTitleContainedAliases(artists: string[], title: string): string[] {
+  const titleIdentity = normalizeArtistIdentity(normalizeOztixTitle(title));
+
+  return artists.filter((artist, artistIndex) => {
+    const artistIdentity = normalizeArtistIdentity(artist);
+
+    return !artists.some((candidate, candidateIndex) => {
+      if (artistIndex === candidateIndex) {
+        return false;
+      }
+
+      const candidateIdentity = normalizeArtistIdentity(candidate);
+      const candidateSuffix = normalizeWhitespace(
+        candidateIdentity.slice(artistIdentity.length)
+      );
+      const isExpandedBandName =
+        candidateIdentity.startsWith(`${artistIdentity} and the `) ||
+        candidateIdentity.startsWith(`${artistIdentity} the `) ||
+        candidateSuffix === "band";
+
+      return (
+        isExpandedBandName &&
+        titleIdentity.includes(candidateIdentity)
+      );
+    });
+  });
+}
+
+function isOztixThemePartyTitle(title: string | null | undefined): boolean {
+  const normalized = normalizeOztixTitle(title);
+
+  return /\bparty\b/i.test(normalized) && /\b(?:vs|playing the best of|worship|after party)\b/i.test(normalized);
+}
+
+function isOztixThemePartySubject(title: string | null | undefined, artist: string): boolean {
+  if (!isOztixThemePartyTitle(title)) {
+    return false;
+  }
+
+  const titleIdentity = normalizeArtistIdentity(normalizeOztixTitle(title));
+  const artistIdentity = normalizeArtistIdentity(artist);
+
+  return Boolean(artistIdentity && titleIdentity.includes(artistIdentity));
+}
+
+export function extractOztixArtists(hit: OztixHit) {
+  return extractOztixArtistsFromContext(
+    hit,
+    createBlockHtmlTextContext(hit.EventDescription)
+  );
+}
+
+export function extractOztixArtistsFromContext(
+  hit: OztixHit,
+  descriptionContext: HtmlTextContext
+) {
+  const titleFeaturedArtists = parseOztixTitleFeaturedArtists(hit.EventName);
+  const titlePresentedArtists = parseOztixTitlePresentedArtists(hit.EventName);
+  const titleTrailingWithArtists = parseOztixTitleTrailingWithArtists(hit.EventName);
+  const descriptionArtists = parseOztixDescriptionArtistsFromContext(
+    descriptionContext
+  );
+  const tributeSubjectIdentities = new Set(
+    getOztixTributeSubjects(hit.EventName).map(normalizeArtistIdentity)
+  );
+  const structuredArtists = [
+    ...(Array.isArray(hit.Bands) ? hit.Bands : []).flatMap(splitOztixStructuredArtist),
+    ...(Array.isArray(hit.Performances)
+      ? hit.Performances.flatMap((performance) =>
+          splitOztixStructuredArtist(performance.Name ?? "")
+        )
+      : []),
+    ...(hit.TourName ? splitOztixStructuredArtist(hit.TourName) : [])
+  ]
+    .map((artist) => normalizeWhitespace(artist))
+    .filter(Boolean)
+    .filter(isLikelyOztixArtistName)
+    .filter(
+      (artist) =>
+        !tributeSubjectIdentities.has(normalizeArtistIdentity(artist))
+    )
+    .filter((artist) => !isOztixThemePartySubject(hit.EventName, artist));
+  const parsedSpecialGuests = parseOztixSpecialGuests(
+    removeExactStructuredArtistTokens(hit.SpecialGuests, structuredArtists)
+  );
+  const titleHeadlinerArtists =
+    structuredArtists.length === 0
+      ? [
+          ...parseOztixTitleHeadlinerArtists(hit.EventName),
+          ...(parsedSpecialGuests.length === 0
+            ? parseOztixTitleLineupArtists(hit.EventName)
+            : [])
+        ]
+      : [];
+  const knownArtistsBeforeSpecialGuests = [
+    ...structuredArtists,
+    ...titleHeadlinerArtists,
+    ...titlePresentedArtists,
+    ...titleFeaturedArtists,
+    ...titleTrailingWithArtists
+  ];
+  const knownArtistsBeforeDescription = [
+    ...knownArtistsBeforeSpecialGuests,
+    ...parsedSpecialGuests
+  ];
+  const combinedArtists = [
+    ...knownArtistsBeforeSpecialGuests,
+    ...parsedSpecialGuests
+      .filter(
+        (artist) =>
+          !isDuplicateOrCompositeOztixArtist(
+            artist,
+            knownArtistsBeforeSpecialGuests
+          )
+      ),
+    ...descriptionArtists.filter(
+      (artist) =>
+        !isDuplicateOrCompositeOztixArtist(
+          artist,
+          knownArtistsBeforeDescription
+        )
+    )
+  ]
+    .filter(
+      (artist) =>
+        !tributeSubjectIdentities.has(normalizeArtistIdentity(artist))
+    )
+    .filter((artist) => !isOztixThemePartySubject(hit.EventName, artist));
+  const extractionKind = structuredArtists.length > 0 ? "structured" : "parsed_text";
+
+  const displayArtists = dedupeOztixArtistsByIdentity(
+    removeOztixTitleContainedAliases(
+      preferArtistDisplayNamesFromTitle(
+        coalesceOztixTitleBandNames(
+          dedupeOztixArtistsByIdentity(combinedArtists),
+          hit.EventName ?? ""
+        ),
+        hit.EventName
+      ),
+      hit.EventName ?? ""
+    )
+  );
+
+  return createArtistExtraction(
+    orderOztixArtistsByTitleLineup(
+      orderOztixArtistsByCompleteDescriptionLineup(
+        displayArtists,
+        descriptionArtists
+      ),
+      hit.EventName ?? ""
+    ),
+    extractionKind
+  );
+}

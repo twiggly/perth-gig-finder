@@ -13,6 +13,11 @@ import {
 } from "@perth-gig-finder/shared";
 
 import { queryAlgolia } from "../algolia";
+import { normalizeUtcDate } from "../source-utils/date";
+import {
+  createBlockHtmlTextContext,
+  createHtmlTextContext
+} from "../source-utils/html-text";
 import type { SourceAdapter, SourceAdapterResult } from "../types";
 import {
   extractOztixArtists,
@@ -21,6 +26,7 @@ import {
   selectPreferredImageUrl,
   type OztixHit
 } from "./oztix-wa";
+import { extractOztixArtistsFromContext } from "./oztix-wa/artists";
 
 const SOURCE_URL = "https://rosemounthotel.com.au/live-stuff/";
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -93,32 +99,6 @@ function normalizeUrl(value: string | null | undefined): string | null {
   }
 }
 
-function toPlainText(html: string | null | undefined): string | null {
-  if (!html) {
-    return null;
-  }
-
-  const text = cheerio.load(`<div>${html}</div>`).text();
-  const normalized = normalizeWhitespace(text);
-  return normalized.length > 0 ? normalized : null;
-}
-
-function normalizeUtcDate(value: string | null | undefined): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const withTimezone =
-    value.endsWith("Z") || value.includes("+") ? value : `${value}Z`;
-  const date = new Date(withTimezone);
-
-  if (Number.isNaN(date.getTime())) {
-    throw new Error(`Invalid Rosemount Hotel event date: ${value}`);
-  }
-
-  return date.toISOString();
-}
-
 function isRosemountVenueHit(hit: OztixHit): boolean {
   const venueName = normalizeVenueName(normalizeWhitespace(hit.Venue?.Name ?? ""));
 
@@ -175,7 +155,10 @@ function normalizeGigStatus(hit: OztixHit, title: string): GigStatus {
 
 export function normalizeRosemountHit(hit: OztixHit): NormalizedGig {
   const title = normalizeOztixTitle(hit.EventName);
-  const startsAt = normalizeUtcDate(hit.DateStart);
+  const startsAt = normalizeUtcDate(
+    hit.DateStart,
+    "Invalid Rosemount Hotel event date"
+  );
 
   if (!title || !startsAt) {
     throw new Error("Rosemount Hotel hit is missing a title or start time");
@@ -183,10 +166,13 @@ export function normalizeRosemountHit(hit: OztixHit): NormalizedGig {
 
   const venue = normalizeVenue(hit);
   const sourceUrl = normalizeUrl(hit.EventUrl) ?? SOURCE_URL;
-  const description = toPlainText(
-    [hit.SpecialGuests, hit.EventDescription].filter(Boolean).join("\n\n")
-  );
-  const artistExtraction = extractOztixArtists(hit);
+  const descriptionContext = createBlockHtmlTextContext(hit.EventDescription);
+  const specialGuestsText = createHtmlTextContext(hit.SpecialGuests).plainText;
+  const description =
+    normalizeWhitespace(
+      [specialGuestsText, descriptionContext.plainText].filter(Boolean).join(" ")
+    ) || null;
+  const artistExtraction = extractOztixArtistsFromContext(hit, descriptionContext);
   const rawPayload = JSON.parse(
     JSON.stringify({
       ...hit,
@@ -205,7 +191,10 @@ export function normalizeRosemountHit(hit: OztixHit): NormalizedGig {
     status: normalizeGigStatus(hit, title),
     startsAt,
     startsAtPrecision: "exact",
-    endsAt: normalizeUtcDate(hit.DateEnd),
+    endsAt: normalizeUtcDate(
+      hit.DateEnd,
+      "Invalid Rosemount Hotel event date"
+    ),
     ticketUrl: sourceUrl,
     venue,
     artists: artistExtraction.artists,

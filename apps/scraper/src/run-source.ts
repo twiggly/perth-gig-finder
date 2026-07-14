@@ -1,128 +1,10 @@
-import {
-  buildGigSlug,
-  type NormalizedGig
-} from "@perth-gig-finder/shared";
-
 import type { GigStore, SourceAdapter, SourceExecutionResult } from "./types";
-
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
-function buildPartialResult(input: {
-  sourceSlug: string;
-  sourceId: string;
-  runId: string;
-  startedAt: string;
-  insertedCount: number;
-  updatedCount: number;
-  failedCount: number;
-  hadPostProcessingError: boolean;
-  errorMessage: string | null;
-}): SourceExecutionResult {
-  const finishedAt = nowIso();
-  const processedCount = input.insertedCount + input.updatedCount;
-  const hasErrors = input.failedCount > 0 || input.hadPostProcessingError;
-  const status =
-    processedCount === 0 && hasErrors
-      ? "failed"
-      : hasErrors
-        ? "partial"
-        : "success";
-
-  return {
-    sourceSlug: input.sourceSlug,
-    sourceId: input.sourceId,
-    runId: input.runId,
-    status,
-    discoveredCount: processedCount + input.failedCount,
-    insertedCount: input.insertedCount,
-    updatedCount: input.updatedCount,
-    failedCount: input.failedCount,
-    errorMessage: input.errorMessage,
-    startedAt: input.startedAt,
-    finishedAt
-  };
-}
-
-async function processGig(
-  store: GigStore,
-  source: { id: string; priority: number },
-  gig: NormalizedGig
-): Promise<{
-  outcome: "inserted" | "updated";
-  gigId: string;
-  sourceGigId: string | null;
-  changed: boolean;
-}> {
-  const venue = await store.upsertVenue(gig);
-  const normalizedGig = {
-    ...gig,
-    venue: {
-      ...gig.venue,
-      slug: venue.slug
-    }
-  };
-  const reused = await store.tryReuseUnchangedSourceGig({
-    sourceId: source.id,
-    sourcePriority: source.priority,
-    venueId: venue.id,
-    gig: normalizedGig
-  });
-
-  if (reused) {
-    return {
-      outcome: "updated",
-      gigId: reused.gigId,
-      sourceGigId: reused.sourceGigId,
-      changed: false
-    };
-  }
-
-  const existingSourceGig = await store.findSourceGig(source.id, gig.externalId, gig.checksum);
-  const matchedGig = await store.findCanonicalGig({
-    venueId: venue.id,
-    startsAt: gig.startsAt,
-    title: gig.title,
-    excludeGigId: existingSourceGig?.gigId ?? null
-  });
-
-  if (
-    existingSourceGig &&
-    matchedGig &&
-    matchedGig.id !== existingSourceGig.gigId
-  ) {
-    await store.prepareSourceGigReattachment({
-      sourceGigId: existingSourceGig.id,
-      currentGigId: existingSourceGig.gigId,
-      targetGigId: matchedGig.id,
-      sourceId: source.id
-    });
-  }
-
-  const targetGigId = matchedGig?.id ?? existingSourceGig?.gigId ?? null;
-
-  const result = await store.saveGig({
-    existingGigId: targetGigId,
-    gig: normalizedGig,
-    venueId: venue.id,
-    sourceId: source.id,
-    sourcePriority: source.priority
-  });
-
-  const sourceGigResult = await store.upsertSourceGig({
-    sourceId: source.id,
-    gigId: result.gig.id,
-    gig: normalizedGig
-  });
-
-  return {
-    outcome: result.inserted ? "inserted" : "updated",
-    gigId: result.gig.id,
-    sourceGigId: sourceGigResult.sourceGig.id,
-    changed: true
-  };
-}
+import {
+  processSourceListings,
+  runSourcePostProcessing
+} from "./run-source/phases";
+import { buildSourceExecutionResult, nowIso } from "./run-source/result";
+import { getErrorMessage } from "./source-utils/errors";
 
 export async function executeSourceRun(
   store: GigStore,
@@ -142,115 +24,47 @@ export async function executeSourceRun(
 
   try {
     const { gigs, failedCount: parseFailures } = await source.fetchListings(fetchImpl);
-    let insertedCount = 0;
-    let updatedCount = 0;
-    let failedCount = parseFailures;
-    const errors: string[] = [];
-    const retainedIdentityKeys = new Set<string>();
-    const touchedGigIds = new Set<string>();
-    const reusedSourceGigIds = new Set<string>();
-    let hadPostProcessingError = false;
+    const state = await processSourceListings({
+      store,
+      source: sourceRecord,
+      gigs,
+      parseFailures
+    });
 
-    for (const gig of gigs) {
-      try {
-        const result = await processGig(store, sourceRecord, {
-          ...gig,
-          venue: {
-            ...gig.venue,
-            slug: gig.venue.slug || buildGigSlug({
-              venueSlug: "venue",
-              startsAt: gig.startsAt,
-              title: gig.venue.name
-            })
-          }
-        });
-
-        retainedIdentityKeys.add(gig.externalId ?? gig.checksum);
-
-        if (result.changed) {
-          touchedGigIds.add(result.gigId);
-        } else if (result.sourceGigId) {
-          reusedSourceGigIds.add(result.sourceGigId);
-        }
-
-        if (result.outcome === "inserted") {
-          insertedCount += 1;
-        } else {
-          updatedCount += 1;
-        }
-      } catch (error) {
-        failedCount += 1;
-        errors.push(error instanceof Error ? error.message : "Unexpected gig error");
-      }
-    }
-
-    if (reusedSourceGigIds.size > 0) {
-      try {
-        await store.touchSourceGigsSeen([...reusedSourceGigIds], nowIso());
-      } catch (error) {
-        hadPostProcessingError = true;
-        errors.push(
-          error instanceof Error
-            ? `Unable to mark unchanged source gigs as seen: ${error.message}`
-            : "Unable to mark unchanged source gigs as seen"
-        );
-      }
-    }
-
-    if (failedCount === 0 && gigs.length > 0) {
-      try {
-        await store.pruneStaleUpcomingSourceGigs({
-          sourceId: sourceRecord.id,
-          retainedIdentityKeys: [...retainedIdentityKeys]
-        });
-      } catch (error) {
-        hadPostProcessingError = true;
-        errors.push(
-          error instanceof Error
-            ? `Unable to prune stale source gigs: ${error.message}`
-            : "Unable to prune stale source gigs"
-        );
-      }
-    }
-
-    if (touchedGigIds.size > 0) {
-      try {
-        await store.syncGigArtistsFromSourceGigs([...touchedGigIds]);
-      } catch (error) {
-        hadPostProcessingError = true;
-        errors.push(
-          error instanceof Error
-            ? `Unable to sync canonical artists: ${error.message}`
-            : "Unable to sync canonical artists"
-        );
-      }
-    }
+    await runSourcePostProcessing({
+      store,
+      sourceId: sourceRecord.id,
+      gigCount: gigs.length,
+      state
+    });
 
     if (parseFailures > 0) {
-      errors.push(`${parseFailures} listing(s) could not be normalized from the source feed`);
+      state.errors.push(
+        `${parseFailures} listing(s) could not be normalized from the source feed`
+      );
     }
 
     const errorMessage =
-      errors.length > 0 ? errors.slice(0, 3).join(" | ") : null;
+      state.errors.length > 0 ? state.errors.slice(0, 3).join(" | ") : null;
 
-    const result = buildPartialResult({
+    const result = buildSourceExecutionResult({
       sourceSlug: source.slug,
       sourceId: sourceRecord.id,
       runId,
       startedAt,
-      insertedCount,
-      updatedCount,
-      failedCount,
-      hadPostProcessingError,
+      insertedCount: state.insertedCount,
+      updatedCount: state.updatedCount,
+      failedCount: state.failedCount,
+      hadPostProcessingError: state.hadPostProcessingError,
       errorMessage
     });
 
     await store.finishScrapeRun(runId, {
       status: result.status,
       discoveredCount: result.discoveredCount,
-      insertedCount,
-      updatedCount,
-      failedCount,
+      insertedCount: state.insertedCount,
+      updatedCount: state.updatedCount,
+      failedCount: state.failedCount,
       errorMessage,
       finishedAt: result.finishedAt
     });
@@ -258,8 +72,7 @@ export async function executeSourceRun(
     return result;
   } catch (error) {
     const finishedAt = nowIso();
-    const errorMessage =
-      error instanceof Error ? error.message : "Unexpected scraper failure";
+    const errorMessage = getErrorMessage(error, "Unexpected scraper failure");
 
     await store.finishScrapeRun(runId, {
       status: "failed",
