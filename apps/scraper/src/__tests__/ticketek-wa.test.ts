@@ -509,7 +509,15 @@ describe("ticketek wa source adapter", () => {
       throw new Error(`Unexpected URL: ${url}`);
     });
 
-    const result = await ticketekWaSource.fetchListings(fetchMock);
+    const metrics = new Map<string, number>();
+    const result = await ticketekWaSource.fetchListings(fetchMock, {
+      async loadSourceGigPayloads() {
+        return new Map();
+      },
+      recordMetric(name, value) {
+        metrics.set(name, value);
+      }
+    });
 
     expect(result.failedCount).toBe(0);
     expect(result.gigs).toHaveLength(1);
@@ -521,5 +529,9 @@ describe("ticketek wa source adapter", () => {
       startsAtPrecision: "exact"
     });
     expect(fetchMock).toHaveBeenCalled();
+    expect(metrics.get("ticketek.html_query_1.new_unique")).toBe(1);
+    expect(metrics.get("ticketek.html_query_2.new_unique")).toBe(0);
+    expect(metrics.get("ticketek.search_api.exact_time_keys")).toBe(0);
+    expect(metrics.get("ticketek.title_hydration.new_exact_time_keys")).toBe(2);
   });
 });

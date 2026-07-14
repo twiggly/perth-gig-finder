@@ -1,4 +1,4 @@
-import type { NormalizedGig } from "@perth-gig-finder/shared";
+import type { JsonValue, NormalizedGig } from "@perth-gig-finder/shared";
 import { describe, expect, it } from "vitest";
 
 import { shouldMirrorImage } from "../image-mirror";
@@ -16,6 +16,11 @@ class MirrorOnlyStore implements GigStore {
   readonly sourceGigs = new Map<string, SourceGigRecord>();
   imageBucketEnsured = false;
   lastForceValue = false;
+  mirrorDelayMs = 0;
+  activeMirrors = 0;
+  maxActiveMirrors = 0;
+  readonly throwingMirrorIds = new Set<string>();
+  readonly mirrorAttempts: string[] = [];
 
   constructor(sourceGigs: SourceGigRecord[]) {
     for (const sourceGig of sourceGigs) {
@@ -53,6 +58,21 @@ class MirrorOnlyStore implements GigStore {
       finishedAt: string;
     }
   ): Promise<void> {
+    throw new Error("not implemented");
+  }
+
+  async preloadSourceRunState(_input: {
+    sourceId: string;
+    gigs: NormalizedGig[];
+    now: string;
+  }): Promise<void> {
+    throw new Error("not implemented");
+  }
+
+  async loadSourceGigPayloads(
+    _sourceId: string,
+    _externalIds: string[]
+  ): Promise<Map<string, JsonValue>> {
     throw new Error("not implemented");
   }
 
@@ -131,9 +151,23 @@ class MirrorOnlyStore implements GigStore {
   async mirrorSourceGigImage(
     sourceGig: SourceGigRecord
   ): Promise<SourceGigImageMirrorResult> {
+    this.mirrorAttempts.push(sourceGig.id);
+    this.activeMirrors += 1;
+    this.maxActiveMirrors = Math.max(this.maxActiveMirrors, this.activeMirrors);
+
+    if (this.mirrorDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, this.mirrorDelayMs));
+    }
+
+    if (this.throwingMirrorIds.has(sourceGig.id)) {
+      this.activeMirrors -= 1;
+      throw new Error(`mirror failed: ${sourceGig.id}`);
+    }
+
     const existing = this.sourceGigs.get(sourceGig.id);
 
     if (!existing) {
+      this.activeMirrors -= 1;
       throw new Error("source gig missing");
     }
 
@@ -147,6 +181,7 @@ class MirrorOnlyStore implements GigStore {
     };
 
     this.sourceGigs.set(sourceGig.id, readyRecord);
+    this.activeMirrors -= 1;
 
     return {
       status: "ready",
@@ -274,5 +309,64 @@ describe("mirrorPendingSourceGigImages", () => {
       failedCount: 0
     });
     expect(store.lastForceValue).toBe(true);
+  });
+
+  it("mirrors at most two source images concurrently by default", async () => {
+    const sourceGigs = Array.from({ length: 3 }, (_, index) => ({
+      id: `source-gig-${index}`,
+      gigId: `gig-${index}`,
+      sourceSlug: "oztix-wa",
+      externalId: `event-${index}`,
+      identityKey: `event-${index}`,
+      checksum: `checksum-${index}`,
+      sourceUrl: `https://tickets.example.test/event-${index}`,
+      startsAtPrecision: "exact" as const,
+      artistNames: [],
+      artistExtractionKind: "unknown" as const,
+      sourceImageUrl: `https://images.example.test/event-${index}.jpg`,
+      mirroredImagePath: null,
+      imageMirrorStatus: "pending" as const,
+      imageMirroredAt: null,
+      mirroredImageWidth: null,
+      mirroredImageHeight: null
+    }));
+    const store = new MirrorOnlyStore(sourceGigs);
+    store.mirrorDelayMs = 5;
+
+    const result = await mirrorPendingSourceGigImages(store);
+
+    expect(result).toEqual({ discoveredCount: 3, mirroredCount: 3, failedCount: 0 });
+    expect(store.maxActiveMirrors).toBe(2);
+  });
+
+  it("does not start later image batches after a thrown error", async () => {
+    const sourceGigs = Array.from({ length: 4 }, (_, index) => ({
+      id: `source-gig-${index}`,
+      gigId: `gig-${index}`,
+      sourceSlug: "oztix-wa",
+      externalId: `event-${index}`,
+      identityKey: `event-${index}`,
+      checksum: `checksum-${index}`,
+      sourceUrl: `https://tickets.example.test/event-${index}`,
+      startsAtPrecision: "exact" as const,
+      artistNames: [],
+      artistExtractionKind: "unknown" as const,
+      sourceImageUrl: `https://images.example.test/event-${index}.jpg`,
+      mirroredImagePath: null,
+      imageMirrorStatus: "pending" as const,
+      imageMirroredAt: null,
+      mirroredImageWidth: null,
+      mirroredImageHeight: null
+    }));
+    const store = new MirrorOnlyStore(sourceGigs);
+    store.throwingMirrorIds.add("source-gig-0");
+    store.mirrorDelayMs = 5;
+
+    await expect(mirrorPendingSourceGigImages(store)).rejects.toThrow(
+      "mirror failed: source-gig-0"
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(store.mirrorAttempts).toEqual(["source-gig-0", "source-gig-1"]);
   });
 });

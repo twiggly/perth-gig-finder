@@ -2,8 +2,9 @@ import "dotenv/config";
 
 import { pathToFileURL } from "node:url";
 
+import { readPositiveIntegerEnv } from "./source-utils/env";
 import { SupabaseGigStore } from "./supabase-store";
-import type { GigStore } from "./types";
+import type { GigStore, SourceGigImageMirrorResult } from "./types";
 
 export interface MirrorImagesResult {
   discoveredCount: number;
@@ -16,23 +17,27 @@ export async function mirrorPendingSourceGigImages(
   fetchImpl: typeof fetch = fetch,
   options: {
     force?: boolean;
+    concurrency?: number;
   } = {}
 ): Promise<MirrorImagesResult> {
   await store.ensureImageBucket();
   const sourceGigs = await store.listSourceGigsNeedingImageMirror(options.force);
 
-  let mirroredCount = 0;
-  let failedCount = 0;
+  const concurrency =
+    options.concurrency ??
+    readPositiveIntegerEnv("IMAGE_MIRROR_CONCURRENCY", 2);
+  const results: SourceGigImageMirrorResult[] = [];
 
-  for (const sourceGig of sourceGigs) {
-    const result = await store.mirrorSourceGigImage(sourceGig, fetchImpl);
-
-    if (result.status === "ready") {
-      mirroredCount += 1;
-    } else if (result.status === "failed") {
-      failedCount += 1;
-    }
+  for (let index = 0; index < sourceGigs.length; index += concurrency) {
+    const batchResults = await Promise.all(
+      sourceGigs
+        .slice(index, index + concurrency)
+        .map((sourceGig) => store.mirrorSourceGigImage(sourceGig, fetchImpl))
+    );
+    results.push(...batchResults);
   }
+  const mirroredCount = results.filter((result) => result.status === "ready").length;
+  const failedCount = results.filter((result) => result.status === "failed").length;
 
   return {
     discoveredCount: sourceGigs.length,

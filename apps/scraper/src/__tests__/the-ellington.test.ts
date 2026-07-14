@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { executeSourceRun } from "../run-source";
 import {
   extractEllingtonEventTimes,
+  getEllingtonDetailCacheEnabled,
+  getEllingtonDetailConcurrency,
   normalizeEllingtonEvent,
   normalizeEllingtonTitle,
   parseEllingtonDateTime,
@@ -10,6 +13,7 @@ import {
   type EllingtonRestEvent
 } from "../sources/the-ellington";
 import { sources } from "../sources";
+import { MemoryGigStore } from "./helpers/run-source-fixtures";
 
 function createEllingtonEvent(
   overrides: Partial<EllingtonRestEvent> = {}
@@ -17,6 +21,7 @@ function createEllingtonEvent(
   return {
     id: 172057,
     link: "https://www.ellingtonjazz.com.au/tc-events/women-in-big-band/",
+    modified_gmt: "2026-03-01T04:30:00",
     title: {
       rendered: "Women in Big Band ft. Sue Bluck[br]with WAYJO &amp; Friends"
     },
@@ -135,9 +140,26 @@ describe("the ellington source adapter", () => {
       source: "wordpress-rest",
       eventId: 172057,
       categories: ["Big Band", "Jazz"],
+      detailVersion: "2026-03-01T04:30:00",
+      startsAt: "2026-05-03T09:00:00.000Z",
+      endsAt: "2026-05-03T12:00:00.000Z",
       eventStartText: "May 3, 2026 17:00",
       eventDateRangeText: "3 May 2026 5:00 pm - 8:00 pm"
     });
+  });
+
+  it("changes its checksum when the validated detail version changes", () => {
+    const first = normalizeEllingtonEvent(
+      createEllingtonEvent({ modified_gmt: "2026-05-01T10:00:00" }),
+      DETAIL_HTML
+    );
+    const changed = normalizeEllingtonEvent(
+      createEllingtonEvent({ modified_gmt: "2026-05-02T10:00:00" }),
+      DETAIL_HTML
+    );
+
+    expect(changed.checksum).not.toBe(first.checksum);
+    expect(changed.sourceUrl).toBe(first.sourceUrl);
   });
 
   it("prefers REST embedded media over detail-page image fallbacks", () => {
@@ -311,8 +333,8 @@ describe("the ellington source adapter", () => {
     expect(fetchMock.mock.calls[3]?.[0]).toBe(secondEvent.link);
   });
 
-  it("limits event detail page fetches to four concurrent requests", async () => {
-    const events = Array.from({ length: 5 }, (_, index) =>
+  it("limits event detail page fetches to eight concurrent requests", async () => {
+    const events = Array.from({ length: 9 }, (_, index) =>
       createEllingtonEvent({
         id: index + 1,
         link: `https://www.ellingtonjazz.com.au/tc-events/show-${index + 1}/`
@@ -352,16 +374,163 @@ describe("the ellington source adapter", () => {
 
     const result = await theEllingtonSource.fetchListings(fetchMock);
 
-    expect(result.gigs.map((gig) => gig.externalId)).toEqual([
-      "1",
-      "2",
-      "3",
-      "4",
-      "5"
-    ]);
+    expect(result.gigs.map((gig) => gig.externalId)).toEqual(
+      events.map((event) => String(event.id))
+    );
     expect(result.failedCount).toBe(0);
-    expect(maxActiveDetailRequests).toBe(4);
+    expect(maxActiveDetailRequests).toBe(8);
     expect(detailUrls).toEqual(events.map((event) => event.link));
+  });
+
+  it("reuses version-matched detail fields without changing normalized output", async () => {
+    const event = createEllingtonEvent({
+      id: 42,
+      link: "https://www.ellingtonjazz.com.au/tc-events/cached-show/",
+      modified_gmt: "2026-05-01T10:00:00"
+    });
+    const createFetchMock = () =>
+      vi.fn<typeof fetch>(async (input) => {
+        const url = String(input);
+
+        if (url.includes("/wp-json/wp/v2/tc_events")) {
+          return new Response(JSON.stringify([event]), {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+              "x-wp-totalpages": "1"
+            }
+          });
+        }
+
+        return new Response(DETAIL_HTML, {
+          status: 200,
+          headers: { "content-type": "text/html" }
+        });
+      });
+    const coldFetch = createFetchMock();
+    const cold = await theEllingtonSource.fetchListings(coldFetch, {
+      async loadSourceGigPayloads() {
+        return new Map();
+      }
+    });
+    const warmFetch = createFetchMock();
+    const loadSourceGigPayloads = vi.fn(async (externalIds: string[]) => {
+      expect(externalIds).toEqual(["42"]);
+      return new Map([["42", cold.gigs[0]!.rawPayload]]);
+    });
+
+    const warm = await theEllingtonSource.fetchListings(warmFetch, {
+      loadSourceGigPayloads
+    });
+
+    expect(warm).toEqual(cold);
+    expect(coldFetch).toHaveBeenCalledTimes(2);
+    expect(warmFetch).toHaveBeenCalledTimes(1);
+    expect(loadSourceGigPayloads).toHaveBeenCalledOnce();
+  });
+
+  it("warms the detail cache through the normal source-run persistence path", async () => {
+    const event = createEllingtonEvent({
+      id: 44,
+      link: "https://www.ellingtonjazz.com.au/tc-events/persisted-cache-show/",
+      modified_gmt: "2026-05-03T10:00:00"
+    });
+    let detailRequestCount = 0;
+    const fetchMock = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+
+      if (url.includes("/wp-json/wp/v2/tc_events")) {
+        return new Response(JSON.stringify([event]), {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+            "x-wp-totalpages": "1"
+          }
+        });
+      }
+
+      detailRequestCount += 1;
+      return new Response(DETAIL_HTML, { status: 200 });
+    });
+    const store = new MemoryGigStore();
+
+    await executeSourceRun(store, theEllingtonSource, fetchMock);
+    await executeSourceRun(store, theEllingtonSource, fetchMock);
+
+    expect(detailRequestCount).toBe(1);
+    expect([...store.sourceGigs.values()][0]?.rawPayload).toMatchObject({
+      detailVersion: "2026-05-03T10:00:00",
+      startsAt: "2026-05-03T09:00:00.000Z"
+    });
+  });
+
+  it("falls back to detail requests for changed or malformed cache entries", async () => {
+    const event = createEllingtonEvent({
+      id: 43,
+      link: "https://www.ellingtonjazz.com.au/tc-events/changed-show/",
+      modified_gmt: "2026-05-02T10:00:00"
+    });
+    const cachedPayloads = [
+      {
+        detailVersion: "2026-05-01T10:00:00",
+        startsAt: "2026-05-03T09:00:00.000Z",
+        endsAt: "2026-05-03T12:00:00.000Z",
+        eventStartText: "May 3, 2026 17:00",
+        eventDateRangeText: "3 May 2026 5:00 pm - 8:00 pm",
+        imageUrl: null
+      },
+      {
+        detailVersion: "2026-05-02T10:00:00",
+        startsAt: "not-a-date",
+        endsAt: null,
+        eventStartText: "May 3, 2026 17:00",
+        eventDateRangeText: null,
+        imageUrl: null
+      }
+    ];
+
+    for (const rawPayload of cachedPayloads) {
+      const fetchMock = vi.fn<typeof fetch>(async (input) => {
+        const url = String(input);
+
+        if (url.includes("/wp-json/wp/v2/tc_events")) {
+          return new Response(JSON.stringify([event]), {
+            status: 200,
+            headers: {
+              "content-type": "application/json",
+              "x-wp-totalpages": "1"
+            }
+          });
+        }
+
+        return new Response(DETAIL_HTML, { status: 200 });
+      });
+
+      const result = await theEllingtonSource.fetchListings(fetchMock, {
+        async loadSourceGigPayloads() {
+          return new Map([["43", rawPayload]]);
+        }
+      });
+
+      expect(result.gigs).toHaveLength(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    }
+  });
+
+  it("allows Ellington detail concurrency to be rolled back through configuration", () => {
+    expect(getEllingtonDetailConcurrency({})).toBe(8);
+    expect(
+      getEllingtonDetailConcurrency({ ELLINGTON_DETAIL_CONCURRENCY: "4" })
+    ).toBe(4);
+  });
+
+  it("supports disabling the Ellington detail cache", () => {
+    expect(getEllingtonDetailCacheEnabled({})).toBe(true);
+    expect(
+      getEllingtonDetailCacheEnabled({
+        ELLINGTON_DETAIL_CACHE_DISABLED: "true"
+      })
+    ).toBe(false);
   });
 
   it("counts missing links, failed detail pages, and parse failures", async () => {

@@ -6,6 +6,7 @@ import {
   buildGigChecksum,
   buildGigSlug,
   type GigStatus,
+  type JsonValue,
   normalizeCanonicalTitleForMatch,
   normalizeTitleForMatch,
   slugify,
@@ -87,6 +88,7 @@ export class MemoryGigStore implements GigStore {
       checksum: string;
       sourceUrl: string;
       lastSeenAt: string;
+      rawPayload?: JsonValue;
     }
   >();
   readonly artists = new Map<string, string>();
@@ -101,6 +103,7 @@ export class MemoryGigStore implements GigStore {
   upsertSourceGigCalls = 0;
   syncGigArtistsError: string | null = null;
   imageBucketEnsured = false;
+  preloadSourceRunStateCalls = 0;
 
   async ensureSource(input: {
     slug: string;
@@ -163,6 +166,35 @@ export class MemoryGigStore implements GigStore {
       updatedCount: result.updatedCount,
       failedCount: result.failedCount
     });
+  }
+
+  async preloadSourceRunState(_input: {
+    sourceId: string;
+    gigs: NormalizedGig[];
+    now: string;
+  }): Promise<void> {
+    this.preloadSourceRunStateCalls += 1;
+  }
+
+  async loadSourceGigPayloads(
+    sourceId: string,
+    externalIds: string[]
+  ): Promise<Map<string, JsonValue>> {
+    const requestedExternalIds = new Set(externalIds);
+    const payloads = new Map<string, JsonValue>();
+
+    for (const sourceGig of this.sourceGigs.values()) {
+      if (
+        sourceGig.sourceId === sourceId &&
+        sourceGig.externalId &&
+        requestedExternalIds.has(sourceGig.externalId) &&
+        sourceGig.rawPayload !== undefined
+      ) {
+        payloads.set(sourceGig.externalId, sourceGig.rawPayload);
+      }
+    }
+
+    return payloads;
   }
 
   async upsertVenue(gig: NormalizedGig): Promise<VenueRecord> {
@@ -542,6 +574,7 @@ export class MemoryGigStore implements GigStore {
       checksum: string;
       sourceUrl: string;
       lastSeenAt: string;
+      rawPayload: JsonValue;
     } = {
       id: existing?.id ?? randomUUID(),
       gigId: input.gigId,
@@ -564,7 +597,8 @@ export class MemoryGigStore implements GigStore {
           ? "ready"
           : "pending",
       imageMirroredAt: unchangedReadyImage ? existing?.imageMirroredAt ?? null : null,
-      lastSeenAt: new Date().toISOString()
+      lastSeenAt: new Date().toISOString(),
+      rawPayload: input.gig.rawPayload
     };
 
     this.sourceGigs.set(nextRecord.id, nextRecord);

@@ -221,6 +221,21 @@ pnpm verify
    pnpm scrape
    ```
 
+   To profile selected adapters without writing to Supabase, set the normal
+   `SCRAPER_SOURCE_SLUGS` filter and run:
+
+   ```bash
+   SCRAPER_SOURCE_SLUGS=the-ellington pnpm --filter @perth-gig-finder/scraper profile
+   ```
+
+   Scrape performance can be tuned with
+   `SCRAPER_SOURCE_FETCH_CONCURRENCY` (default `2`),
+   `ELLINGTON_DETAIL_CONCURRENCY` (default `8`), and
+   `IMAGE_MIRROR_CONCURRENCY` (default `2`). Set
+   `ELLINGTON_DETAIL_CACHE_DISABLED=1` to restore uncached Ellington detail
+   requests, or `SCRAPER_PROFILE=1` to emit one redacted metrics line per
+   source.
+
 7. Recompute source-level artist provenance for active and upcoming gigs after parser changes when needed:
 
    ```bash

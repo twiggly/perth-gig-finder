@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { planGigArtistWrites } from "../supabase-store";
+import {
+  planGigArtistWrites,
+  planPreferredArtistDisplayNames
+} from "../supabase-store";
 
 describe("supabase store artist sync planning", () => {
   it("skips canonical artist rewrites when the public artist list is unchanged", () => {
@@ -125,5 +128,33 @@ describe("supabase store artist sync planning", () => {
         artistNames: []
       }
     ]);
+  });
+});
+
+describe("supabase store artist preparation", () => {
+  it("folds display-name evidence in deterministic write-plan order", () => {
+    const preferredNames = planPreferredArtistDisplayNames({
+      existingNamesBySlug: new Map([
+        ["adam-lebransky", "ADAM LEBRANSKY"],
+        ["tool", "TOOL"]
+      ]),
+      writePlan: [
+        {
+          gigId: "gig-1",
+          artistNames: ["Adam Lebransky", "TOOL"]
+        },
+        {
+          gigId: "gig-2",
+          artistNames: ["ADAM LEBRANSKY"]
+        }
+      ]
+    });
+
+    expect(preferredNames).toEqual(
+      new Map([
+        ["adam-lebransky", "Adam Lebransky"],
+        ["tool", "TOOL"]
+      ])
+    );
   });
 });

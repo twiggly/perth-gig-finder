@@ -44,6 +44,7 @@ describe("executeSourceRun persistence", () => {
     expect(store.gigs.size).toBe(1);
     expect(store.sourceGigs.size).toBe(1);
     expect(store.imageBucketEnsured).toBe(false);
+    expect(store.preloadSourceRunStateCalls).toBe(2);
   });
 
   it("uses the unchanged source-gig fast path on clean reruns", async () => {

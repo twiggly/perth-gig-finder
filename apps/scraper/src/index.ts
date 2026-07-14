@@ -2,8 +2,10 @@ import "dotenv/config";
 
 import { pathToFileURL } from "node:url";
 
-import { executeSourceRun } from "./run-source";
+import { executeSourceRunsPipelined } from "./run-source";
+import { formatSourceMetricsLogLine } from "./scrape-metrics";
 import { resolveSourcesToRun } from "./source-selection";
+import { readBooleanEnv } from "./source-utils/env";
 import { SupabaseGigStore } from "./supabase-store";
 import type { SourceExecutionResult } from "./types";
 
@@ -56,20 +58,28 @@ export function formatSourceRunLogLine(summary: SourceRunSummary): string {
 
 export async function main(): Promise<void> {
   const store = new SupabaseGigStore();
-  const results: SourceExecutionResult[] = [];
   const selectedSources = resolveSourcesToRun();
   const scrapeStartedAtMs = Date.now();
+  const shouldLogMetrics = readBooleanEnv("SCRAPER_PROFILE", false);
 
   await store.ensureImageBucket();
   console.error(`[scrape] starting ${selectedSources.length} source(s)`);
 
-  for (const source of selectedSources) {
-    console.error(`[scrape] starting ${source.slug}`);
-    const result = await executeSourceRun(store, source);
-    const summary = buildSourceRunSummary(result);
-    results.push(result);
-    console.error(formatSourceRunLogLine(summary));
-  }
+  const executions = await executeSourceRunsPipelined(store, selectedSources, {
+    onSourceStart(source) {
+      console.error(`[scrape] starting ${source.slug}`);
+    },
+    onSourceComplete(execution) {
+      console.error(formatSourceRunLogLine(buildSourceRunSummary(execution.result)));
+
+      if (shouldLogMetrics) {
+        console.error(formatSourceMetricsLogLine(execution.metrics));
+      }
+    }
+  });
+  const results: SourceExecutionResult[] = executions.map(
+    (execution) => execution.result
+  );
 
   console.error(
     `[scrape] all sources completed in ${Date.now() - scrapeStartedAtMs}ms`

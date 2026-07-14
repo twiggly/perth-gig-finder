@@ -111,6 +111,33 @@ export function planGigArtistWrites(input: {
   });
 }
 
+export function planPreferredArtistDisplayNames(input: {
+  writePlan: GigArtistWritePlanItem[];
+  existingNamesBySlug: Map<string, string>;
+}): Map<string, string> {
+  const preferredNamesBySlug = new Map(input.existingNamesBySlug);
+
+  for (const item of input.writePlan) {
+    for (const artistName of normalizeArtistNames(item.artistNames)) {
+      const artistSlug = slugify(artistName);
+
+      if (!artistSlug) {
+        continue;
+      }
+
+      preferredNamesBySlug.set(
+        artistSlug,
+        selectPreferredArtistDisplayName(
+          preferredNamesBySlug.get(artistSlug),
+          artistName
+        )
+      );
+    }
+  }
+
+  return preferredNamesBySlug;
+}
+
 type EnsureSource = (input: {
   slug: string;
   name: string;
@@ -165,29 +192,31 @@ export class SupabaseArtistRepository {
     return grouped;
   }
 
-  private async writeGigArtists(gigId: string, artists: string[]): Promise<void> {
-    await retryTransientSupabaseOperation(async () => {
-      const normalizedArtists = normalizeArtistNames(artists);
-      const uniqueArtistsBySlug = new Map<string, string>();
+  private async prepareArtistRows(
+    writePlan: GigArtistWritePlanItem[]
+  ): Promise<Map<string, ArtistRow>> {
+    const desiredSlugs = [
+      ...new Set(
+        writePlan.flatMap((item) =>
+          normalizeArtistNames(item.artistNames)
+            .map((artistName) => slugify(artistName))
+            .filter(Boolean)
+        )
+      )
+    ];
 
-      for (const artist of normalizedArtists) {
-        const artistSlug = slugify(artist);
+    if (desiredSlugs.length === 0) {
+      return new Map();
+    }
 
-        if (!artistSlug || uniqueArtistsBySlug.has(artistSlug)) {
-          continue;
-        }
+    return retryTransientSupabaseOperation(async () => {
+      const existingRows: ArtistRow[] = [];
 
-        uniqueArtistsBySlug.set(artistSlug, artist);
-      }
-
-      const artistSlugs = [...uniqueArtistsBySlug.keys()];
-      const existingArtistNamesBySlug = new Map<string, string>();
-
-      if (artistSlugs.length > 0) {
+      for (const slugChunk of chunkValues(desiredSlugs, QUERY_CHUNK_SIZE)) {
         const { data, error } = await this.client
           .from("artists")
-          .select("name, slug")
-          .in("slug", artistSlugs);
+          .select("id, name, slug")
+          .in("slug", slugChunk);
 
         if (error) {
           throw new Error(
@@ -195,9 +224,70 @@ export class SupabaseArtistRepository {
           );
         }
 
-        for (const artist of (data as ArtistNameRow[] | null) ?? []) {
-          existingArtistNamesBySlug.set(artist.slug, artist.name);
+        existingRows.push(...(((data as ArtistRow[] | null) ?? [])));
+      }
+
+      const existingRowsBySlug = new Map(
+        existingRows.map((artist) => [artist.slug, artist])
+      );
+      const preferredNamesBySlug = planPreferredArtistDisplayNames({
+        writePlan,
+        existingNamesBySlug: new Map(
+          existingRows.map((artist) => [artist.slug, artist.name])
+        )
+      });
+      const rowsToUpsert = [...preferredNamesBySlug.entries()].flatMap(
+        ([artistSlug, artistName]) =>
+          existingRowsBySlug.get(artistSlug)?.name === artistName
+            ? []
+            : [{ slug: artistSlug, name: artistName }]
+      );
+      const preparedRowsBySlug = new Map(existingRowsBySlug);
+
+      for (const rowChunk of chunkValues(rowsToUpsert, QUERY_CHUNK_SIZE)) {
+        const { data, error } = await this.client
+          .from("artists")
+          .upsert(rowChunk, { onConflict: "slug" })
+          .select("id, name, slug");
+
+        if (error) {
+          throw new Error(`Unable to upsert artists: ${error.message ?? "unknown error"}`);
         }
+
+        for (const artist of (data as ArtistRow[] | null) ?? []) {
+          preparedRowsBySlug.set(artist.slug, artist);
+        }
+      }
+
+      for (const artistSlug of desiredSlugs) {
+        if (!preparedRowsBySlug.has(artistSlug)) {
+          throw new Error(`Unable to resolve prepared artist: ${artistSlug}`);
+        }
+      }
+
+      return preparedRowsBySlug;
+    });
+  }
+
+  private async replaceGigArtistLinks(
+    gigId: string,
+    artists: string[],
+    preparedRowsBySlug: Map<string, ArtistRow>
+  ): Promise<void> {
+    await retryTransientSupabaseOperation(async () => {
+      const normalizedArtists = normalizeArtistNames(artists);
+      const uniqueArtistSlugs: string[] = [];
+      const seenArtistSlugs = new Set<string>();
+
+      for (const artist of normalizedArtists) {
+        const artistSlug = slugify(artist);
+
+        if (!artistSlug || seenArtistSlugs.has(artistSlug)) {
+          continue;
+        }
+
+        seenArtistSlugs.add(artistSlug);
+        uniqueArtistSlugs.push(artistSlug);
       }
 
       const { error: deleteError } = await this.client
@@ -209,39 +299,19 @@ export class SupabaseArtistRepository {
         throw new Error(`Unable to clear gig artists: ${deleteError.message}`);
       }
 
-      if (uniqueArtistsBySlug.size === 0) {
+      if (uniqueArtistSlugs.length === 0) {
         return;
       }
 
-      const artistRows: ArtistRow[] = [];
+      const uniqueArtistRows = uniqueArtistSlugs.map((artistSlug) => {
+        const artist = preparedRowsBySlug.get(artistSlug);
 
-      for (const [artistSlug, artistName] of uniqueArtistsBySlug.entries()) {
-        const preferredArtistName = selectPreferredArtistDisplayName(
-          existingArtistNamesBySlug.get(artistSlug),
-          artistName
-        );
-        const { data, error } = await this.client
-          .from("artists")
-          .upsert(
-            {
-              name: preferredArtistName,
-              slug: artistSlug
-            },
-            { onConflict: "slug" }
-          )
-          .select("id, name, slug")
-          .single<ArtistRow>();
-
-        if (error || !data) {
-          throw new Error(`Unable to upsert artist: ${error?.message ?? "unknown error"}`);
+        if (!artist) {
+          throw new Error(`Prepared artist is missing: ${artistSlug}`);
         }
 
-        artistRows.push(data);
-      }
-
-      const uniqueArtistRows = [
-        ...new Map(artistRows.map((artist) => [artist.id, artist])).values()
-      ];
+        return artist;
+      });
       const { error: joinError } = await this.client.from("gig_artists").insert(
         uniqueArtistRows.map((artist, index) => ({
           gig_id: gigId,
@@ -341,9 +411,14 @@ export class SupabaseArtistRepository {
       candidatesByGigId: syncCandidatesByGigId,
       currentArtistNamesByGigId
     });
+    const preparedRowsBySlug = await this.prepareArtistRows(writePlan);
 
     for (const item of writePlan) {
-      await this.writeGigArtists(item.gigId, item.artistNames);
+      await this.replaceGigArtistLinks(
+        item.gigId,
+        item.artistNames,
+        preparedRowsBySlug
+      );
     }
   }
 

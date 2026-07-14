@@ -341,6 +341,27 @@ describe("the bird source adapter", () => {
     }
   });
 
+  it("starts both independent Bird feed requests concurrently", async () => {
+    let releaseRequests: (() => void) | undefined;
+    const requestGate = new Promise<void>((resolve) => {
+      releaseRequests = resolve;
+    });
+    const fetchMock = vi.fn<typeof fetch>(async () => {
+      await requestGate;
+      return new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    });
+
+    const resultPromise = theBirdSource.fetchListings(fetchMock);
+    await Promise.resolve();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    releaseRequests?.();
+    await expect(resultPromise).resolves.toEqual({ gigs: [], failedCount: 0 });
+  });
+
   it("enriches Bird gigs with posters from linked Humanitix event pages", async () => {
     freezeTheBirdFixtureClock();
 

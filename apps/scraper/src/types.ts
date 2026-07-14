@@ -12,13 +12,23 @@ export interface SourceAdapterResult {
   failedCount: number;
 }
 
+export interface SourceFetchContext {
+  loadSourceGigPayloads(
+    externalIds: string[]
+  ): Promise<Map<string, JsonValue>>;
+  recordMetric?(name: string, value: number): void;
+}
+
 export interface SourceAdapter {
   slug: string;
   name: string;
   baseUrl: string;
   priority: number;
   isPublicListingSource: boolean;
-  fetchListings(fetchImpl?: typeof fetch): Promise<SourceAdapterResult>;
+  fetchListings(
+    fetchImpl?: typeof fetch,
+    context?: SourceFetchContext
+  ): Promise<SourceAdapterResult>;
   repairArtists?(rawPayload: JsonValue): {
     artists: string[];
     artistExtractionKind: ArtistExtractionKind;
@@ -97,6 +107,15 @@ export interface GigStore {
       finishedAt: string;
     }
   ): Promise<void>;
+  preloadSourceRunState(input: {
+    sourceId: string;
+    gigs: NormalizedGig[];
+    now: string;
+  }): Promise<void>;
+  loadSourceGigPayloads(
+    sourceId: string,
+    externalIds: string[]
+  ): Promise<Map<string, JsonValue>>;
   upsertVenue(gig: NormalizedGig): Promise<VenueRecord>;
   findSourceGig(
     sourceId: string,

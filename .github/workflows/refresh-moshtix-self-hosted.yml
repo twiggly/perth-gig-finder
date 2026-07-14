@@ -35,19 +35,13 @@ jobs:
           corepack enable pnpm
           pnpm --version
 
-      - name: Configure pnpm cache
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Scrape Moshtix WA
         env:
           SCRAPER_SOURCE_SLUGS: moshtix-wa
+          SCRAPER_PROFILE: "1"
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: pnpm --filter @perth-gig-finder/scraper scrape
