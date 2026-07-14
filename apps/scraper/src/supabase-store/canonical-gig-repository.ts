@@ -6,6 +6,7 @@ import {
   normalizeTitleForMatch,
   normalizeWhitespace,
   type GigStatus,
+  type JsonValue,
   type NormalizedGig,
   type StartsAtPrecision
 } from "@perth-gig-finder/shared";
@@ -40,7 +41,10 @@ import {
   type VenueCacheEntry
 } from "./operations-repository";
 
-export { planGigArtistWrites } from "./artist-repository";
+export {
+  planGigArtistWrites,
+  planPreferredArtistDisplayNames
+} from "./artist-repository";
 export type { GigArtistWritePlanItem } from "./artist-repository";
 
 interface GigRow {
@@ -107,17 +111,31 @@ interface SourceGigLookupRow extends AttachedSourceGigRow {
   source_url: string;
 }
 
+interface SourceGigPayloadRow {
+  external_id: string | null;
+  raw_payload: JsonValue;
+}
+
 interface SourceGigCache {
   byChecksum: Map<string, SourceGigLookupRow>;
   byExternalId: Map<string, SourceGigLookupRow>;
   byGigId: Map<string, SourceGigLookupRow[]>;
   byId: Map<string, SourceGigLookupRow>;
+  activeUpcomingRows: Map<string, PrunableSourceGigRow> | null;
 }
 
 interface PrunableSourceGigRow {
   id: string;
   gig_id: string;
   identity_key: string;
+  starts_at?: string;
+}
+
+interface ActiveUpcomingSourceGigLookupRow extends SourceGigLookupRow {
+  gigs:
+    | { starts_at: string }
+    | Array<{ starts_at: string }>
+    | null;
 }
 
 interface CanonicalGigSourceRow {
@@ -191,6 +209,9 @@ function isReadyMirroredSourceGig(row: SourceGigRow): boolean {
 const PERTH_UTC_OFFSET_MS = 8 * 60 * 60 * 1000;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const QUERY_CHUNK_SIZE = 100;
+const QUERY_PAGE_SIZE = 1_000;
+const SOURCE_GIG_LOOKUP_SELECT =
+  "id, source_id, gig_id, identity_key, starts_at_precision, artist_names, artist_extraction_kind, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height, external_id, checksum, source_url, last_seen_at, created_at";
 
 function getPerthDayBounds(startsAt: string): { startsAtGte: string; startsAtLt: string } {
   const utcDate = new Date(startsAt);
@@ -391,12 +412,82 @@ export class SupabaseGigStore implements GigStore {
     return this.operationsRepository.upsertVenue(gig);
   }
 
-  private buildSourceGigCache(rows: SourceGigLookupRow[]): SourceGigCache {
+  async preloadSourceRunState(input: {
+    sourceId: string;
+    gigs: NormalizedGig[];
+    now: string;
+  }): Promise<void> {
+    try {
+      await this.operationsRepository.preloadVenues(input.gigs);
+    } catch {
+      // Preloading is an optimization; per-gig venue lookups remain the fallback.
+    }
+
+    try {
+      await this.preloadSourceGigCache(input);
+    } catch {
+      this.sourceGigCaches.delete(input.sourceId);
+    }
+  }
+
+  async loadSourceGigPayloads(
+    sourceId: string,
+    externalIds: string[]
+  ): Promise<Map<string, JsonValue>> {
+    const payloads = new Map<string, JsonValue>();
+    const uniqueExternalIds = [...new Set(externalIds.filter(Boolean))];
+
+    for (const externalIdChunk of chunkValues(
+      uniqueExternalIds,
+      QUERY_CHUNK_SIZE
+    )) {
+      let offset = 0;
+
+      while (true) {
+        const { data, error } = await this.client
+          .from("source_gigs")
+          .select("external_id, raw_payload")
+          .eq("source_id", sourceId)
+          .in("external_id", externalIdChunk)
+          .order("id", { ascending: true })
+          .range(offset, offset + QUERY_PAGE_SIZE - 1);
+
+        if (error) {
+          throw new Error(`Could not load source gig payloads: ${error.message}`);
+        }
+
+        const rows = (data ?? []) as SourceGigPayloadRow[];
+
+        for (const row of rows) {
+          if (row.external_id) {
+            payloads.set(row.external_id, row.raw_payload);
+          }
+        }
+
+        if (rows.length < QUERY_PAGE_SIZE) {
+          break;
+        }
+
+        offset += QUERY_PAGE_SIZE;
+      }
+    }
+
+    return payloads;
+  }
+
+  private buildSourceGigCache(
+    rows: SourceGigLookupRow[],
+    activeUpcomingRows: PrunableSourceGigRow[] | null = null
+  ): SourceGigCache {
     const cache: SourceGigCache = {
       byChecksum: new Map(),
       byExternalId: new Map(),
       byGigId: new Map(),
-      byId: new Map()
+      byId: new Map(),
+      activeUpcomingRows:
+        activeUpcomingRows === null
+          ? null
+          : new Map(activeUpcomingRows.map((row) => [row.id, row]))
     };
 
     for (const row of rows) {
@@ -432,6 +523,7 @@ export class SupabaseGigStore implements GigStore {
   private removeSourceGigRowFromCache(cache: SourceGigCache, row: SourceGigLookupRow): void {
     cache.byId.delete(row.id);
     cache.byChecksum.delete(row.checksum);
+    cache.activeUpcomingRows?.delete(row.id);
 
     if (row.external_id) {
       cache.byExternalId.delete(row.external_id);
@@ -448,6 +540,185 @@ export class SupabaseGigStore implements GigStore {
     cache.byGigId.set(row.gig_id, nextRows);
   }
 
+  private async loadActiveUpcomingSourceGigRows(
+    sourceId: string,
+    now: string
+  ): Promise<ActiveUpcomingSourceGigLookupRow[]> {
+    const rows: ActiveUpcomingSourceGigLookupRow[] = [];
+
+    for (let offset = 0; ; offset += QUERY_CHUNK_SIZE) {
+      const { data, error } = await this.client
+        .from("source_gigs")
+        .select(`${SOURCE_GIG_LOOKUP_SELECT}, gigs!inner(status, starts_at)`)
+        .eq("source_id", sourceId)
+        .eq("gigs.status", "active")
+        .gte("gigs.starts_at", now)
+        .order("id", { ascending: true })
+        .range(offset, offset + QUERY_CHUNK_SIZE - 1);
+
+      if (error) {
+        throw new Error(
+          `Unable to preload upcoming source gigs: ${error.message ?? "unknown error"}`
+        );
+      }
+
+      const page =
+        (data as unknown as ActiveUpcomingSourceGigLookupRow[] | null) ?? [];
+      rows.push(...page);
+
+      if (page.length < QUERY_CHUNK_SIZE) {
+        break;
+      }
+    }
+
+    return rows;
+  }
+
+  private async loadAllSourceGigLookupRows(
+    sourceId: string
+  ): Promise<SourceGigLookupRow[]> {
+    const rows: SourceGigLookupRow[] = [];
+
+    for (let offset = 0; ; offset += QUERY_CHUNK_SIZE) {
+      const { data, error } = await this.client
+        .from("source_gigs")
+        .select(SOURCE_GIG_LOOKUP_SELECT)
+        .eq("source_id", sourceId)
+        .order("id", { ascending: true })
+        .range(offset, offset + QUERY_CHUNK_SIZE - 1);
+
+      if (error) {
+        throw new Error(
+          `Unable to load source gigs for cache: ${error.message ?? "unknown error"}`
+        );
+      }
+
+      const page = (data as SourceGigLookupRow[] | null) ?? [];
+      rows.push(...page);
+
+      if (page.length < QUERY_CHUNK_SIZE) {
+        break;
+      }
+    }
+
+    return rows;
+  }
+
+  private async loadSourceGigRowsByField(input: {
+    sourceId: string;
+    field: "external_id" | "checksum";
+    values: string[];
+  }): Promise<SourceGigLookupRow[]> {
+    const rows: SourceGigLookupRow[] = [];
+
+    for (const valueChunk of chunkValues([...new Set(input.values)], QUERY_CHUNK_SIZE)) {
+      for (let offset = 0; ; offset += QUERY_CHUNK_SIZE) {
+        const { data, error } = await this.client
+          .from("source_gigs")
+          .select(SOURCE_GIG_LOOKUP_SELECT)
+          .eq("source_id", input.sourceId)
+          .in(input.field, valueChunk)
+          .order("id", { ascending: true })
+          .range(offset, offset + QUERY_CHUNK_SIZE - 1);
+
+        if (error) {
+          throw new Error(
+            `Unable to preload matching source gigs: ${error.message ?? "unknown error"}`
+          );
+        }
+
+        const page = (data as SourceGigLookupRow[] | null) ?? [];
+        rows.push(...page);
+
+        if (page.length < QUERY_CHUNK_SIZE) {
+          break;
+        }
+      }
+    }
+
+    return rows;
+  }
+
+  private async loadAttachedSourceGigRows(input: {
+    sourceId: string;
+    gigIds: string[];
+  }): Promise<SourceGigLookupRow[]> {
+    const rows: SourceGigLookupRow[] = [];
+
+    for (const gigIdChunk of chunkValues([...new Set(input.gigIds)], QUERY_CHUNK_SIZE)) {
+      for (let offset = 0; ; offset += QUERY_CHUNK_SIZE) {
+        const { data, error } = await this.client
+          .from("source_gigs")
+          .select(SOURCE_GIG_LOOKUP_SELECT)
+          .eq("source_id", input.sourceId)
+          .in("gig_id", gigIdChunk)
+          .order("id", { ascending: true })
+          .range(offset, offset + QUERY_CHUNK_SIZE - 1);
+
+        if (error) {
+          throw new Error(
+            `Unable to preload attached source gigs: ${error.message ?? "unknown error"}`
+          );
+        }
+
+        const page = (data as SourceGigLookupRow[] | null) ?? [];
+        rows.push(...page);
+
+        if (page.length < QUERY_CHUNK_SIZE) {
+          break;
+        }
+      }
+    }
+
+    return rows;
+  }
+
+  private async preloadSourceGigCache(input: {
+    sourceId: string;
+    gigs: NormalizedGig[];
+    now: string;
+  }): Promise<void> {
+    const externalIds = input.gigs.flatMap((gig) =>
+      gig.externalId ? [gig.externalId] : []
+    );
+    const checksums = input.gigs.map((gig) => gig.checksum);
+    const [activeRows, externalIdRows, checksumRows] = await Promise.all([
+      this.loadActiveUpcomingSourceGigRows(input.sourceId, input.now),
+      this.loadSourceGigRowsByField({
+        sourceId: input.sourceId,
+        field: "external_id",
+        values: externalIds
+      }),
+      this.loadSourceGigRowsByField({
+        sourceId: input.sourceId,
+        field: "checksum",
+        values: checksums
+      })
+    ]);
+    const initialRows = [activeRows, externalIdRows, checksumRows].flat();
+    const attachedRows = await this.loadAttachedSourceGigRows({
+      sourceId: input.sourceId,
+      gigIds: initialRows.map((row) => row.gig_id)
+    });
+    const rowsById = new Map(
+      [...initialRows, ...attachedRows].map((row) => [row.id, row])
+    );
+    const cache = this.buildSourceGigCache(
+      [...rowsById.values()],
+      activeRows.map((row) => ({
+        id: row.id,
+        gig_id: row.gig_id,
+        identity_key: row.identity_key,
+        starts_at: getSingleRelation(row.gigs)?.starts_at
+      }))
+    );
+    this.sourceGigCaches.set(input.sourceId, cache);
+
+    await this.hydrateGigCaches(
+      [...new Set([...cache.byId.values()].map((row) => row.gig_id))]
+    );
+  }
+
   private async getSourceGigCache(sourceId: string): Promise<SourceGigCache> {
     const cached = this.sourceGigCaches.get(sourceId);
 
@@ -455,21 +726,8 @@ export class SupabaseGigStore implements GigStore {
       return cached;
     }
 
-    const { data, error } = await this.client
-      .from("source_gigs")
-      .select(
-        "id, source_id, gig_id, identity_key, starts_at_precision, artist_names, artist_extraction_kind, source_image_url, mirrored_image_path, image_mirror_status, image_mirrored_at, mirrored_image_width, mirrored_image_height, external_id, checksum, source_url, last_seen_at, created_at"
-      )
-      .eq("source_id", sourceId);
-
-    if (error) {
-      throw new Error(
-        `Unable to load source gigs for cache: ${error.message ?? "unknown error"}`
-      );
-    }
-
     const cache = this.buildSourceGigCache(
-      (data as SourceGigLookupRow[] | null) ?? []
+      await this.loadAllSourceGigLookupRows(sourceId)
     );
     this.sourceGigCaches.set(sourceId, cache);
 
@@ -1314,24 +1572,87 @@ export class SupabaseGigStore implements GigStore {
     await this.deleteGigsById([input.currentGigId]);
   }
 
+  private async loadAllPrunableSourceGigRows(
+    sourceId: string
+  ): Promise<PrunableSourceGigRow[]> {
+    const rows: PrunableSourceGigRow[] = [];
+
+    for (let offset = 0; ; offset += QUERY_CHUNK_SIZE) {
+      const { data, error } = await this.client
+        .from("source_gigs")
+        .select("id, gig_id, identity_key")
+        .eq("source_id", sourceId)
+        .order("id", { ascending: true })
+        .range(offset, offset + QUERY_CHUNK_SIZE - 1);
+
+      if (error) {
+        throw new Error(
+          `Unable to load source gigs for pruning: ${error.message ?? "unknown error"}`
+        );
+      }
+
+      const page = (data as PrunableSourceGigRow[] | null) ?? [];
+      rows.push(...page);
+
+      if (page.length < QUERY_CHUNK_SIZE) {
+        break;
+      }
+    }
+
+    return rows;
+  }
+
+  private async deleteStaleSourceGigRows(
+    staleSourceGigRows: PrunableSourceGigRow[]
+  ): Promise<void> {
+    if (staleSourceGigRows.length === 0) {
+      return;
+    }
+
+    const staleSourceGigIds = staleSourceGigRows.map((row) => row.id);
+    const staleGigIds = [...new Set(staleSourceGigRows.map((row) => row.gig_id))];
+
+    await this.deleteSourceGigsById(staleSourceGigIds);
+
+    const attachedGigIds = await this.listGigIdsWithSourceGigs(staleGigIds);
+    const orphanedGigIds = staleGigIds.filter((gigId) => !attachedGigIds.has(gigId));
+
+    await this.deleteGigsById(orphanedGigIds);
+
+    const remainingGigIds = staleGigIds.filter((gigId) => attachedGigIds.has(gigId));
+    await this.syncGigArtistsFromSourceGigs(remainingGigIds);
+  }
+
+  private async prunePreparedSourceGigRows(
+    input: { retainedIdentityKeys: string[] },
+    sourceGigRows: PrunableSourceGigRow[]
+  ): Promise<void> {
+    const retainedIdentityKeys = new Set(input.retainedIdentityKeys);
+    const nowIsoValue = new Date().toISOString();
+    const staleRows = sourceGigRows.filter(
+      (row) =>
+        Boolean(row.starts_at && row.starts_at >= nowIsoValue) &&
+        !retainedIdentityKeys.has(row.identity_key)
+    );
+
+    await this.deleteStaleSourceGigRows(staleRows);
+  }
+
   async pruneStaleUpcomingSourceGigs(input: {
     sourceId: string;
     retainedIdentityKeys: string[];
   }): Promise<void> {
-    const { data: sourceGigData, error: sourceGigError } = await this.client
-      .from("source_gigs")
-      .select("id, gig_id, identity_key")
-      .eq("source_id", input.sourceId);
-
-    if (sourceGigError) {
-      throw new Error(
-        `Unable to load source gigs for pruning: ${sourceGigError.message ?? "unknown error"}`
-      );
-    }
-
-    const sourceGigRows = (sourceGigData as PrunableSourceGigRow[] | null) ?? [];
+    const preparedRows = this.sourceGigCaches.get(input.sourceId)?.activeUpcomingRows;
+    const sourceGigRows = preparedRows
+      ? [...preparedRows.values()]
+      : await this.loadAllPrunableSourceGigRows(input.sourceId);
 
     if (sourceGigRows.length === 0) {
+      return;
+    }
+
+    if (preparedRows) {
+      await this.prunePreparedSourceGigRows(input, sourceGigRows);
       return;
     }
 
@@ -1368,18 +1689,7 @@ export class SupabaseGigStore implements GigStore {
         activeUpcomingGigIds.has(row.gig_id) &&
         !retainedIdentityKeys.has(row.identity_key)
     );
-    const staleSourceGigIds = staleSourceGigRows.map((row) => row.id);
-    const staleGigIds = [...new Set(staleSourceGigRows.map((row) => row.gig_id))];
-
-    await this.deleteSourceGigsById(staleSourceGigIds);
-
-    const attachedGigIds = await this.listGigIdsWithSourceGigs(staleGigIds);
-    const orphanedGigIds = staleGigIds.filter((gigId) => !attachedGigIds.has(gigId));
-
-    await this.deleteGigsById(orphanedGigIds);
-
-    const remainingGigIds = staleGigIds.filter((gigId) => attachedGigIds.has(gigId));
-    await this.syncGigArtistsFromSourceGigs(remainingGigIds);
+    await this.deleteStaleSourceGigRows(staleSourceGigRows);
   }
 
   async mirrorSourceGigImage(

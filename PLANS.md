@@ -72,6 +72,10 @@ Primary touchpoints:
 The hosted pipeline works, but scraper visibility can still improve.
 
 Useful follow-ups:
+- compare at least six successful hosted `[scrape-metrics]` runs after the
+  scraper performance rollout
+- prototype a service-role write-plan RPC only if persistence p50 remains
+  above 45 seconds or total scrape p50 remains above 120 seconds
 - persisted scrape/source trends
 - GitHub Actions job summaries
 - source failure alerting

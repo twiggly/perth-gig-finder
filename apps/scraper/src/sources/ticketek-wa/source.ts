@@ -32,7 +32,7 @@ export const ticketekWaSource: SourceAdapter = {
   baseUrl: SOURCE_URL,
   priority: 10,
   isPublicListingSource: true,
-  async fetchListings(fetchImpl = fetch): Promise<SourceAdapterResult> {
+  async fetchListings(fetchImpl = fetch, context): Promise<SourceAdapterResult> {
     const cookieJar = createTicketekCookieJar();
     const listingsById = new Map<string, TicketekSearchListing>();
     const exactTimeLookup = new Map<string, string | null>();
@@ -46,13 +46,18 @@ export const ticketekWaSource: SourceAdapter = {
       }
     });
 
-    for (const query of SEARCH_QUERIES) {
+    for (const [queryIndex, query] of SEARCH_QUERIES.entries()) {
+      const listingCountBeforeQuery = listingsById.size;
+      const queryListingIds = new Set<string>();
+      let fetchedPageCount = 0;
+
       try {
         const firstPageHtml = await fetchTicketekPageHtml(
           buildTicketekSearchUrl(query, 1),
           fetchImpl,
           cookieJar
         );
+        fetchedPageCount += 1;
 
         if (detectFrontdoorPage(firstPageHtml)) {
           failedCount += 1;
@@ -63,6 +68,7 @@ export const ticketekWaSource: SourceAdapter = {
         failedCount += firstPage.failedCount;
 
         for (const listing of firstPage.listings) {
+          queryListingIds.add(listing.externalId);
           const existing = listingsById.get(listing.externalId);
           listingsById.set(
             listing.externalId,
@@ -78,6 +84,7 @@ export const ticketekWaSource: SourceAdapter = {
             fetchImpl,
             cookieJar
           );
+          fetchedPageCount += 1;
 
           if (detectFrontdoorPage(pageHtml)) {
             failedCount += 1;
@@ -88,6 +95,7 @@ export const ticketekWaSource: SourceAdapter = {
           failedCount += pageResult.failedCount;
 
           for (const listing of pageResult.listings) {
+            queryListingIds.add(listing.externalId);
             const existing = listingsById.get(listing.externalId);
             listingsById.set(
               listing.externalId,
@@ -98,9 +106,24 @@ export const ticketekWaSource: SourceAdapter = {
       } catch {
         failedCount += 1;
       }
+
+      const metricPrefix = `ticketek.html_query_${queryIndex + 1}`;
+      context?.recordMetric?.(`${metricPrefix}.pages`, fetchedPageCount);
+      context?.recordMetric?.(
+        `${metricPrefix}.candidates`,
+        queryListingIds.size
+      );
+      context?.recordMetric?.(
+        `${metricPrefix}.new_unique`,
+        Math.max(0, listingsById.size - listingCountBeforeQuery)
+      );
     }
 
     await Promise.all(searchApiTasks);
+    context?.recordMetric?.(
+      "ticketek.search_api.exact_time_keys",
+      exactTimeLookup.size
+    );
 
     const listings = [...listingsById.values()];
     const listingsNeedingTitleHydration = listings.filter(
@@ -109,12 +132,21 @@ export const ticketekWaSource: SourceAdapter = {
           .startsAtPrecision !== "exact"
     );
 
+    const exactTimeCountBeforeTitleHydration = exactTimeLookup.size;
     await runTicketekTitleHydrationBatch({
       listings: listingsNeedingTitleHydration,
       exactTimeLookup,
       fetchImpl,
       titleQueryCache
     });
+    context?.recordMetric?.(
+      "ticketek.title_hydration.listings",
+      listingsNeedingTitleHydration.length
+    );
+    context?.recordMetric?.(
+      "ticketek.title_hydration.new_exact_time_keys",
+      Math.max(0, exactTimeLookup.size - exactTimeCountBeforeTitleHydration)
+    );
 
     const enrichedListings = listings.map((listing) =>
       enrichTicketekListingWithExactTime(listing, exactTimeLookup)

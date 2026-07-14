@@ -5,18 +5,28 @@ import {
   normalizeWhitespace,
   type GigStatus,
   type JsonObject,
+  type JsonValue,
   type NormalizedGig,
   type NormalizedVenue
 } from "@perth-gig-finder/shared";
 
 import { extractEllingtonArtists } from "./the-ellington-artists";
-import type { SourceAdapter, SourceAdapterResult } from "../types";
+import { mapWithConcurrency } from "../source-utils/concurrency";
+import {
+  readBooleanEnv,
+  readPositiveIntegerEnv
+} from "../source-utils/env";
+import type {
+  SourceAdapter,
+  SourceAdapterResult,
+  SourceFetchContext
+} from "../types";
 
 const SOURCE_ORIGIN = "https://www.ellingtonjazz.com.au";
 const SOURCE_URL = `${SOURCE_ORIGIN}/all-shows/`;
 const EVENTS_API_URL = `${SOURCE_ORIGIN}/wp-json/wp/v2/tc_events`;
 const REQUEST_TIMEOUT_MS = 20_000;
-const DETAIL_FETCH_BATCH_SIZE = 4;
+const DEFAULT_DETAIL_FETCH_CONCURRENCY = 8;
 const PERTH_OFFSET_SUFFIX = "+08:00";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -60,6 +70,7 @@ const MONTHS: ReadonlyMap<string, number> = new Map(
 export interface EllingtonRestEvent {
   id?: number;
   link?: string;
+  modified_gmt?: string;
   title?: {
     rendered?: string;
   };
@@ -97,14 +108,40 @@ export interface EllingtonEventTimes {
   eventDateRangeText: string | null;
 }
 
+export interface EllingtonDetailSnapshot extends EllingtonEventTimes {
+  imageUrl: string | null;
+}
+
+export function getEllingtonDetailConcurrency(
+  env: NodeJS.ProcessEnv = process.env
+): number {
+  return readPositiveIntegerEnv(
+    "ELLINGTON_DETAIL_CONCURRENCY",
+    DEFAULT_DETAIL_FETCH_CONCURRENCY,
+    env
+  );
+}
+
+export function getEllingtonDetailCacheEnabled(
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  return !readBooleanEnv("ELLINGTON_DETAIL_CACHE_DISABLED", false, env);
+}
+
 interface EllingtonDetailFetchTarget {
   event: EllingtonRestEvent;
   sourceUrl: string;
+  cachedDetail: EllingtonDetailSnapshot | null;
 }
 
 interface EllingtonDetailFetchResult {
-  bundle: EllingtonEventBundle | null;
+  bundle: EllingtonPreparedEventBundle | null;
   failedCount: number;
+}
+
+interface EllingtonPreparedEventBundle {
+  event: EllingtonRestEvent;
+  detail: EllingtonDetailSnapshot;
 }
 
 function normalizeUrl(value: string | null | undefined): string | null {
@@ -445,6 +482,74 @@ function extractImageUrl(
   return extractDetailPageImageUrl(detailHtml);
 }
 
+function getEllingtonDetailVersion(
+  event: EllingtonRestEvent
+): string | null {
+  const version = normalizeWhitespace(event.modified_gmt ?? "");
+  return version || null;
+}
+
+function isValidIsoDateTime(value: string): boolean {
+  return !Number.isNaN(new Date(value).getTime());
+}
+
+function getCachedEllingtonDetail(
+  event: EllingtonRestEvent,
+  rawPayload: JsonValue | undefined
+): EllingtonDetailSnapshot | null {
+  const detailVersion = getEllingtonDetailVersion(event);
+
+  if (
+    !detailVersion ||
+    !rawPayload ||
+    typeof rawPayload !== "object" ||
+    Array.isArray(rawPayload)
+  ) {
+    return null;
+  }
+
+  const payload = rawPayload as JsonObject;
+  const startsAt = payload.startsAt;
+  const endsAt = payload.endsAt;
+  const eventStartText = payload.eventStartText;
+  const eventDateRangeText = payload.eventDateRangeText;
+  const imageUrl = payload.imageUrl;
+
+  if (
+    payload.detailVersion !== detailVersion ||
+    typeof startsAt !== "string" ||
+    !isValidIsoDateTime(startsAt) ||
+    (endsAt !== null &&
+      (typeof endsAt !== "string" || !isValidIsoDateTime(endsAt))) ||
+    typeof eventStartText !== "string" ||
+    !normalizeWhitespace(eventStartText) ||
+    (eventDateRangeText !== null && typeof eventDateRangeText !== "string") ||
+    (imageUrl !== null &&
+      (typeof imageUrl !== "string" ||
+        normalizeEllingtonImageUrl(imageUrl) !== imageUrl))
+  ) {
+    return null;
+  }
+
+  return {
+    startsAt,
+    endsAt,
+    eventStartText,
+    eventDateRangeText,
+    imageUrl
+  };
+}
+
+function extractEllingtonDetailSnapshot(
+  event: EllingtonRestEvent,
+  detailHtml: string
+): EllingtonDetailSnapshot {
+  return {
+    ...extractEllingtonEventTimes(detailHtml),
+    imageUrl: extractImageUrl(event, detailHtml)
+  };
+}
+
 function normalizeEllingtonStatus(title: string, description: string | null): GigStatus {
   const statusText = `${title} ${description ?? ""}`;
 
@@ -459,9 +564,28 @@ function normalizeEllingtonStatus(title: string, description: string | null): Gi
   return "active";
 }
 
-export function normalizeEllingtonEvent(
+function buildEllingtonChecksum(input: {
+  startsAt: string;
+  title: string;
+  sourceUrl: string;
+  detailVersion: string | null;
+}): string {
+  const checksumSourceUrl = input.detailVersion
+    ? `${input.sourceUrl}#detail-version=${encodeURIComponent(input.detailVersion)}`
+    : input.sourceUrl;
+
+  return buildGigChecksum({
+    sourceSlug: "the-ellington",
+    startsAt: input.startsAt,
+    title: input.title,
+    venueSlug: VENUE.slug,
+    sourceUrl: checksumSourceUrl
+  });
+}
+
+function normalizeEllingtonEventWithDetail(
   event: EllingtonRestEvent,
-  detailHtml: string
+  detail: EllingtonDetailSnapshot
 ): NormalizedGig {
   const eventId = event.id;
 
@@ -476,23 +600,25 @@ export function normalizeEllingtonEvent(
     throw new Error("The Ellington event is missing a title or source URL");
   }
 
-  const times = extractEllingtonEventTimes(detailHtml);
   const description = toPlainText(event.content?.rendered);
-  const imageUrl = extractImageUrl(event, detailHtml);
   const categories = extractCategories(event);
   const artistExtraction = extractEllingtonArtists({
     title,
     contentHtml: event.content?.rendered
   });
+  const detailVersion = getEllingtonDetailVersion(event);
   const rawPayload: JsonObject = {
     source: "wordpress-rest",
     eventId,
     title,
     sourceUrl,
-    imageUrl,
+    imageUrl: detail.imageUrl,
     categories,
-    eventStartText: times.eventStartText,
-    eventDateRangeText: times.eventDateRangeText,
+    detailVersion,
+    startsAt: detail.startsAt,
+    endsAt: detail.endsAt,
+    eventStartText: detail.eventStartText,
+    eventDateRangeText: detail.eventDateRangeText,
     contentHtml: event.content?.rendered ?? null
   };
 
@@ -500,26 +626,35 @@ export function normalizeEllingtonEvent(
     sourceSlug: "the-ellington",
     externalId: String(eventId),
     sourceUrl,
-    imageUrl,
+    imageUrl: detail.imageUrl,
     title,
     description,
     status: normalizeEllingtonStatus(title, description),
-    startsAt: times.startsAt,
+    startsAt: detail.startsAt,
     startsAtPrecision: "exact",
-    endsAt: times.endsAt,
+    endsAt: detail.endsAt,
     ticketUrl: sourceUrl,
     venue: VENUE,
     artists: artistExtraction.artists,
     artistExtractionKind: artistExtraction.artistExtractionKind,
     rawPayload,
-    checksum: buildGigChecksum({
-      sourceSlug: "the-ellington",
-      startsAt: times.startsAt,
+    checksum: buildEllingtonChecksum({
+      startsAt: detail.startsAt,
       title,
-      venueSlug: VENUE.slug,
-      sourceUrl
+      sourceUrl,
+      detailVersion
     })
   };
+}
+
+export function normalizeEllingtonEvent(
+  event: EllingtonRestEvent,
+  detailHtml: string
+): NormalizedGig {
+  return normalizeEllingtonEventWithDetail(
+    event,
+    extractEllingtonDetailSnapshot(event, detailHtml)
+  );
 }
 
 export function parseEllingtonEvents(
@@ -531,6 +666,23 @@ export function parseEllingtonEvents(
   for (const bundle of bundles) {
     try {
       gigs.push(normalizeEllingtonEvent(bundle.event, bundle.detailHtml));
+    } catch {
+      failedCount += 1;
+    }
+  }
+
+  return { gigs, failedCount };
+}
+
+function parsePreparedEllingtonEvents(
+  bundles: EllingtonPreparedEventBundle[]
+): SourceAdapterResult {
+  const gigs: NormalizedGig[] = [];
+  let failedCount = 0;
+
+  for (const bundle of bundles) {
+    try {
+      gigs.push(normalizeEllingtonEventWithDetail(bundle.event, bundle.detail));
     } catch {
       failedCount += 1;
     }
@@ -585,8 +737,19 @@ async function fetchEllingtonEventDetail(input: {
   event: EllingtonRestEvent;
   sourceUrl: string;
   fetchImpl: typeof fetch;
+  cachedDetail: EllingtonDetailSnapshot | null;
 }): Promise<EllingtonDetailFetchResult> {
   try {
+    if (input.cachedDetail) {
+      return {
+        bundle: {
+          event: input.event,
+          detail: input.cachedDetail
+        },
+        failedCount: 0
+      };
+    }
+
     const response = await input.fetchImpl(input.sourceUrl, {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     });
@@ -598,7 +761,10 @@ async function fetchEllingtonEventDetail(input: {
     return {
       bundle: {
         event: input.event,
-        detailHtml: await response.text()
+        detail: extractEllingtonDetailSnapshot(
+          input.event,
+          await response.text()
+        )
       },
       failedCount: 0
     };
@@ -610,16 +776,63 @@ async function fetchEllingtonEventDetail(input: {
   }
 }
 
+async function loadCachedEllingtonDetails(input: {
+  events: EllingtonRestEvent[];
+  context?: SourceFetchContext;
+}): Promise<Map<string, EllingtonDetailSnapshot>> {
+  if (!input.context || !getEllingtonDetailCacheEnabled()) {
+    return new Map();
+  }
+
+  const externalIds = input.events.flatMap((event) =>
+    typeof event.id === "number" &&
+    Number.isInteger(event.id) &&
+    getEllingtonDetailVersion(event)
+      ? [String(event.id)]
+      : []
+  );
+
+  if (externalIds.length === 0) {
+    return new Map();
+  }
+
+  let payloads: Map<string, JsonValue>;
+
+  try {
+    payloads = await input.context.loadSourceGigPayloads(externalIds);
+  } catch {
+    return new Map();
+  }
+
+  const details = new Map<string, EllingtonDetailSnapshot>();
+
+  for (const event of input.events) {
+    if (typeof event.id !== "number" || !Number.isInteger(event.id)) {
+      continue;
+    }
+
+    const externalId = String(event.id);
+    const detail = getCachedEllingtonDetail(event, payloads.get(externalId));
+
+    if (detail) {
+      details.set(externalId, detail);
+    }
+  }
+
+  return details;
+}
+
 export const theEllingtonSource: SourceAdapter = {
   slug: "the-ellington",
   name: "The Ellington",
   baseUrl: SOURCE_URL,
   priority: 100,
   isPublicListingSource: true,
-  async fetchListings(fetchImpl = fetch) {
+  async fetchListings(fetchImpl = fetch, context) {
     const events = await fetchEllingtonEvents(fetchImpl);
-    const bundles: EllingtonEventBundle[] = [];
+    const bundles: EllingtonPreparedEventBundle[] = [];
     const detailTargets: EllingtonDetailFetchTarget[] = [];
+    const cachedDetails = await loadCachedEllingtonDetails({ events, context });
     let failedCount = 0;
 
     for (const event of events) {
@@ -630,36 +843,37 @@ export const theEllingtonSource: SourceAdapter = {
         continue;
       }
 
-      detailTargets.push({ event, sourceUrl });
+      detailTargets.push({
+        event,
+        sourceUrl,
+        cachedDetail:
+          typeof event.id === "number"
+            ? cachedDetails.get(String(event.id)) ?? null
+            : null
+      });
     }
 
-    for (
-      let detailIndex = 0;
-      detailIndex < detailTargets.length;
-      detailIndex += DETAIL_FETCH_BATCH_SIZE
-    ) {
-      const batchResults = await Promise.all(
-        detailTargets
-          .slice(detailIndex, detailIndex + DETAIL_FETCH_BATCH_SIZE)
-          .map((target) =>
-            fetchEllingtonEventDetail({
-              event: target.event,
-              sourceUrl: target.sourceUrl,
-              fetchImpl
-            })
-          )
-      );
+    const detailResults = await mapWithConcurrency(
+      detailTargets,
+      getEllingtonDetailConcurrency(),
+      (target) =>
+        fetchEllingtonEventDetail({
+          event: target.event,
+          sourceUrl: target.sourceUrl,
+          fetchImpl,
+          cachedDetail: target.cachedDetail
+        })
+    );
 
-      for (const result of batchResults) {
-        failedCount += result.failedCount;
+    for (const result of detailResults) {
+      failedCount += result.failedCount;
 
-        if (result.bundle) {
-          bundles.push(result.bundle);
-        }
+      if (result.bundle) {
+        bundles.push(result.bundle);
       }
     }
 
-    const parsed = parseEllingtonEvents(bundles);
+    const parsed = parsePreparedEllingtonEvents(bundles);
 
     return {
       gigs: parsed.gigs,

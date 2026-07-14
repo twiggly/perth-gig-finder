@@ -24,23 +24,18 @@ export const theBirdSource: SourceAdapter = {
   priority: 50,
   isPublicListingSource: true,
   async fetchListings(fetchImpl = fetch) {
-    const response = await fetchImpl(FEED_URL, {
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-    });
+    const [response, weeklyResponse] = await Promise.all([
+      fetchImpl(FEED_URL, {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+      }),
+      fetchImpl(WHATSON_FEED_URL, {
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+      })
+    ]);
 
     if (!response.ok) {
       throw new Error(`The Bird feed returned status ${response.status}`);
     }
-
-    const payload = (await response.json()) as unknown;
-
-    if (!Array.isArray(payload)) {
-      throw new Error("The Bird feed payload was not an array");
-    }
-
-    const weeklyResponse = await fetchImpl(WHATSON_FEED_URL, {
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-    });
 
     if (!weeklyResponse.ok) {
       throw new Error(
@@ -48,7 +43,14 @@ export const theBirdSource: SourceAdapter = {
       );
     }
 
-    const weeklyPayload = (await weeklyResponse.json()) as unknown;
+    const [payload, weeklyPayload] = (await Promise.all([
+      response.json(),
+      weeklyResponse.json()
+    ])) as [unknown, unknown];
+
+    if (!Array.isArray(payload)) {
+      throw new Error("The Bird feed payload was not an array");
+    }
 
     if (!Array.isArray(weeklyPayload)) {
       throw new Error("The Bird weekly feed payload was not an array");

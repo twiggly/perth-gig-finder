@@ -15,6 +15,9 @@ interface SourceRow {
 interface VenueRow {
   id: string;
   slug: string;
+  name?: string;
+  suburb?: string | null;
+  address?: string | null;
   website_url?: string | null;
 }
 
@@ -26,11 +29,68 @@ export interface VenueCacheEntry extends VenueRecord {
 }
 
 export class SupabaseOperationsRepository {
+  private readonly knownMissingVenueSlugs = new Set<string>();
+
   constructor(
     private readonly client: SupabaseClient,
     private readonly venueCache: Map<string, VenueCacheEntry>,
     private readonly sourcePriorityCache: Map<string, number>
   ) {}
+
+  async preloadVenues(gigs: NormalizedGig[]): Promise<void> {
+    const requestedSlugs = [
+      ...new Set(
+        gigs.map((gig) => gig.venue.slug || slugifyVenueName(gig.venue.name))
+      )
+    ].filter((slug) => !this.venueCache.has(slug));
+
+    if (requestedSlugs.length === 0) {
+      return;
+    }
+
+    const rows: VenueRow[] = [];
+
+    for (let index = 0; index < requestedSlugs.length; index += 100) {
+      const slugChunk = requestedSlugs.slice(index, index + 100);
+      const { data, error } = await this.client
+        .from("venues")
+        .select("id, slug, name, suburb, address, website_url")
+        .in("slug", slugChunk);
+
+      if (error) {
+        throw new Error(
+          `Unable to preload venues: ${error.message ?? "unknown error"}`
+        );
+      }
+
+      rows.push(...(((data as VenueRow[] | null) ?? [])));
+    }
+
+    const loadedSlugs = new Set<string>();
+
+    for (const row of rows) {
+      if (!row.name) {
+        continue;
+      }
+
+      loadedSlugs.add(row.slug);
+      this.venueCache.set(row.slug, {
+        id: row.id,
+        slug: row.slug,
+        name: row.name,
+        suburb: row.suburb ?? null,
+        address: row.address ?? null,
+        websiteUrl: row.website_url ?? null
+      });
+      this.knownMissingVenueSlugs.delete(row.slug);
+    }
+
+    for (const slug of requestedSlugs) {
+      if (!loadedSlugs.has(slug)) {
+        this.knownMissingVenueSlugs.add(slug);
+      }
+    }
+  }
 
   async ensureSource(input: {
     slug: string;
@@ -141,16 +201,31 @@ export class SupabaseOperationsRepository {
       };
     }
 
-    const { data: existingVenue, error: existingVenueError } = await this.client
-      .from("venues")
-      .select("id, slug, website_url")
-      .eq("slug", venueSlug)
-      .maybeSingle<VenueRow>();
+    let existingVenue: VenueRow | null = cachedVenue
+      ? {
+          id: cachedVenue.id,
+          slug: cachedVenue.slug,
+          name: cachedVenue.name,
+          suburb: cachedVenue.suburb,
+          address: cachedVenue.address,
+          website_url: cachedVenue.websiteUrl
+        }
+      : null;
 
-    if (existingVenueError) {
-      throw new Error(
-        `Unable to look up venue before upsert: ${existingVenueError.message ?? "unknown error"}`
-      );
+    if (!cachedVenue && !this.knownMissingVenueSlugs.has(venueSlug)) {
+      const { data, error } = await this.client
+        .from("venues")
+        .select("id, slug, name, suburb, address, website_url")
+        .eq("slug", venueSlug)
+        .maybeSingle<VenueRow>();
+
+      if (error) {
+        throw new Error(
+          `Unable to look up venue before upsert: ${error.message ?? "unknown error"}`
+        );
+      }
+
+      existingVenue = data;
     }
 
     const { data, error } = await this.client
@@ -180,6 +255,7 @@ export class SupabaseOperationsRepository {
       address: gig.venue.address,
       websiteUrl: desiredWebsiteUrl ?? existingVenue?.website_url ?? null
     });
+    this.knownMissingVenueSlugs.delete(venueSlug);
 
     return { id: data.id, slug: data.slug };
   }
