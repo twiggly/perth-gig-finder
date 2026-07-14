@@ -16,6 +16,11 @@ import {
   preferArtistDisplayNamesFromTitle
 } from "../artist-utils";
 import { queryAlgolia } from "../algolia";
+import { normalizeUtcDate } from "../source-utils/date";
+import {
+  createBlockHtmlTextContext,
+  type HtmlTextContext
+} from "../source-utils/html-text";
 import type { SourceAdapter, SourceAdapterResult } from "../types";
 
 const SOURCE_URL = "https://milkbarperth.com.au/gigs/";
@@ -91,38 +96,20 @@ export function extractMilkBarSearchConfig(html: string): MilkBarSearchConfig {
   };
 }
 
-function toPlainText(html: string | null | undefined): string | null {
-  if (!html) {
-    return null;
-  }
-
-  const text = cheerio.load(`<div>${html}</div>`).text();
-  const normalized = normalizeWhitespace(text);
-  return normalized.length > 0 ? normalized : null;
-}
-
-function toPlainTextLines(html: string | null | undefined): string[] {
-  if (!html) {
-    return [];
-  }
-
-  const htmlWithLineBreaks = html
-    .replace(/<br\s*\/?\s*>/gi, "\n")
-    .replace(/<\/(?:blockquote|div|h[1-6]|li|p)>/gi, "\n");
-  const text = cheerio.load(`<div>${htmlWithLineBreaks}</div>`).text();
-
-  return text
-    .split(/\n+/)
-    .map((line) => normalizeWhitespace(line))
-    .filter(Boolean);
-}
-
 export function parseMilkBarDescriptionArtists(
   descriptionHtml: string | null | undefined
 ): string[] {
+  return parseMilkBarDescriptionArtistsFromContext(
+    createBlockHtmlTextContext(descriptionHtml)
+  );
+}
+
+function parseMilkBarDescriptionArtistsFromContext(
+  descriptionContext: HtmlTextContext
+): string[] {
   const artists: string[] = [];
 
-  for (const line of toPlainTextLines(descriptionHtml)) {
+  for (const line of descriptionContext.lines) {
     const tributeCredit = line.match(
       /^[^\p{L}\p{N}]{0,8}(.{2,60}?)\s+[–—-]\s+(?:bringing|delivering|recreating)\b/iu
     );
@@ -167,22 +154,6 @@ export function parseMilkBarDescriptionArtists(
   return createArtistExtraction(artists, "explicit_lineup").artists;
 }
 
-function normalizeUtcDate(value: string | null | undefined): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const withTimezone =
-    value.endsWith("Z") || value.includes("+") ? value : `${value}Z`;
-  const date = new Date(withTimezone);
-
-  if (Number.isNaN(date.getTime())) {
-    throw new Error(`Invalid event date: ${value}`);
-  }
-
-  return date.toISOString();
-}
-
 function normalizeVenue(hit: MilkBarHit): NormalizedVenue {
   const venue = hit.Venue;
   const venueName = normalizeWhitespace(venue?.Name ?? "Milk Bar");
@@ -199,7 +170,19 @@ function normalizeVenue(hit: MilkBarHit): NormalizedVenue {
 }
 
 export function extractMilkBarArtists(hit: MilkBarHit) {
-  const descriptionArtists = parseMilkBarDescriptionArtists(hit.EventDescription);
+  return extractMilkBarArtistsFromContext(
+    hit,
+    createBlockHtmlTextContext(hit.EventDescription)
+  );
+}
+
+function extractMilkBarArtistsFromContext(
+  hit: MilkBarHit,
+  descriptionContext: HtmlTextContext
+) {
+  const descriptionArtists = parseMilkBarDescriptionArtistsFromContext(
+    descriptionContext
+  );
 
   if (descriptionArtists.length > 0) {
     return createArtistExtraction(descriptionArtists, "explicit_lineup");
@@ -302,10 +285,13 @@ export function normalizeMilkBarHit(hit: MilkBarHit): NormalizedGig {
 
   const venue = normalizeVenue(hit);
   const sourceUrl = hit.EventUrl?.trim() || SOURCE_URL;
-  const description = toPlainText(
-    [hit.SpecialGuests, hit.EventDescription].filter(Boolean).join("\n\n")
-  );
-  const artistExtraction = extractMilkBarArtists(hit);
+  const descriptionContext = createBlockHtmlTextContext(hit.EventDescription);
+  const specialGuestsText = createBlockHtmlTextContext(hit.SpecialGuests).plainText;
+  const description =
+    normalizeWhitespace(
+      [specialGuestsText, descriptionContext.plainText].filter(Boolean).join(" ")
+    ) || null;
+  const artistExtraction = extractMilkBarArtistsFromContext(hit, descriptionContext);
 
   return {
     sourceSlug: "milk-bar",

@@ -3,6 +3,7 @@ import * as cheerio from "cheerio";
 import { normalizeWhitespace, slugify } from "@perth-gig-finder/shared";
 
 import { createArtistExtraction } from "../artist-utils";
+import { loadHtmlFragment } from "../source-utils/html-text";
 
 const MUSICIAN_ROLE_PATTERN_SOURCE = String.raw`(?:(?:acoustic|alto|backing|baritone|electric|lead|rhythm|soprano|tenor)\s+)?(?:vocals?|voice|piano|keys?|keyboards?|guitars?|bass(?:\s+guitar)?|double\s+bass|drums?|drum\s+kit|percussion|sax(?:es|ophone)?|trumpet|trombone|violin|viola|cello|flute|clarinet|organ|hammond\s+organ|accordi[oa]n|synth(?:esizer)?|modular\s+synth|mandolin|banjo|harp|didgeridoo|tabla|e?sarod|ewi|rhodes|bongos?|cajon|congas?|timbales|tambourine|riq\s+tambourine|maracas|g[üu]iro|clave|bell|horns?|charts?|mc|sound\s+engineer|composer|compositions?|arranger|band\s+leader)(?:\s+\d+)?`;
 const MUSICIAN_ROLE_PATTERN = new RegExp(
@@ -215,13 +216,27 @@ function parsePerformerCredit(value: string): string[] {
     : [];
 }
 
-function extractDescriptionLines(contentHtml: string): string[] {
-  const $ = cheerio.load(`<div data-ellington-description-root>${contentHtml}</div>`);
-  const root = $("[data-ellington-description-root]").first();
+interface EllingtonDescriptionContext {
+  $: ReturnType<typeof cheerio.load>;
+  identityByName: Map<string, string>;
+  lines: string[];
+  plainText: string;
+  root: ReturnType<typeof loadHtmlFragment>["root"];
+}
+
+function createEllingtonDescriptionContext(
+  contentHtml: string
+): EllingtonDescriptionContext {
+  const { $, root } = loadHtmlFragment(
+    contentHtml,
+    "data-ellington-description-root"
+  );
+  const plainText = normalizeWhitespace(root.text());
+  const lineRoot = root.clone();
   const lines: string[] = [];
 
-  root.find("br").replaceWith("\n");
-  root.children().each((_, element) => {
+  lineRoot.find("br").replaceWith("\n");
+  lineRoot.children().each((_, element) => {
     for (const value of $(element).text().split(/\n+/)) {
       const line = normalizeWhitespace(value);
 
@@ -231,14 +246,32 @@ function extractDescriptionLines(contentHtml: string): string[] {
     }
   });
 
-  return lines;
+  return {
+    $,
+    identityByName: new Map(),
+    lines,
+    plainText,
+    root
+  };
 }
 
-function extractFormationArtists(contentHtml: string): string[] {
-  const text = normalizeWhitespace(
-    cheerio.load(`<div>${contentHtml}</div>`).text()
-  );
-  const match = text.match(
+function getArtistIdentity(
+  context: EllingtonDescriptionContext,
+  artist: string
+): string {
+  const cached = context.identityByName.get(artist);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const identity = normalizeArtistIdentity(artist);
+  context.identityByName.set(artist, identity);
+  return identity;
+}
+
+function extractFormationArtists(context: EllingtonDescriptionContext): string[] {
+  const match = context.plainText.match(
     /\bwas formed\b.{0,120}?\bby\s+(.+?)\s+and since\b/i
   );
 
@@ -247,7 +280,7 @@ function extractFormationArtists(contentHtml: string): string[] {
 
 function extractNamedEnsembleLeader(
   title: string,
-  contentHtml: string,
+  context: EllingtonDescriptionContext,
   creditedArtists: string[]
 ): string[] {
   if (TITLE_CONCEPT_PATTERN.test(title)) {
@@ -269,20 +302,17 @@ function extractNamedEnsembleLeader(
     candidate.split(/\s+/).length !== 2 ||
     !isLikelyArtistName(candidate) ||
     creditedArtists.some(
-      (artist) => normalizeArtistIdentity(artist) === normalizeArtistIdentity(candidate)
+      (artist) => getArtistIdentity(context, artist) === getArtistIdentity(context, candidate)
     )
   ) {
     return [];
   }
 
-  const text = normalizeWhitespace(
-    cheerio.load(`<div>${contentHtml}</div>`).text()
-  );
   const escapedCandidate = candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const isExplicitLeader = new RegExp(
     String.raw`\b${escapedCandidate}\b`,
     "i"
-  ).test(text);
+  ).test(context.plainText);
 
   return isExplicitLeader ? [candidate] : [];
 }
@@ -352,12 +382,17 @@ function isTributeOrRepertoireSubject(title: string, artist: string): boolean {
   ].some((phrase) => normalizedTitle.includes(phrase));
 }
 
-function extractMarkedArtists(title: string, contentHtml: string): string[] {
-  const $ = cheerio.load(`<div data-ellington-description-root>${contentHtml}</div>`);
-  const titleCandidateIdentities = getTitleCandidates(title).map(normalizeArtistIdentity);
+function extractMarkedArtists(
+  title: string,
+  context: EllingtonDescriptionContext
+): string[] {
+  const { $, root } = context;
+  const titleCandidateIdentities = getTitleCandidates(title).map((candidate) =>
+    getArtistIdentity(context, candidate)
+  );
   const artists: string[] = [];
 
-  $("[data-ellington-description-root] strong").each((_, element) => {
+  root.find("strong").each((_, element) => {
     const markedText = normalizeWhitespace($(element).text());
     const parentText = normalizeWhitespace($(element).parent().text());
     const siblingText = collectSiblingTextUntilStrong(element);
@@ -387,7 +422,7 @@ function extractMarkedArtists(title: string, contentHtml: string): string[] {
         continue;
       }
 
-      const artistIdentity = normalizeArtistIdentity(artist);
+      const artistIdentity = getArtistIdentity(context, artist);
       const isTitleRelated =
         titleCandidateIdentities.includes(artistIdentity) ||
         (artist.split(/\s+/).length <= 3 &&
@@ -400,14 +435,14 @@ function extractMarkedArtists(title: string, contentHtml: string): string[] {
           !REPERTOIRE_OR_REFERENCE_CONTEXT_PATTERN.test(parentText));
       const isStandaloneDescriptionSubject =
         markedArtists.length === 1 &&
-        isDescriptionSubject(artist, contentHtml);
+        isDescriptionSubject(artist, context);
       const isAmbiguousSingleName = /^\p{Lu}\p{Ll}+$/u.test(artist);
 
       if (
         !isAmbiguousSingleName &&
         (isTitleRelated || hasPerformanceContext || isStandaloneDescriptionSubject) &&
         !isTributeOrRepertoireSubject(title, artist) &&
-        !isMemorialSubject(artist, contentHtml)
+        !isMemorialSubject(artist, context)
       ) {
         artists.push(artist);
       }
@@ -427,19 +462,21 @@ function isExplicitTitleBilling(title: string, artist: string): boolean {
   return suffixes.some((suffix) => suffix.includes(normalizedArtist));
 }
 
-function isMemorialSubject(artist: string, contentHtml: string): boolean {
-  const text = normalizeWhitespace(cheerio.load(`<div>${contentHtml}</div>`).text());
+function isMemorialSubject(
+  artist: string,
+  context: EllingtonDescriptionContext
+): boolean {
   const escapedArtist = artist.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
   return (
     new RegExp(
       String.raw`\b(?:late|memory of|tribute to)\s+(?:the\s+)?${escapedArtist}\b`,
       "i"
-    ).test(text) ||
+    ).test(context.plainText) ||
     new RegExp(
       String.raw`\bpassing\b.{0,120}\b${escapedArtist}\b|\b${escapedArtist}\b.{0,120}\bpassing\b|\blegacy of\s+(?:the\s+)?${escapedArtist}\b|\b${escapedArtist}(?:['’]s)?\s+legacy\b`,
       "i"
-    ).test(text)
+    ).test(context.plainText)
   );
 }
 
@@ -543,17 +580,20 @@ function getTitleCandidates(title: string): string[] {
   return splitExplicitArtistList(candidate);
 }
 
-function isDescriptionSubject(artist: string, contentHtml: string): boolean {
-  const artistIdentity = normalizeArtistIdentity(artist);
+function isDescriptionSubject(
+  artist: string,
+  context: EllingtonDescriptionContext
+): boolean {
+  const artistIdentity = getArtistIdentity(context, artist);
 
   if (!artistIdentity) {
     return false;
   }
 
-  return extractDescriptionLines(contentHtml)
+  return context.lines
     .filter((line) => !/^(?:doors?|show|artist talk)\b/i.test(line))
     .some((line) => {
-      const lineIdentity = normalizeArtistIdentity(line);
+      const lineIdentity = getArtistIdentity(context, line);
 
       return (
         lineIdentity.startsWith(`${artistIdentity}-`) ||
@@ -568,26 +608,28 @@ function isDescriptionSubject(artist: string, contentHtml: string): boolean {
 
 function extractCorroboratedTitleArtists(
   title: string,
-  contentHtml: string,
+  context: EllingtonDescriptionContext,
   markedArtists: string[]
 ): string[] {
-  const markedIdentities = markedArtists.map(normalizeArtistIdentity);
+  const markedIdentities = markedArtists.map((artist) =>
+    getArtistIdentity(context, artist)
+  );
   return getTitleCandidates(title).filter((candidate) => {
     if (!candidate || TITLE_CONCEPT_PATTERN.test(candidate) || !isLikelyArtistName(candidate)) {
       return false;
     }
 
-    const candidateIdentity = normalizeArtistIdentity(candidate);
+    const candidateIdentity = getArtistIdentity(context, candidate);
     const isMarked = markedIdentities.includes(candidateIdentity);
     const hasExpandedMarkedName = markedIdentities.some(
       (identity) => identity.startsWith(`${candidateIdentity}-`)
     );
 
     return (
-      !isMemorialSubject(candidate, contentHtml) &&
+      !isMemorialSubject(candidate, context) &&
       !hasExpandedMarkedName &&
       (isMarked ||
-        isDescriptionSubject(candidate, contentHtml) ||
+        isDescriptionSubject(candidate, context) ||
         isExplicitTitleBilling(title, candidate))
     );
   });
@@ -596,7 +638,8 @@ function extractCorroboratedTitleArtists(
 function isSimpleCreditedTitleArtist(
   title: string,
   candidate: string,
-  creditedArtists: string[]
+  creditedArtists: string[],
+  context: EllingtonDescriptionContext
 ): boolean {
   if (
     /\b(?:feat\.?|ft\.?|presented by|presents?|with)\b/i.test(title) ||
@@ -615,14 +658,14 @@ function isSimpleCreditedTitleArtist(
   const leadTitle = normalizeEllingtonArtistName(
     normalizedTitle.split(/\s+[-–—]\s+|:\s+/)[0] ?? normalizedTitle
   );
-  const candidateIdentity = normalizeArtistIdentity(candidate);
+  const candidateIdentity = getArtistIdentity(context, candidate);
 
-  if (normalizeArtistIdentity(leadTitle) !== candidateIdentity) {
+  if (getArtistIdentity(context, leadTitle) !== candidateIdentity) {
     return false;
   }
 
   return !creditedArtists.some((artist) =>
-    normalizeArtistIdentity(artist).startsWith(`${candidateIdentity}-`)
+    getArtistIdentity(context, artist).startsWith(`${candidateIdentity}-`)
   );
 }
 
@@ -636,20 +679,19 @@ export function extractEllingtonArtists(input: {
     return createArtistExtraction([], "explicit_lineup");
   }
 
-  const markedArtists = extractMarkedArtists(input.title, contentHtml);
-  const lineArtists = extractDescriptionLines(contentHtml).flatMap(
-    parsePerformerCredit
-  );
+  const context = createEllingtonDescriptionContext(contentHtml);
+  const markedArtists = extractMarkedArtists(input.title, context);
+  const lineArtists = context.lines.flatMap(parsePerformerCredit);
   const creditedArtists = [...markedArtists, ...lineArtists];
-  const formationArtists = extractFormationArtists(contentHtml);
+  const formationArtists = extractFormationArtists(context);
   const ensembleLeaderArtists = extractNamedEnsembleLeader(
     input.title,
-    contentHtml,
+    context,
     creditedArtists
   );
   const corroboratedTitleArtists = extractCorroboratedTitleArtists(
     input.title,
-    contentHtml,
+    context,
     markedArtists
   );
   const creditedTitleArtists = getTitleCandidates(input.title).filter(
@@ -657,9 +699,9 @@ export function extractEllingtonArtists(input: {
       creditedArtists.length >= 2 &&
       !TITLE_CONCEPT_PATTERN.test(candidate) &&
       isLikelyArtistName(candidate) &&
-      !isMemorialSubject(candidate, contentHtml) &&
+      !isMemorialSubject(candidate, context) &&
       (ENSEMBLE_SUFFIX_PATTERN.test(candidate) ||
-        isSimpleCreditedTitleArtist(input.title, candidate, creditedArtists))
+        isSimpleCreditedTitleArtist(input.title, candidate, creditedArtists, context))
   );
 
   return createArtistExtraction(
