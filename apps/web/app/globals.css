@@ -683,6 +683,10 @@ code {
   color: var(--subtle-text);
 }
 
+.site-header__filter-toggle {
+  -webkit-tap-highlight-color: transparent;
+}
+
 .site-header__filter-toggle,
 .site-header__theme-toggle,
 .site-header__profile,
@@ -694,13 +698,36 @@ code {
     color 160ms ease;
 }
 
-.site-header__filter-toggle:hover,
 .site-header__theme-toggle:hover,
 .site-header__profile:hover,
 .site-header__menu-button:hover,
 .site-header__menu-button[data-surface-state="open"] {
   background: var(--soft-fill);
   color: var(--text);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .site-header__filter-toggle:hover {
+    background: var(--soft-fill);
+    color: var(--text);
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .site-header__filter-toggle {
+    transition-delay: 240ms, 0ms, 240ms;
+  }
+
+  .site-header__filter-toggle:active:not(:disabled) {
+    background: var(--soft-fill);
+    color: var(--text);
+    transition-delay: 0ms;
+    transition-duration: 0ms;
+  }
+
+  .site-header__filter-toggle:focus-visible {
+    transition-delay: 0ms;
+  }
 }
 
 .site-header__filter-toggle:focus-visible,

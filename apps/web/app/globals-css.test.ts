@@ -80,6 +80,71 @@ describe("global CSS compatibility", () => {
     expect(venuePopoverRule).toContain("background: var(--popover-bg);");
   });
 
+  it("uses pointer-aware filter toggle feedback", () => {
+    const sharedControlSelector = `.site-header__filter-toggle,
+.site-header__theme-toggle,
+.site-header__profile,
+.site-header__menu-button`;
+    const firstSharedControlRule = globalCss.indexOf(
+      `${sharedControlSelector} {`,
+    );
+    const filterToggleRule = getRuleBody(".site-header__filter-toggle");
+    const transitionRule = getRuleBody(
+      sharedControlSelector,
+      firstSharedControlRule + 1,
+    );
+    const finePointerHoverRule = getRuleBody(
+      "@media (hover: hover) and (pointer: fine)",
+    );
+    const coarsePointerPressRule = getRuleBody(
+      "@media (hover: none) and (pointer: coarse)",
+    );
+    const keyboardFocusRule = getRuleBody(
+      `.site-header__filter-toggle:focus-visible,
+.site-header__theme-toggle:focus-visible,
+.site-header__profile:focus-visible,
+.site-header__menu-button:focus-visible`,
+    );
+
+    expect(
+      globalCss.match(/\.site-header__filter-toggle:hover/g),
+    ).toHaveLength(1);
+    expect(finePointerHoverRule).toContain(
+      ".site-header__filter-toggle:hover",
+    );
+    expect(finePointerHoverRule).toContain(
+      "background: var(--soft-fill);",
+    );
+    expect(coarsePointerPressRule).toContain(
+      ".site-header__filter-toggle:active:not(:disabled)",
+    );
+    expect(coarsePointerPressRule).toContain(
+      "transition-delay: 240ms, 0ms, 240ms;",
+    );
+    expect(coarsePointerPressRule).toContain(
+      "background: var(--soft-fill);",
+    );
+    expect(coarsePointerPressRule).toContain("color: var(--text);");
+    expect(coarsePointerPressRule).toContain("transition-delay: 0ms;");
+    expect(coarsePointerPressRule).toContain(
+      "transition-duration: 0ms;",
+    );
+    expect(coarsePointerPressRule).toContain(
+      ".site-header__filter-toggle:focus-visible",
+    );
+    expect(transitionRule).toContain("background-color 160ms ease,");
+    expect(transitionRule).toContain("color 160ms ease;");
+    expect(keyboardFocusRule).toContain(
+      "background: var(--soft-fill);",
+    );
+    expect(keyboardFocusRule).toContain(
+      "box-shadow: 0 0 0 2px var(--control-focus-border);",
+    );
+    expect(filterToggleRule).toContain(
+      "-webkit-tap-highlight-color: transparent;",
+    );
+  });
+
   it("keeps date arrows transparent until hover or focus", () => {
     expect(globalCss).toMatch(
       /^\.day-browser__arrow \{[\s\S]*?background: transparent;/m,
