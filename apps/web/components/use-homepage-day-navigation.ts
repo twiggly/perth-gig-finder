@@ -786,6 +786,7 @@ export function useHomepageDayNavigation({
     isNavigationLocked,
     navigateAdjacentDate,
     nextDateKey,
+    prefersReducedMotion,
     previousDateKey,
     renderedContentPanes,
     renderedHeadingPanes,

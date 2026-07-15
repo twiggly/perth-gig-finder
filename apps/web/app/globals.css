@@ -1937,6 +1937,9 @@ body[data-filter-dropdown-open="true"] .date-pills {
 }
 
 .day-browser__arrow {
+  --day-browser-arrow-opacity-duration: 160ms;
+  --day-browser-arrow-press-duration: 100ms;
+
   position: relative;
   z-index: 1;
   display: inline-flex;
@@ -1949,26 +1952,136 @@ body[data-filter-dropdown-open="true"] .date-pills {
   border: 0;
   border-radius: 999px;
   appearance: none;
-  background: var(--soft-fill);
+  background: transparent;
   color: var(--text);
   cursor: pointer;
   font-family: var(--font-display), sans-serif;
-  font-size: 1.3rem;
+  font-size: clamp(1.65rem, 4vw, 2.5rem);
   transition:
     background-color 160ms ease,
-    box-shadow 160ms ease;
+    box-shadow 160ms ease,
+    color 160ms ease,
+    opacity var(--day-browser-arrow-opacity-duration) ease;
 }
 
-.day-browser__arrow:hover,
-.day-browser__arrow:focus-visible {
-  background: var(--soft-fill-strong);
-  box-shadow: 0 0 0 1px var(--faint-border);
+/* Surface feedback is reserved for mouse hover and keyboard focus. */
+.day-browser__arrow:focus-visible,
+.day-browser__arrow[data-keyboard-focus="true"] {
+  background: var(--soft-fill);
+  box-shadow: 0 0 0 2px var(--control-focus-border);
+  color: var(--text);
   outline: none;
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .day-browser__arrow:hover,
+  .day-browser__header:has(> .day-browser__arrow--previous:hover)
+    + .day-browser__header-cover
+    .day-browser__arrow--previous,
+  .day-browser__header:has(> .day-browser__arrow--next:hover)
+    + .day-browser__header-cover
+    .day-browser__arrow--next {
+    background: var(--soft-fill);
+  }
+}
+
+/* Navigation feedback animates the icon without moving its hit area. */
+.day-browser__skip-track-icon {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform var(--day-browser-arrow-press-duration) ease;
+}
+
+/* 100ms shrink, 40ms hold, and 100ms release within the 240ms page motion. */
+@keyframes day-browser-arrow-gesture-feedback {
+  0% {
+    color: var(--text);
+    transform: scale(1);
+    animation-timing-function: ease;
+  }
+
+  41.6667% {
+    color: var(--subtle-text);
+    transform: scale(0.84);
+    animation-timing-function: linear;
+  }
+
+  58.3333% {
+    color: var(--subtle-text);
+    transform: scale(0.84);
+    animation-timing-function: var(--day-browser-heading-easing);
+  }
+
+  100% {
+    color: var(--text);
+    transform: scale(1);
+  }
+}
+
+@keyframes day-browser-arrow-feedback-release {
+  from {
+    color: var(--subtle-text);
+    transform: scale(0.84);
+  }
+
+  to {
+    color: var(--text);
+    transform: scale(1);
+  }
+}
+
+.day-browser__arrow:active:not(:disabled),
+.day-browser__arrow[data-navigation-feedback="pending"][data-navigation-origin="button"] {
+  color: var(--subtle-text);
+  transform: none;
+}
+
+.day-browser__arrow:active:not(:disabled) .day-browser__skip-track-icon,
+.day-browser__arrow[data-navigation-feedback="pending"][data-navigation-origin="button"]
+  .day-browser__skip-track-icon {
+  transform: scale(0.84);
+}
+
+.day-browser__arrow[data-navigation-feedback="animating"][data-navigation-origin="button"]
+  .day-browser__skip-track-icon {
+  animation: day-browser-arrow-feedback-release
+    var(--day-browser-heading-duration) var(--day-browser-heading-easing) both;
+}
+
+.day-browser__arrow[data-navigation-feedback="animating"][data-navigation-origin="gesture"]
+  .day-browser__skip-track-icon {
+  animation: day-browser-arrow-gesture-feedback
+    var(--day-browser-heading-duration) linear both;
+}
+
+.day-browser__arrow[data-navigation-feedback="settled"]
+  .day-browser__skip-track-icon {
+  color: var(--text);
+  transform: scale(1);
+}
+
+/* Date-boundary availability is independent from temporary navigation locking. */
 .day-browser__arrow:disabled {
   cursor: default;
+}
+
+.day-browser__arrow[data-date-unavailable="true"] {
   opacity: 0.35;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .day-browser__arrow {
+    --day-browser-arrow-opacity-duration: 0ms;
+  }
+
+  .day-browser__arrow .day-browser__skip-track-icon {
+    transition: none;
+  }
+
+  .day-browser__arrow[data-navigation-feedback]
+    .day-browser__skip-track-icon {
+    animation: none;
+  }
 }
 
 @media (min-width: 721px) {
@@ -2676,7 +2789,7 @@ body[data-filter-dropdown-open="true"] .date-pills {
   .day-browser__arrow {
     width: 2.85rem;
     height: 2.85rem;
-    font-size: 1.15rem;
+    font-size: clamp(1.8rem, calc(1.62rem + 0.6vw), 1.95rem);
   }
 
   .gig-card {
