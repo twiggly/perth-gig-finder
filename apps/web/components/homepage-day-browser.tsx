@@ -6,7 +6,7 @@ import React, {
   useRef,
   useState
 } from "react";
-import { ActionIcon, Box, Popover, Text, UnstyledButton } from "@mantine/core";
+import { Box, Popover, Text, UnstyledButton } from "@mantine/core";
 import { flushSync } from "react-dom";
 
 import {
@@ -24,9 +24,12 @@ import {
   type SwipeDirection
 } from "@/lib/homepage-dates";
 import { useHomepageAdjacentImagePreload } from "./use-homepage-adjacent-image-preload";
+import { HomepageDayArrow } from "./homepage-day-arrow";
+import { getHomepageDayArrowAvailability } from "./homepage-day-arrow-feedback";
 import { HomepageDayCalendarDropdown } from "./homepage-day-calendar-dropdown";
 import { HomepageDayContent } from "./homepage-day-content";
 import { useHomepageDayCache } from "./use-homepage-day-cache";
+import { useHomepageDayArrowFeedback } from "./use-homepage-day-arrow-feedback";
 import { useHomepageDayGestures } from "./use-homepage-day-gestures";
 import { useHomepageDayNavigation } from "./use-homepage-day-navigation";
 import { useHomepageDayScrollRestoration } from "./use-homepage-day-scroll-restoration";
@@ -57,6 +60,7 @@ export function HomepageDayBrowser({
   );
   const clearDateChangeLayoutRef = useRef<() => void>(() => {});
   const dateHeaderRef = useRef<HTMLDivElement | null>(null);
+  const cancelArrowFeedbackRef = useRef<() => void>(() => {});
   const resetAdjacentImagePreloadsRef = useRef<() => void>(() => {});
   const resetDayWheelGestureRef = useRef<() => void>(() => {});
   const [calendarMonthKey, setCalendarMonthKey] = useState<string | null>(null);
@@ -94,6 +98,7 @@ export function HomepageDayBrowser({
     isNavigationLocked,
     navigateAdjacentDate,
     nextDateKey,
+    prefersReducedMotion,
     previousDateKey,
     renderedContentPanes,
     renderedHeadingPanes,
@@ -109,6 +114,7 @@ export function HomepageDayBrowser({
     initialDays,
     isLoadingDay,
     onDateChangeCancel: () => {
+      cancelArrowFeedbackRef.current();
       clearDateChangeLayoutRef.current();
     },
     onDateChangeStart: (nextDateKey) =>
@@ -135,17 +141,6 @@ export function HomepageDayBrowser({
         todayDateKey
       })
     : null;
-  const {
-    calendarGestureHandlers,
-    consumeCalendarSwipeSelection,
-    dayGestureHandlers,
-    resetDayWheelGesture
-  } = useHomepageDayGestures({
-    isNavigationLocked,
-    onNavigateCalendarMonth: handleCalendarMonthNavigate,
-    onNavigateDate: handleNavigateDate
-  });
-  resetDayWheelGestureRef.current = resetDayWheelGesture;
   const { isDateHeaderStuck, stickySentinelRef } =
     useHomepageDayStickyHeader();
   const { resetAdjacentImagePreloads } = useHomepageAdjacentImagePreload({
@@ -180,6 +175,31 @@ export function HomepageDayBrowser({
   });
   captureDateChangeLayoutRef.current = captureDateChangeLayout;
   clearDateChangeLayoutRef.current = clearDateChangeLayout;
+  const {
+    arrowBindings,
+    cancelNavigationFeedback,
+    navigateWithFeedback
+  } = useHomepageDayArrowFeedback({
+    clearDateChangeLayout,
+    isNavigationLocked,
+    isStickyHoldActive: isStickyScrollRestorationVisualHoldActive,
+    navigateAdjacentDate,
+    prefersReducedMotion,
+    transitionPhase
+  });
+  cancelArrowFeedbackRef.current = cancelNavigationFeedback;
+  const {
+    calendarGestureHandlers,
+    consumeCalendarSwipeSelection,
+    dayGestureHandlers,
+    resetDayWheelGesture
+  } = useHomepageDayGestures({
+    isNavigationLocked,
+    onNavigateCalendarMonth: handleCalendarMonthNavigate,
+    onNavigateDate: (direction) =>
+      navigateWithFeedback(direction, "gesture")
+  });
+  resetDayWheelGestureRef.current = resetDayWheelGesture;
   const stickyRestorationCoverStyle = useMemo(
     () =>
       stickyScrollRestorationCoverRect
@@ -301,16 +321,6 @@ export function HomepageDayBrowser({
     return true;
   }
 
-  function handleNavigateDate(direction: SwipeDirection): boolean {
-    const didNavigate = navigateAdjacentDate(direction);
-
-    if (!didNavigate) {
-      clearDateChangeLayout();
-    }
-
-    return didNavigate;
-  }
-
   function captureDateChangeLayoutSynchronously(targetDateKey?: string) {
     flushSync(() => {
       captureDateChangeLayoutRef.current(targetDateKey);
@@ -321,12 +331,19 @@ export function HomepageDayBrowser({
     return null;
   }
 
+  const arrowAvailability = getHomepageDayArrowAvailability({
+    activeDateKey,
+    availableDateKeys,
+    transitionTargetDateKey: transition?.toDateKey
+  });
+
   return (
     <section
       aria-busy={isLoadingDay ? "true" : undefined}
       data-preview-revision={previewAssetRevision}
       data-calendar-open={isCalendarOpen ? "true" : undefined}
       className="day-browser"
+      style={headingTrackStyle}
       {...dayGestureHandlers}
     >
       <h2 className="sr-only">{activeDay.heading}</h2>
@@ -340,16 +357,13 @@ export function HomepageDayBrowser({
         data-stuck={isDateHeaderStuck ? "true" : undefined}
         ref={dateHeaderRef}
       >
-        <ActionIcon
-          aria-label="Previous date"
-          className="day-browser__arrow"
+        <HomepageDayArrow
+          bindings={arrowBindings.previous.buttonProps}
+          direction="previous"
           disabled={!previousDateKey || isNavigationLocked}
-          onClick={() => handleNavigateDate("previous")}
-          type="button"
-          variant="subtle"
-        >
-          <span aria-hidden="true">&lt;</span>
-        </ActionIcon>
+          unavailable={arrowAvailability.previous}
+          variant="button"
+        />
         <Popover
           middlewares={{ flip: true, shift: true }}
           onChange={setIsCalendarOpen}
@@ -410,16 +424,13 @@ export function HomepageDayBrowser({
             onSelectDate={handleCalendarDateSelect}
           />
         </Popover>
-        <ActionIcon
-          aria-label="Next date"
-          className="day-browser__arrow"
+        <HomepageDayArrow
+          bindings={arrowBindings.next.buttonProps}
+          direction="next"
           disabled={!nextDateKey || isNavigationLocked}
-          onClick={() => handleNavigateDate("next")}
-          type="button"
-          variant="subtle"
-        >
-          <span aria-hidden="true">&gt;</span>
-        </ActionIcon>
+          unavailable={arrowAvailability.next}
+          variant="button"
+        />
       </Box>
       {isStickyScrollRestorationVisualHoldActive ? (
         <Box
@@ -430,9 +441,12 @@ export function HomepageDayBrowser({
           }
           style={stickyRestorationCoverStyle}
         >
-          <span className="day-browser__arrow day-browser__header-cover-arrow">
-            &lt;
-          </span>
+          <HomepageDayArrow
+            bindings={arrowBindings.previous.coverProps}
+            direction="previous"
+            unavailable={arrowAvailability.previous}
+            variant="cover"
+          />
           <Box className="day-browser__heading-button day-browser__header-cover-heading">
             <Box className="day-browser__heading-viewport">
               <Box
@@ -457,9 +471,12 @@ export function HomepageDayBrowser({
               </Box>
             </Box>
           </Box>
-          <span className="day-browser__arrow day-browser__header-cover-arrow">
-            &gt;
-          </span>
+          <HomepageDayArrow
+            bindings={arrowBindings.next.coverProps}
+            direction="next"
+            unavailable={arrowAvailability.next}
+            variant="cover"
+          />
         </Box>
       ) : null}
       {isLoadingDay ? (

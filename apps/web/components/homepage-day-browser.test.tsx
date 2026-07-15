@@ -146,6 +146,45 @@ describe("HomepageDayBrowser", () => {
     expect(html).not.toContain("day-browser__header-cover");
   });
 
+  it("renders filled Phosphor icons for adjacent date navigation", () => {
+    const html = renderBrowser([
+      {
+        dateKey: "2026-04-29",
+        heading: "Wed, Apr 29th",
+        items: [createGig()]
+      },
+      {
+        dateKey: "2026-04-30",
+        heading: "Thu, Apr 30th",
+        items: []
+      }
+    ]);
+
+    expect(html).toContain('aria-label="Previous date"');
+    expect(html).toContain('aria-label="Next date"');
+    expect(html).toContain("day-browser__skip-track-icon--previous");
+    expect(html).toContain("day-browser__skip-track-icon--next");
+    const icons =
+      html.match(/<svg[^>]*day-browser__skip-track-icon[\s\S]*?<\/svg>/g) ?? [];
+    const buttonTags = html.match(/<button[^>]+>/g) ?? [];
+    const previousButton = buttonTags.find((button) =>
+      button.includes('aria-label="Previous date"')
+    );
+    const nextButton = buttonTags.find((button) =>
+      button.includes('aria-label="Next date"')
+    );
+
+    expect(icons).toHaveLength(2);
+    expect(previousButton).toContain('data-date-unavailable="true"');
+    expect(nextButton).not.toContain("data-date-unavailable");
+    for (const icon of icons) {
+      expect(icon).toContain('fill="currentColor"');
+    }
+    expect(html).toContain('transform="translate(256 0) scale(-1 1)"');
+    expect(html).not.toContain("&lt;");
+    expect(html).not.toContain("&gt;");
+  });
+
   it("renders an independent cover while sticky scroll restoration is holding", () => {
     homepageDayBrowserMockState.isDateHeaderStuck = false;
     homepageDayBrowserMockState.isStickyScrollRestorationVisualHoldActive = true;
