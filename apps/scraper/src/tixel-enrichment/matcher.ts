@@ -12,6 +12,7 @@ import type {
 } from "./types";
 
 const START_TIME_TOLERANCE_MS = 15 * 60 * 1000;
+const MULTI_SHOW_PASS_TITLE = /\b(?:both|two|2)[ -]?show pass\b/i;
 
 export interface TixelMatchPlan {
   ambiguousEventUrls: Set<string>;
@@ -26,6 +27,10 @@ function isPerformerTitleMatch(
   gig: TixelEnrichmentGig,
   title: string
 ): boolean {
+  if (MULTI_SHOW_PASS_TITLE.test(gig.title)) {
+    return false;
+  }
+
   const titleKey = normalizeTitleForMatch(title);
 
   return gig.artistNames.some(

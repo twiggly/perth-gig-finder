@@ -135,6 +135,39 @@ describe("Tixel event matching", () => {
     ).toBe(false);
   });
 
+  it("does not match generic performer titles to multi-show passes", () => {
+    const passGig = createGig("spacey-jane-pass", {
+      artistNames: ["Spacey Jane"],
+      title:
+        "Spacey Jane | Heading Back Down Under Australian Tour *BOTH SHOW PASS*",
+      venueName: "Ice Cream Factory",
+      venueSlug: "ice-cream-factory"
+    });
+    const genericEvent = createEvent("spacey-jane-the-ice-cream-factory", {
+      title: "Spacey Jane",
+      venueName: "The Ice Cream Factory"
+    });
+    const dedicatedPassEvent = createEvent("spacey-jane-both-show-pass", {
+      title:
+        "Spacey Jane | Heading Back Down Under Australian Tour *BOTH SHOW PASS*",
+      venueName: "The Ice Cream Factory"
+    });
+
+    expect(isTixelEventMatch(passGig, genericEvent)).toBe(false);
+    expect(
+      isPlausibleTixelDiscoveryCard(
+        {
+          dateKey: genericEvent.dateKey,
+          title: genericEvent.title,
+          url: genericEvent.url,
+          venueName: genericEvent.venueName
+        },
+        [passGig]
+      )
+    ).toBe(false);
+    expect(isTixelEventMatch(passGig, dedicatedPassEvent)).toBe(true);
+  });
+
   it("rejects different dates and weak canonical matches without corroboration", () => {
     expect(
       isTixelEventMatch(
