@@ -54,6 +54,7 @@ This file is for coding agents working in this repository. Keep it short, practi
 - Hosted artist provenance repairs run through [.github/workflows/repair-hosted-artists.yml](.github/workflows/repair-hosted-artists.yml).
 - `ticketmaster-au` refresh runs through [.github/workflows/refresh-ticketmaster-self-hosted.yml](.github/workflows/refresh-ticketmaster-self-hosted.yml) on a self-hosted runner labeled `perth-gig-finder` and `ticketmaster`.
 - `moshtix-wa` refresh runs through [.github/workflows/refresh-moshtix-self-hosted.yml](.github/workflows/refresh-moshtix-self-hosted.yml) on the same self-hosted runner labels, because Moshtix blocks GitHub-hosted runners with `403` responses.
+- `eventbrite-perth-music` refresh runs through [.github/workflows/refresh-eventbrite-self-hosted.yml](.github/workflows/refresh-eventbrite-self-hosted.yml) on the same self-hosted runner labels, because Eventbrite blocks GitHub-hosted runners with `4xx` responses.
 - Runner health is monitored through [.github/workflows/check-ticketmaster-runner.yml](.github/workflows/check-ticketmaster-runner.yml).
 - The runner health workflow depends on the `RUNNER_MONITOR_TOKEN` repository secret so it can check the GitHub runners API for an online runner with the `perth-gig-finder` and `ticketmaster` labels.
 - The hosted workflow:
@@ -61,7 +62,7 @@ This file is for coding agents working in this repository. Keep it short, practi
   - runs `scrape` against hosted Supabase
   - enriches existing public gigs with verified Tixel event links as best effort
   - emits redacted per-source `[scrape-metrics]` timing, request, and contribution counters
-  - excludes `ticketmaster-au` and `moshtix-wa`, which refresh through the self-hosted workflows
+  - excludes `ticketmaster-au`, `moshtix-wa`, and `eventbrite-perth-music`, which refresh through the self-hosted workflows
   - runs `mirror-images` as best effort
   - runs post-mirror image cleanup
   - runs `audit:gigs -- --supabase --reconcile-sources --record-history --limit 30` against the hosted `gig_cards` public view and private source-gig status breakdown

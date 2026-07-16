@@ -1,0 +1,60 @@
+name: Refresh Eventbrite Self-Hosted
+
+on:
+  schedule:
+    - cron: "32 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-eventbrite-self-hosted
+  cancel-in-progress: false
+
+jobs:
+  scrape-eventbrite:
+    runs-on:
+      - self-hosted
+      - perth-gig-finder
+      - ticketmaster
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Set up pnpm with Corepack
+        run: |
+          npm install --global corepack@latest
+          corepack enable pnpm
+          pnpm --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Scrape Eventbrite Perth Music
+        env:
+          SCRAPER_SOURCE_SLUGS: eventbrite-perth-music
+          SCRAPER_PROFILE: "1"
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: pnpm --filter @perth-gig-finder/scraper scrape
+
+      - name: Backfill mirrored images (best effort)
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: pnpm mirror-images
+
+      - name: Audit hosted public gig cards
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: pnpm audit:gigs -- --supabase --reconcile-sources --record-history --limit 30

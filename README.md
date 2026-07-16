@@ -143,14 +143,15 @@ Not built yet:
 - Apply hosted Supabase migrations before or alongside deploying web code that depends on new public view columns.
 - Hosted data refresh runs through [.github/workflows/refresh-hosted-gigs.yml](.github/workflows/refresh-hosted-gigs.yml).
 - Hosted artist provenance repairs run through [.github/workflows/repair-hosted-artists.yml](.github/workflows/repair-hosted-artists.yml).
-- The main hosted refresh excludes `ticketmaster-au` and `moshtix-wa`.
+- The main hosted refresh excludes `ticketmaster-au`, `moshtix-wa`, and `eventbrite-perth-music`.
 - `ticketmaster-au` runs separately through [.github/workflows/refresh-ticketmaster-self-hosted.yml](.github/workflows/refresh-ticketmaster-self-hosted.yml) on a self-hosted runner labeled `perth-gig-finder` and `ticketmaster`, because GitHub-hosted runners are currently blocked with `403` responses.
 - `moshtix-wa` runs separately through [.github/workflows/refresh-moshtix-self-hosted.yml](.github/workflows/refresh-moshtix-self-hosted.yml) on the same self-hosted runner labels, because Moshtix blocks GitHub-hosted runners with `403` responses.
+- `eventbrite-perth-music` runs separately through [.github/workflows/refresh-eventbrite-self-hosted.yml](.github/workflows/refresh-eventbrite-self-hosted.yml) on the same self-hosted runner labels, because Eventbrite blocks GitHub-hosted runners with `4xx` responses.
 - Runner health is monitored by [.github/workflows/check-ticketmaster-runner.yml](.github/workflows/check-ticketmaster-runner.yml), which checks for an online self-hosted runner with the `perth-gig-finder` and `ticketmaster` labels.
 - The runner health workflow reads the GitHub runners API through the `RUNNER_MONITOR_TOKEN` repository secret.
 - The hosted refresh workflow:
   - runs preflight image cleanup for old mirrored images
-  - scrapes source data into hosted Supabase, excluding `ticketmaster-au` and `moshtix-wa`
+  - scrapes source data into hosted Supabase, excluding `ticketmaster-au`, `moshtix-wa`, and `eventbrite-perth-music`
   - enriches existing public gigs with verified Tixel event links as best effort
   - backfills mirrored images as best effort
   - runs post-mirror image cleanup
