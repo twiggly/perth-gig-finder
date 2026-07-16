@@ -135,7 +135,7 @@ begin
 
   execute 'set local role anon';
 
-  execute 'select id, slug, title, starts_at, artist_names, venue_slug, venue_name, status from public.gig_cards limit 1';
+  execute 'select id, slug, title, starts_at, artist_names, venue_slug, venue_name, status, tixel_url from public.gig_cards limit 1';
   execute 'select id, title, starts_at, artist_names, venue_slug, venue_name, status from public.homepage_gig_dates limit 1';
   execute 'select slug, name, suburb from public.venues limit 1';
 

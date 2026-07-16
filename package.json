@@ -10,6 +10,7 @@
     "audit:gigs": "node scripts/check-node-version.mjs && node scripts/audit-gigs.mjs",
     "cleanup-images": "pnpm --filter @perth-gig-finder/scraper cleanup-images",
     "dev": "node scripts/check-node-version.mjs && pnpm web:dev",
+    "enrich:tixel": "node scripts/ensure-local-supabase.mjs && pnpm --filter @perth-gig-finder/scraper enrich-tixel",
     "local:bootstrap": "pnpm supabase:start && pnpm supabase:reset && pnpm scrape",
     "local:repair": "node scripts/check-node-version.mjs && node scripts/local-repair.mjs",
     "mirror-images": "pnpm --filter @perth-gig-finder/scraper mirror-images",

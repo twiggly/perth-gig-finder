@@ -29,6 +29,7 @@ function createGig(overrides: Partial<GigCardRecord> = {}): GigCardRecord {
     image_height: 900,
     image_version: null,
     ticket_url: "https://tickets.example.com/alt",
+    tixel_url: null,
     source_url: "https://source.example.com/alt",
     source_name: "The Bird",
     venue_slug: "the-bird",

@@ -57,6 +57,13 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: pnpm --filter @perth-gig-finder/scraper scrape
 
+      - name: Enrich gig details with Tixel links (best effort)
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: pnpm --filter @perth-gig-finder/scraper enrich-tixel
+
       - name: Backfill mirrored images (best effort)
         continue-on-error: true
         env:

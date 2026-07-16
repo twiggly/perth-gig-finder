@@ -25,6 +25,7 @@ export interface GigCardRecord {
   image_height: number | null;
   image_version: string | null;
   ticket_url: string | null;
+  tixel_url: string | null;
   source_url: string;
   source_name: string | null;
   venue_slug: string;
@@ -78,7 +79,7 @@ const THE_BIRD_PLACEHOLDER_IMAGE: RenderableGigImage = {
 };
 
 const GIG_CARD_SELECT =
-  "id, slug, title, starts_at, ends_at, artist_names, image_path, source_image_url, image_width, image_height, image_version, ticket_url, source_url, source_name, venue_slug, venue_name, venue_suburb, venue_address, venue_website_url, status";
+  "id, slug, title, starts_at, ends_at, artist_names, image_path, source_image_url, image_width, image_height, image_version, ticket_url, tixel_url, source_url, source_name, venue_slug, venue_name, venue_suburb, venue_address, venue_website_url, status";
 
 function normalizeGigCard(
   gig: GigCardRecord & { artist_names: string[] | null }

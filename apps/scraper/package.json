@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
     "cleanup-images": "tsx src/cleanup-images.ts",
+    "enrich-tixel": "tsx src/enrich-tixel.ts",
     "mirror-images": "tsx src/mirror-images.ts",
     "profile": "tsx src/profile-sources.ts",
     "repair-artists": "tsx src/repair-artists.ts",

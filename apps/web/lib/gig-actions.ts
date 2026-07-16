@@ -4,9 +4,22 @@ import type { GigCardRecord } from "./gigs";
 
 export interface GigAction {
   href: string;
-  key: "tickets" | "venue";
+  key: "tickets" | "tixel" | "venue";
   label: string;
 }
+
+type GigActionFields = Pick<
+  GigCardRecord,
+  | "source_url"
+  | "ticket_url"
+  | "tixel_url"
+  | "venue_name"
+  | "venue_slug"
+  | "venue_website_url"
+>;
+
+const TIXEL_EVENT_PATH =
+  /^\/au\/[a-z0-9-]+-tickets\/\d{4}\/\d{2}\/\d{2}\/[a-z0-9-]+$/;
 
 function matchesHost(hostname: string, domain: string): boolean {
   return hostname === domain || hostname.endsWith(`.${domain}`);
@@ -100,14 +113,26 @@ function getVenueListingLabelName(venueSlug: string, venueName: string): string 
   }
 }
 
-export function getGigActions(
-  gig: Pick<
-    GigCardRecord,
-    "source_url" | "ticket_url" | "venue_name" | "venue_slug" | "venue_website_url"
-  >
-): GigAction[] {
+function normalizeTixelEventUrl(value: string | null): string | null {
+  const normalized = normalizeAbsoluteHttpUrl(value);
+
+  if (!normalized) {
+    return null;
+  }
+
+  const url = new URL(normalized);
+  return url.hostname === "tixel.com" &&
+    !url.search &&
+    !url.hash &&
+    TIXEL_EVENT_PATH.test(url.pathname)
+    ? url.href
+    : null;
+}
+
+export function getGigActions(gig: GigActionFields): GigAction[] {
   const actions: GigAction[] = [];
   const ticketUrl = normalizeAbsoluteHttpUrl(gig.ticket_url);
+  const tixelUrl = normalizeTixelEventUrl(gig.tixel_url);
   const venueWebsiteUrl = normalizeAbsoluteHttpUrl(gig.venue_website_url);
   const sourceUrl = normalizeAbsoluteHttpUrl(gig.source_url);
 
@@ -116,6 +141,14 @@ export function getGigActions(
       href: ticketUrl,
       key: "tickets",
       label: getBuyTicketsLabel(ticketUrl, gig.venue_slug)
+    });
+  }
+
+  if (tixelUrl) {
+    actions.push({
+      href: tixelUrl,
+      key: "tixel",
+      label: "Tickets @ tixel"
     });
   }
 

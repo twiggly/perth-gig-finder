@@ -55,6 +55,7 @@ function createGig(
     image_height: null,
     image_version: null,
     ticket_url: "https://tickets.example.com",
+    tixel_url: null,
     source_url: "https://source.example.com/gig-1",
     source_name: "The Bird",
     venue_slug: "the-bird",
@@ -174,6 +175,68 @@ describe("GigCard", () => {
     expect(venueIndex).toBeGreaterThan(contentIndex);
     expect(popoverIndex).toBeGreaterThan(venueIndex);
     expect(firstActionIndex).toBeGreaterThan(popoverIndex);
+  });
+
+  it("renders a verified Tixel action only when the card is expanded", () => {
+    const gig = createGig({
+      tixel_url:
+        "https://tixel.com/au/music-tickets/2026/04/23/alt-thursdays-the-bird-perth"
+    });
+    const closedHtml = renderToStaticMarkup(
+      <MantineProvider defaultColorScheme="dark" theme={theme}>
+        <GigCard
+          gig={gig}
+          isOpen={false}
+          onClose={() => {}}
+          onToggle={() => {}}
+        />
+      </MantineProvider>
+    );
+    const openHtml = renderToStaticMarkup(
+      <MantineProvider defaultColorScheme="dark" theme={theme}>
+        <GigCard
+          gig={gig}
+          isOpen
+          onClose={() => {}}
+          onToggle={() => {}}
+        />
+      </MantineProvider>
+    );
+
+    expect(closedHtml).not.toContain("Tickets @ tixel");
+    expect(openHtml).toContain("Tickets @ tixel");
+    expect(openHtml).toContain(
+      'href="https://tixel.com/au/music-tickets/2026/04/23/alt-thursdays-the-bird-perth"'
+    );
+    expect(openHtml).toContain('target="_blank"');
+    expect(openHtml).toContain('rel="noreferrer"');
+    expect(openHtml.indexOf("Buy tickets")).toBeLessThan(
+      openHtml.indexOf("Tickets @ tixel")
+    );
+    expect(openHtml.indexOf("Tickets @ tixel")).toBeLessThan(
+      openHtml.indexOf("Listing @ The Bird")
+    );
+  });
+
+  it("keeps a Tixel-only card actionable", () => {
+    const html = renderToStaticMarkup(
+      <MantineProvider defaultColorScheme="dark" theme={theme}>
+        <GigCard
+          gig={createGig({
+            ticket_url: null,
+            tixel_url:
+              "https://tixel.com/au/music-tickets/2026/04/23/alt-thursdays-the-bird-perth",
+            venue_website_url: null
+          })}
+          isOpen={false}
+          onClose={() => {}}
+          onToggle={() => {}}
+        />
+      </MantineProvider>
+    );
+
+    expect(html).toContain('data-action-count="1"');
+    expect(html).toContain("gig-card__toggle-overlay");
   });
 
   it("marks a renderable poster as eager when requested", () => {

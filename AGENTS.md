@@ -29,6 +29,7 @@ This file is for coding agents working in this repository. Keep it short, practi
 - Start local infra with `pnpm supabase:start`.
 - Reset local data with `pnpm supabase:reset`.
 - Run the scraper locally with `pnpm scrape`.
+- Enrich existing gigs with verified Tixel links using `pnpm enrich:tixel`; this never creates gigs.
 - Profile selected adapters without database writes with `SCRAPER_SOURCE_SLUGS=<slug> pnpm --filter @perth-gig-finder/scraper profile`.
 - Recompute source-level artist provenance with `pnpm --filter @perth-gig-finder/scraper repair-artists`.
 - Audit the public homepage payload with `pnpm audit:gigs -- --url <deployment-url> --vercel` for Vercel-protected deployments.
@@ -58,6 +59,7 @@ This file is for coding agents working in this repository. Keep it short, practi
 - The hosted workflow:
   - runs `cleanup-images -- --execute --older-than-days 14 --skip-orphans` as a preflight cleanup
   - runs `scrape` against hosted Supabase
+  - enriches existing public gigs with verified Tixel event links as best effort
   - emits redacted per-source `[scrape-metrics]` timing, request, and contribution counters
   - excludes `ticketmaster-au` and `moshtix-wa`, which refresh through the self-hosted workflows
   - runs `mirror-images` as best effort
