@@ -67,6 +67,14 @@ function getTicketSellerLabel(ticketUrl: string): string | null {
     return "ticketmaster";
   }
 
+  if (
+    matchesHost(hostname, "eventbrite.com.au") ||
+    matchesHost(hostname, "eventbrite.com") ||
+    matchesHost(hostname, "eventbrite.co")
+  ) {
+    return "eventbrite";
+  }
+
   switch (hostname) {
     case "tickets.avclive.com.au":
     case "tickets.393murray.com.au":
@@ -83,6 +91,11 @@ function getBuyTicketsLabel(ticketUrl: string, venueSlug: string): string {
   }
 
   const sellerLabel = getTicketSellerLabel(ticketUrl);
+
+  if (sellerLabel === "eventbrite") {
+    return "Tickets @ eventbrite";
+  }
+
   return sellerLabel ? `Tickets @ ${sellerLabel}` : "Buy tickets";
 }
 
