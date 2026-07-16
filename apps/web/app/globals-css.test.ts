@@ -80,15 +80,19 @@ describe("global CSS compatibility", () => {
     expect(venuePopoverRule).toContain("background: var(--popover-bg);");
   });
 
-  it("uses pointer-aware filter toggle feedback", () => {
+  it("uses pointer-aware header toggle feedback", () => {
     const sharedControlSelector = `.site-header__filter-toggle,
 .site-header__theme-toggle,
 .site-header__profile,
 .site-header__menu-button`;
+    const tapHighlightSelector = `.site-header__location,
+.site-header__filter-toggle,
+.site-header__menu-button`;
     const firstSharedControlRule = globalCss.indexOf(
       `${sharedControlSelector} {`,
     );
-    const filterToggleRule = getRuleBody(".site-header__filter-toggle");
+    const locationRule = getRuleBody(".site-header__location");
+    const tapHighlightRule = getRuleBody(tapHighlightSelector);
     const transitionRule = getRuleBody(
       sharedControlSelector,
       firstSharedControlRule + 1,
@@ -109,12 +113,20 @@ describe("global CSS compatibility", () => {
     expect(
       globalCss.match(/\.site-header__filter-toggle:hover/g),
     ).toHaveLength(1);
+    expect(globalCss.match(/\.site-header__location:hover/g)).toHaveLength(1);
+    expect(
+      globalCss.match(/\.site-header__menu-button:hover/g),
+    ).toHaveLength(1);
+    expect(finePointerHoverRule).toContain(".site-header__location:hover");
     expect(finePointerHoverRule).toContain(
       ".site-header__filter-toggle:hover",
     );
+    expect(finePointerHoverRule).toContain(".site-header__menu-button:hover");
     expect(finePointerHoverRule).toContain(
       "background: var(--soft-fill);",
     );
+    expect(coarsePointerPressRule).toContain(".site-header__location");
+    expect(coarsePointerPressRule).toContain(".site-header__menu-button");
     expect(coarsePointerPressRule).toContain(
       ".site-header__filter-toggle:active:not(:disabled)",
     );
@@ -132,6 +144,20 @@ describe("global CSS compatibility", () => {
     expect(coarsePointerPressRule).toContain(
       ".site-header__filter-toggle:focus-visible",
     );
+    expect(coarsePointerPressRule).toMatch(
+      /\.site-header__location\[data-state="open"\],\s+\.site-header__menu-button\[data-state="open"\] \{\s+transition-delay: 0ms;/,
+    );
+    expect(coarsePointerPressRule).toMatch(
+      /\.site-header__menu-button\[data-state="closed"\] \{\s+background: transparent;\s+color: var\(--subtle-text\);/,
+    );
+    expect(coarsePointerPressRule).toContain(
+      ".site-header__location:focus-visible",
+    );
+    expect(coarsePointerPressRule).toContain(
+      ".site-header__menu-button:focus-visible",
+    );
+    expect(locationRule).toContain("background-color 160ms ease,");
+    expect(locationRule).toContain("color 160ms ease;");
     expect(transitionRule).toContain("background-color 160ms ease,");
     expect(transitionRule).toContain("color 160ms ease;");
     expect(keyboardFocusRule).toContain(
@@ -140,8 +166,87 @@ describe("global CSS compatibility", () => {
     expect(keyboardFocusRule).toContain(
       "box-shadow: 0 0 0 2px var(--control-focus-border);",
     );
-    expect(filterToggleRule).toContain(
+    expect(tapHighlightRule).toContain(
       "-webkit-tap-highlight-color: transparent;",
+    );
+  });
+
+  it("holds the mobile Venues highlight after the dropdown closes", () => {
+    const triggerRule = getRuleBody(".venue-menu__trigger");
+    const highlightRule = getRuleBody(".venue-menu__trigger::before");
+    const finePointerHoverRule = getRuleBody(
+      "@media (hover: hover) and (pointer: fine)",
+      globalCss.indexOf(".venue-menu__trigger::before"),
+    );
+    const coarsePointerRule = getRuleBody(
+      "@media (hover: none) and (pointer: coarse)",
+      globalCss.indexOf(".venue-menu__trigger::before"),
+    );
+
+    expect(globalCss.match(/\.venue-menu__trigger:hover::before/g)).toHaveLength(
+      1,
+    );
+    expect(finePointerHoverRule).toContain(
+      ".venue-menu__trigger:hover::before",
+    );
+    expect(finePointerHoverRule).toContain("opacity: 1;");
+    expect(coarsePointerRule).toMatch(
+      /\.venue-menu__trigger::before \{\s+transition-delay: 240ms;/,
+    );
+    expect(coarsePointerRule).toMatch(
+      /\.venue-menu__trigger:focus-visible::before,\s+\.venue-menu__trigger--open::before \{\s+transition-delay: 0ms;/,
+    );
+    expect(highlightRule).toContain("transition: opacity 160ms ease;");
+    expect(triggerRule).toContain(
+      "-webkit-tap-highlight-color: transparent;",
+    );
+  });
+
+  it("stabilizes the rotating Venues chevron for iOS", () => {
+    const chevronRule = getRuleBody(".venue-menu__chevron");
+    const iconRule = getRuleBody(".venue-menu__chevron-icon");
+    const openChevronRule = getRuleBody(
+      ".venue-menu__trigger--open .venue-menu__chevron",
+    );
+
+    expect(chevronRule).toContain("flex: 0 0 18px;");
+    expect(chevronRule).toContain("width: 18px;");
+    expect(chevronRule).toContain("height: 18px;");
+    expect(chevronRule).toContain("transform-origin: 50% 50%;");
+    expect(chevronRule).toMatch(
+      /-webkit-backface-visibility: hidden;\s+backface-visibility: hidden;/,
+    );
+    expect(chevronRule).toContain("transform: translateZ(0) rotate(0deg);");
+    expect(chevronRule).toContain("transition: transform 180ms ease;");
+    expect(chevronRule).toContain("will-change: transform;");
+    expect(iconRule).toContain("display: block;");
+    expect(iconRule).not.toContain("transform:");
+    expect(openChevronRule).toContain(
+      "transform: translateZ(0) rotate(180deg);",
+    );
+  });
+
+  it("stabilizes the rotating city chevron for iOS", () => {
+    const chevronRule = getRuleBody(".site-header__location-chevron");
+    const iconRule = getRuleBody(".site-header__location-chevron-icon");
+    const openChevronRule = getRuleBody(
+      '.site-header__location[data-state="open"] .site-header__location-chevron',
+    );
+
+    expect(chevronRule).toContain("flex: 0 0 0.62em;");
+    expect(chevronRule).toContain("width: 0.62em;");
+    expect(chevronRule).toContain("height: 0.62em;");
+    expect(chevronRule).toContain("transform-origin: 50% 50%;");
+    expect(chevronRule).toMatch(
+      /-webkit-backface-visibility: hidden;\s+backface-visibility: hidden;/,
+    );
+    expect(chevronRule).toContain("transform: translateZ(0) rotate(0deg);");
+    expect(chevronRule).toContain("transition: transform 160ms ease;");
+    expect(chevronRule).toContain("will-change: transform;");
+    expect(iconRule).toContain("display: block;");
+    expect(iconRule).not.toContain("transform:");
+    expect(openChevronRule).toContain(
+      "transform: translateZ(0) rotate(180deg);",
     );
   });
 

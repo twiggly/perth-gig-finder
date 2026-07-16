@@ -57,7 +57,10 @@ describe("HeaderLocationSelect", () => {
     expect(html).toContain("site-header__location-name-word--boorloo");
     expect(html).toContain("site-header__location-static-name");
     expect(html).toContain("site-header__location-measurements");
-    expect(html).toContain("site-header__location-chevron");
+    expect(html).toContain(
+      '<span aria-hidden="true" class="site-header__location-chevron">',
+    );
+    expect(html).toContain('class="site-header__location-chevron-icon"');
     expect(html).toContain("M5.5 7.75 10 12.25l4.5-4.5");
   });
 

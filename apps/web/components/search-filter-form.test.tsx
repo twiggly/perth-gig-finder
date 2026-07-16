@@ -6,7 +6,10 @@ import { describe, expect, it } from "vitest";
 import { theme } from "@/app/theme";
 import type { SearchSuggestion } from "@/lib/search-suggestion-types";
 
-import { SearchFilterForm } from "./search-filter-form";
+import {
+  SearchFilterForm,
+  dismissMobileSearchKeyboard
+} from "./search-filter-form";
 
 const SEARCH_SUGGESTIONS: SearchSuggestion[] = [
   {
@@ -66,6 +69,31 @@ function renderSearchForm({
 }
 
 describe("SearchFilterForm", () => {
+  it("dismisses the keyboard only for coarse-pointer search submissions", () => {
+    let blurCount = 0;
+    let matchedQuery = "";
+    const input = {
+      blur() {
+        blurCount += 1;
+      }
+    };
+
+    expect(
+      dismissMobileSearchKeyboard(input, (query) => {
+        matchedQuery = query;
+        return { matches: true };
+      })
+    ).toBe(true);
+    expect(matchedQuery).toBe("(hover: none) and (pointer: coarse)");
+    expect(blurCount).toBe(1);
+
+    expect(
+      dismissMobileSearchKeyboard(input, () => ({ matches: false }))
+    ).toBe(false);
+    expect(dismissMobileSearchKeyboard(input, null)).toBe(false);
+    expect(blurCount).toBe(1);
+  });
+
   it("renders the search input and placeholder when closed", () => {
     const html = renderSearchForm();
 

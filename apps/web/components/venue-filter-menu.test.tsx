@@ -62,6 +62,11 @@ describe("VenueFilterMenu", () => {
     expect(html).toContain("Venues");
     expect(html).toContain("venue-menu__trigger");
     expect(html).not.toContain("venue-menu__trigger--open");
+    expect(html).toContain(
+      '<span aria-hidden="true" class="venue-menu__chevron">',
+    );
+    expect(html).toContain('class="venue-menu__chevron-icon"');
+    expect(html).toContain("M5.5 7.75 10 12.25l4.5-4.5");
     expect(html).toContain('aria-controls="venue-menu-test"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('aria-haspopup="listbox"');

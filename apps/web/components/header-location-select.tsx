@@ -72,22 +72,23 @@ export function syncHeaderLocationMenuOpenState(
 
 function HeaderLocationChevron() {
   return (
-    <svg
-      aria-hidden="true"
-      className="site-header__location-chevron"
-      fill="none"
-      height="18"
-      viewBox="0 0 20 20"
-      width="18"
-    >
-      <path
-        d="M5.5 7.75 10 12.25l4.5-4.5"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.75"
-      />
-    </svg>
+    <span aria-hidden="true" className="site-header__location-chevron">
+      <svg
+        className="site-header__location-chevron-icon"
+        fill="none"
+        height="18"
+        viewBox="0 0 20 20"
+        width="18"
+      >
+        <path
+          d="M5.5 7.75 10 12.25l4.5-4.5"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.75"
+        />
+      </svg>
+    </span>
   );
 }
 
