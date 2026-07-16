@@ -7,6 +7,12 @@ import {
   parseTicketekSearchPage,
   ticketekWaSource
 } from "../sources/ticketek-wa";
+import {
+  classifyTicketekMusicListing,
+  classifyTicketekStructuredMusicCategories,
+  runTicketekStructuredMusicVerificationBatch,
+  verifyTicketekListingWithStructuredResponse
+} from "../sources/ticketek-wa/parser";
 
 function buildSingleVenueResult(input: {
   title: string;
@@ -115,12 +121,16 @@ function buildTicketekSearchApiResponse(input: {
   nextPageToken?: string | null;
   hasMore?: boolean;
   totalCount?: number;
+  categories?: Record<string, number>;
 }) {
   return {
     paging: {
       nextPageToken: input.nextPageToken ?? null,
       hasMore: input.hasMore ?? false,
       totalCount: input.totalCount ?? input.events.length
+    },
+    facets: {
+      categories: input.categories ?? {}
     },
     events: input.events.map((event) => ({
       id: event.id,
@@ -192,6 +202,226 @@ describe("ticketek wa source adapter", () => {
       locationText:
         "Riverside Theatre, Perth Convention and Exhibition Centre, Perth, WA",
       startsAt: "2026-11-07T04:00:00.000Z"
+    });
+    expect(parsed.unclassifiedListings).toEqual([]);
+  });
+
+  it("retains valid Perth listings without decisive music evidence for verification", () => {
+    const parsed = parseTicketekSearchPage(
+      buildSearchPage({
+        results: [
+          buildSingleVenueResult({
+            title: "The Jungle Giants",
+            href: "/shows/show.aspx?sh=THJUNGIA26",
+            subtitle: "Experiencing Feelings of Joy Tour",
+            locationText: "Astor Theatre, Mount Lawley, WA",
+            dateText: "Sat 18 Jul 2026"
+          })
+        ]
+      }),
+      "Astor Theatre"
+    );
+
+    expect(parsed.listings).toEqual([]);
+    expect(parsed.failedCount).toBe(0);
+    expect(parsed.unclassifiedListings).toHaveLength(1);
+    expect(parsed.unclassifiedListings[0]).toMatchObject({
+      externalId: "THJUNGIA26",
+      title: "The Jungle Giants",
+      startsAt: "2026-07-18T04:00:00.000Z"
+    });
+  });
+
+  it("classifies text evidence without treating generic tour copy as music", () => {
+    expect(
+      classifyTicketekMusicListing({
+        title: "The Jungle Giants",
+        subtitle: "Experiencing Feelings of Joy Tour",
+        summary: null,
+        locationText: "Astor Theatre, Mount Lawley, WA"
+      })
+    ).toBe("unknown");
+    expect(
+      classifyTicketekMusicListing({
+        title: "Bootleg Beatles",
+        subtitle: "In Concert 2026",
+        summary: null,
+        locationText: "Astor Theatre, Mount Lawley, WA"
+      })
+    ).toBe("music");
+    expect(
+      classifyTicketekMusicListing({
+        title: "Dropout Improv",
+        subtitle: "Live comedy",
+        summary: null,
+        locationText: "Astor Theatre, Mount Lawley, WA"
+      })
+    ).toBe("non-music");
+  });
+
+  it("uses structured music categories only when no non-music facet conflicts", () => {
+    expect(
+      classifyTicketekStructuredMusicCategories([
+        "Contemporary Music",
+        "Contemporary Music > Alternative/Indie",
+        "Other > Miscellaneous"
+      ])
+    ).toBe("music");
+    expect(
+      classifyTicketekStructuredMusicCategories([
+        "Contemporary Music > Pop",
+        "Theatre > Comedy"
+      ])
+    ).toBe("non-music");
+    expect(classifyTicketekStructuredMusicCategories(["Other > Miscellaneous"])).toBe(
+      "unknown"
+    );
+  });
+
+  it("verifies an exact Ticketek show while rejecting conflicting or ambiguous metadata", () => {
+    const [listing] = parseTicketekSearchPage(
+      buildSearchPage({
+        results: [
+          buildSingleVenueResult({
+            title: "The Jungle Giants",
+            href: "/shows/show.aspx?sh=THJUNGIA26",
+            subtitle: "Experiencing Feelings of Joy Tour",
+            locationText: "Astor Theatre, Mount Lawley, WA",
+            dateText: "Sat 18 Jul 2026"
+          })
+        ]
+      }),
+      "Astor Theatre"
+    ).unclassifiedListings;
+
+    if (!listing) {
+      throw new Error("Expected The Jungle Giants fixture to remain unclassified");
+    }
+
+    const matchingEvent = {
+      id: "AST20260718",
+      title: "The Jungle Giants",
+      subtitle: "Sat 18 Jul 2026 7:30pm",
+      dateTimeLocalized: "2026-07-18T19:30:00+08:00",
+      showCode: "THJUNGIA26",
+      venueName: "Astor Theatre",
+      venueCode: "AST"
+    };
+
+    expect(
+      verifyTicketekListingWithStructuredResponse(
+        listing,
+        buildTicketekSearchApiResponse({
+          events: [matchingEvent],
+          categories: {
+            "Contemporary Music": 1,
+            "Contemporary Music > Alternative/Indie": 1,
+            "Other > Miscellaneous": 1
+          }
+        })
+      )
+    ).toMatchObject({ status: "accepted" });
+
+    expect(
+      verifyTicketekListingWithStructuredResponse(
+        listing,
+        buildTicketekSearchApiResponse({
+          events: [matchingEvent],
+          categories: {
+            "Contemporary Music > Pop": 1,
+            "Theatre > Comedy": 1
+          }
+        })
+      )
+    ).toMatchObject({ status: "rejected" });
+
+    expect(
+      verifyTicketekListingWithStructuredResponse(
+        listing,
+        buildTicketekSearchApiResponse({
+          events: [
+            matchingEvent,
+            {
+              ...matchingEvent,
+              id: "AST20260718B",
+              title: "The Jungle Giants Afterparty",
+              showCode: "JUNGLEAPT26"
+            }
+          ],
+          categories: { "Contemporary Music": 2 }
+        })
+      )
+    ).toMatchObject({ status: "ambiguous" });
+
+    expect(
+      verifyTicketekListingWithStructuredResponse(
+        listing,
+        buildTicketekSearchApiResponse({
+          events: [{ ...matchingEvent, showCode: "NOTJUNGLE26" }],
+          categories: { "Contemporary Music": 1 }
+        })
+      )
+    ).toMatchObject({ status: "ambiguous" });
+
+    expect(
+      verifyTicketekListingWithStructuredResponse(listing, {
+        events: [
+          {
+            title: "The Jungle Giants",
+            dateTimeLocalized: "2026-07-18T19:30:00+08:00",
+            show: { showCode: "THJUNGIA26" },
+            venue: { name: "Astor Theatre", state: "WA", venueCode: "AST" }
+          }
+        ],
+        facets: { categories: null }
+      })
+    ).toMatchObject({ status: "ambiguous" });
+
+    expect(
+      verifyTicketekListingWithStructuredResponse(
+        listing,
+        buildTicketekSearchApiResponse({
+          events: [matchingEvent],
+          categories: { "Contemporary Music": 1 },
+          hasMore: true,
+          nextPageToken: "more-results"
+        })
+      )
+    ).toMatchObject({ status: "ambiguous" });
+  });
+
+  it("excludes unclassified listings when structured verification is unavailable", async () => {
+    const [listing] = parseTicketekSearchPage(
+      buildSearchPage({
+        results: [
+          buildSingleVenueResult({
+            title: "The Jungle Giants",
+            href: "/shows/show.aspx?sh=THJUNGIA26",
+            subtitle: "Experiencing Feelings of Joy Tour",
+            locationText: "Astor Theatre, Mount Lawley, WA",
+            dateText: "Sat 18 Jul 2026"
+          })
+        ]
+      }),
+      "Astor Theatre"
+    ).unclassifiedListings;
+
+    if (!listing) {
+      throw new Error("Expected The Jungle Giants fixture to remain unclassified");
+    }
+
+    const result = await runTicketekStructuredMusicVerificationBatch({
+      listings: [listing],
+      exactTimeLookup: new Map(),
+      fetchImpl: vi.fn<typeof fetch>(async () => new Response(null, { status: 503 })),
+      titleQueryCache: new Set()
+    });
+
+    expect(result).toEqual({
+      acceptedListings: [],
+      rejectedCount: 0,
+      ambiguousCount: 0,
+      failedCount: 1
     });
   });
 
@@ -533,5 +763,117 @@ describe("ticketek wa source adapter", () => {
     expect(metrics.get("ticketek.html_query_2.new_unique")).toBe(0);
     expect(metrics.get("ticketek.search_api.exact_time_keys")).toBe(0);
     expect(metrics.get("ticketek.title_hydration.new_exact_time_keys")).toBe(2);
+  });
+
+  it("discovers and verifies The Jungle Giants from Astor Theatre page three", async () => {
+    const emptySearchPage = buildSearchPage({ results: [] });
+    const astorFirstPage = buildSearchPage({ results: [], totalPages: 3 });
+    const jungleGiantsPage = buildSearchPage({
+      results: [
+        buildSingleVenueResult({
+          title: "The Jungle Giants",
+          href: "/shows/show.aspx?sh=THJUNGIA26",
+          subtitle: "Experiencing Feelings of Joy Tour",
+          locationText: "Astor Theatre, Mount Lawley, WA",
+          dateText: "Sat 18 Jul 2026"
+        })
+      ]
+    });
+    const jungleGiantsApiResponse = buildTicketekSearchApiResponse({
+      events: [
+        {
+          id: "AST20260718",
+          title: "The Jungle Giants",
+          subtitle: "Sat 18 Jul 2026 7:30pm",
+          dateTimeLocalized: "2026-07-18T19:30:00+08:00",
+          showCode: "THJUNGIA26",
+          venueName: "Astor Theatre",
+          venueCode: "AST"
+        }
+      ],
+      categories: {
+        "Contemporary Music": 1,
+        "Contemporary Music > Alternative/Indie": 1,
+        "Other > Miscellaneous": 1
+      }
+    });
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+
+      if (url === "https://ignition.ticketek.com.au/fanxsearch/api/search") {
+        const requestBody =
+          init && typeof init === "object" && "body" in init && typeof init.body === "string"
+            ? JSON.parse(init.body)
+            : null;
+        const payload =
+          requestBody?.searchTerm === "The Jungle Giants"
+            ? jungleGiantsApiResponse
+            : buildTicketekSearchApiResponse({ events: [] });
+
+        return new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "content-type": "application/json; charset=utf-8" }
+        });
+      }
+
+      if (url.includes("/search/SearchResults.aspx")) {
+        const requestUrl = new URL(url);
+        const query = requestUrl.searchParams.get("k");
+        const page = Number(requestUrl.searchParams.get("page"));
+        const html =
+          query !== "Astor Theatre"
+            ? emptySearchPage
+            : page === 1
+              ? astorFirstPage
+              : page === 3
+                ? jungleGiantsPage
+                : emptySearchPage;
+
+        return new Response(html, {
+          status: 200,
+          headers: { "content-type": "text/html; charset=utf-8" }
+        });
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    const metrics = new Map<string, number>();
+
+    const result = await ticketekWaSource.fetchListings(fetchMock, {
+      async loadSourceGigPayloads() {
+        return new Map();
+      },
+      recordMetric(name, value) {
+        metrics.set(name, value);
+      }
+    });
+
+    expect(result.failedCount).toBe(0);
+    expect(result.gigs).toHaveLength(1);
+    expect(result.gigs[0]).toMatchObject({
+      externalId: "THJUNGIA26",
+      title: "The Jungle Giants",
+      startsAt: "2026-07-18T11:30:00.000Z",
+      startsAtPrecision: "exact",
+      ticketUrl: "https://premier.ticketek.com.au/Shows/Show.aspx?sh=THJUNGIA26",
+      venue: {
+        name: "Astor Theatre",
+        suburb: "Mount Lawley"
+      },
+      rawPayload: {
+        musicClassification: "structured-api",
+        musicCategoryFacets: [
+          "Contemporary Music",
+          "Contemporary Music > Alternative/Indie",
+          "Other > Miscellaneous"
+        ]
+      }
+    });
+    expect(metrics.get("ticketek.html_query_8.pages")).toBe(3);
+    expect(metrics.get("ticketek.structured_music.candidates")).toBe(1);
+    expect(metrics.get("ticketek.structured_music.accepted")).toBe(1);
+    expect(metrics.get("ticketek.structured_music.rejected")).toBe(0);
+    expect(metrics.get("ticketek.structured_music.ambiguous")).toBe(0);
+    expect(metrics.get("ticketek.structured_music.failed")).toBe(0);
   });
 });

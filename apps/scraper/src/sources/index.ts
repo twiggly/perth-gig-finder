@@ -1,3 +1,4 @@
+import { eventbritePerthMusicSource } from "./eventbrite-perth-music";
 import { humanitixPerthMusicSource } from "./humanitix-perth-music";
 import { milkBarSource } from "./milk-bar";
 import { moshtixWaSource } from "./moshtix-wa";
@@ -17,5 +18,6 @@ export const sources = [
   oztixWaSource,
   moshtixWaSource,
   ticketekWaSource,
-  ticketmasterAuSource
+  ticketmasterAuSource,
+  eventbritePerthMusicSource
 ] as const;

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import * as eventbriteFacade from "../sources/eventbrite-perth-music";
+import * as eventbriteParser from "../sources/eventbrite-perth-music/parser";
+import { eventbritePerthMusicSource } from "../sources/eventbrite-perth-music/source";
 import * as humanitixFacade from "../sources/humanitix-perth-music";
 import * as humanitixParser from "../sources/humanitix-perth-music/parser";
 import { humanitixPerthMusicSource } from "../sources/humanitix-perth-music/source";
@@ -17,6 +20,30 @@ import * as birdParser from "../sources/the-bird/parser";
 import { theBirdSource } from "../sources/the-bird/source";
 
 describe("source adapter compatibility facades", () => {
+  it("preserves Eventbrite runtime exports", () => {
+    expect(Object.keys(eventbriteFacade).sort()).toEqual([
+      "eventbritePerthMusicSource",
+      "extractEventbriteArtists",
+      "extractEventbriteServerData",
+      "normalizeEventbriteDetailPage",
+      "normalizeEventbriteDiscoveryUrl",
+      "normalizeEventbriteEventUrl",
+      "parseEventbriteDiscoveryPage"
+    ]);
+    expect(eventbriteFacade.extractEventbriteServerData).toBe(
+      eventbriteParser.extractEventbriteServerData
+    );
+    expect(eventbriteFacade.normalizeEventbriteDetailPage).toBe(
+      eventbriteParser.normalizeEventbriteDetailPage
+    );
+    expect(eventbriteFacade.parseEventbriteDiscoveryPage).toBe(
+      eventbriteParser.parseEventbriteDiscoveryPage
+    );
+    expect(eventbriteFacade.eventbritePerthMusicSource).toBe(
+      eventbritePerthMusicSource
+    );
+  });
+
   it("preserves Humanitix runtime exports", () => {
     expect(Object.keys(humanitixFacade).sort()).toEqual([
       "extractHumanitixArtists",

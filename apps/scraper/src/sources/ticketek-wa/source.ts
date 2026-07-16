@@ -10,6 +10,7 @@ import {
   normalizeTicketekListing,
   parseTicketekSearchPage,
   repairTicketekArtists,
+  runTicketekStructuredMusicVerificationBatch,
   runTicketekTitleHydrationBatch
 } from "./parser";
 import type { TicketekSearchListing } from "./types";
@@ -17,13 +18,14 @@ import type { TicketekSearchListing } from "./types";
 const SOURCE_URL = "https://premier.ticketek.com.au/search/SearchResults.aspx";
 const MAX_PAGES_PER_QUERY = 3;
 const SEARCH_QUERIES = [
-  "concerts perth",
-  "music perth",
-  "live music perth",
-  "orchestra perth",
-  "band perth",
-  "festival perth",
-  "rock perth"
+  { query: "concerts perth", verifyUnclassified: false },
+  { query: "music perth", verifyUnclassified: false },
+  { query: "live music perth", verifyUnclassified: false },
+  { query: "orchestra perth", verifyUnclassified: false },
+  { query: "band perth", verifyUnclassified: false },
+  { query: "festival perth", verifyUnclassified: false },
+  { query: "rock perth", verifyUnclassified: false },
+  { query: "Astor Theatre", verifyUnclassified: true }
 ];
 
 export const ticketekWaSource: SourceAdapter = {
@@ -35,10 +37,11 @@ export const ticketekWaSource: SourceAdapter = {
   async fetchListings(fetchImpl = fetch, context): Promise<SourceAdapterResult> {
     const cookieJar = createTicketekCookieJar();
     const listingsById = new Map<string, TicketekSearchListing>();
+    const unclassifiedListingsById = new Map<string, TicketekSearchListing>();
     const exactTimeLookup = new Map<string, string | null>();
     const titleQueryCache = new Set<string>();
     let failedCount = 0;
-    const searchApiTasks = SEARCH_QUERIES.map(async (query) => {
+    const searchApiTasks = SEARCH_QUERIES.map(async ({ query }) => {
       try {
         await hydrateTicketekSearchApiLookup(query, exactTimeLookup, fetchImpl);
       } catch {
@@ -46,10 +49,41 @@ export const ticketekWaSource: SourceAdapter = {
       }
     });
 
-    for (const [queryIndex, query] of SEARCH_QUERIES.entries()) {
+    for (const [queryIndex, queryConfig] of SEARCH_QUERIES.entries()) {
+      const { query, verifyUnclassified } = queryConfig;
       const listingCountBeforeQuery = listingsById.size;
       const queryListingIds = new Set<string>();
       let fetchedPageCount = 0;
+
+      const mergeParsedPage = (page: ReturnType<typeof parseTicketekSearchPage>) => {
+        failedCount += page.failedCount;
+
+        for (const listing of page.listings) {
+          queryListingIds.add(listing.externalId);
+          unclassifiedListingsById.delete(listing.externalId);
+          const existing = listingsById.get(listing.externalId);
+          listingsById.set(
+            listing.externalId,
+            existing ? choosePreferredListing(existing, listing) : listing
+          );
+        }
+
+        if (!verifyUnclassified) {
+          return;
+        }
+
+        for (const listing of page.unclassifiedListings) {
+          if (listingsById.has(listing.externalId)) {
+            continue;
+          }
+
+          const existing = unclassifiedListingsById.get(listing.externalId);
+          unclassifiedListingsById.set(
+            listing.externalId,
+            existing ? choosePreferredListing(existing, listing) : listing
+          );
+        }
+      };
 
       try {
         const firstPageHtml = await fetchTicketekPageHtml(
@@ -65,16 +99,7 @@ export const ticketekWaSource: SourceAdapter = {
         }
 
         const firstPage = parseTicketekSearchPage(firstPageHtml, query);
-        failedCount += firstPage.failedCount;
-
-        for (const listing of firstPage.listings) {
-          queryListingIds.add(listing.externalId);
-          const existing = listingsById.get(listing.externalId);
-          listingsById.set(
-            listing.externalId,
-            existing ? choosePreferredListing(existing, listing) : listing
-          );
-        }
+        mergeParsedPage(firstPage);
 
         const totalPages = Math.min(MAX_PAGES_PER_QUERY, firstPage.totalPages);
 
@@ -92,16 +117,7 @@ export const ticketekWaSource: SourceAdapter = {
           }
 
           const pageResult = parseTicketekSearchPage(pageHtml, query);
-          failedCount += pageResult.failedCount;
-
-          for (const listing of pageResult.listings) {
-            queryListingIds.add(listing.externalId);
-            const existing = listingsById.get(listing.externalId);
-            listingsById.set(
-              listing.externalId,
-              existing ? choosePreferredListing(existing, listing) : listing
-            );
-          }
+          mergeParsedPage(pageResult);
         }
       } catch {
         failedCount += 1;
@@ -123,6 +139,45 @@ export const ticketekWaSource: SourceAdapter = {
     context?.recordMetric?.(
       "ticketek.search_api.exact_time_keys",
       exactTimeLookup.size
+    );
+
+    const unclassifiedListings = [...unclassifiedListingsById.values()].filter(
+      (listing) => !listingsById.has(listing.externalId)
+    );
+    const structuredVerification = await runTicketekStructuredMusicVerificationBatch({
+      listings: unclassifiedListings,
+      exactTimeLookup,
+      fetchImpl,
+      titleQueryCache
+    });
+
+    for (const listing of structuredVerification.acceptedListings) {
+      const existing = listingsById.get(listing.externalId);
+      listingsById.set(
+        listing.externalId,
+        existing ? choosePreferredListing(existing, listing) : listing
+      );
+    }
+
+    context?.recordMetric?.(
+      "ticketek.structured_music.candidates",
+      unclassifiedListings.length
+    );
+    context?.recordMetric?.(
+      "ticketek.structured_music.accepted",
+      structuredVerification.acceptedListings.length
+    );
+    context?.recordMetric?.(
+      "ticketek.structured_music.rejected",
+      structuredVerification.rejectedCount
+    );
+    context?.recordMetric?.(
+      "ticketek.structured_music.ambiguous",
+      structuredVerification.ambiguousCount
+    );
+    context?.recordMetric?.(
+      "ticketek.structured_music.failed",
+      structuredVerification.failedCount
     );
 
     const listings = [...listingsById.values()];
