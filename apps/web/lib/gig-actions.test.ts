@@ -8,6 +8,7 @@ function createGigActionInput(overrides: Partial<GigActionInput>): GigActionInpu
   return {
     source_url: "https://source.example.com/gig",
     ticket_url: null,
+    tixel_url: null,
     venue_name: "Test Venue",
     venue_slug: "test-venue",
     venue_website_url: null,
@@ -264,6 +265,50 @@ describe("getGigActions", () => {
           venue_website_url: null
         })
       )
+    ).toEqual([]);
+  });
+});
+
+describe("getGigActions Tixel links", () => {
+  it("inserts a Tixel action between the primary ticket and venue listing", () => {
+    expect(
+      getGigActions(
+        createGigActionInput({
+          ticket_url: "https://tickets.oztix.com.au/outlet/event/show",
+          tixel_url:
+            "https://tixel.com/au/music-tickets/2026/07/18/ninajirachi-the-rechabite-perth",
+          venue_website_url: "https://venue.example.com"
+        })
+      )
+    ).toEqual([
+      {
+        href: "https://tickets.oztix.com.au/outlet/event/show",
+        key: "tickets",
+        label: "Tickets @ oztix"
+      },
+      {
+        href:
+          "https://tixel.com/au/music-tickets/2026/07/18/ninajirachi-the-rechabite-perth",
+        key: "tixel",
+        label: "Tickets @ tixel"
+      },
+      {
+        href: "https://venue.example.com/",
+        key: "venue",
+        label: "Listing @ Test Venue"
+      }
+    ]);
+  });
+
+  it.each([
+    "https://example.com/au/music-tickets/2026/07/18/ninajirachi",
+    "https://www.tixel.com/au/music-tickets/2026/07/18/ninajirachi",
+    "https://tixel.com/au/music-tickets/ninajirachi",
+    "https://tixel.com/au/music-tickets/2026/07/18/ninajirachi?ref=tracking",
+    "javascript:alert(1)"
+  ])("omits non-direct Tixel URLs: %s", (tixelUrl) => {
+    expect(
+      getGigActions(createGigActionInput({ tixel_url: tixelUrl }))
     ).toEqual([]);
   });
 });

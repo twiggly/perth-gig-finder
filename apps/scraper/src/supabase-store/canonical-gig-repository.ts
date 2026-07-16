@@ -10,16 +10,12 @@ import {
   type NormalizedGig,
   type StartsAtPrecision
 } from "@perth-gig-finder/shared";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-
 import {
   IMAGE_MIRROR_BUCKET,
   mirrorSourceImage,
   shouldMirrorImageForGig
 } from "../image-mirror";
-import {
-  normalizeArtistNames
-} from "../artist-utils";
+import { normalizeArtistNames } from "../artist-utils";
 import type {
   ImageCleanupDeleteResult,
   ImageCleanupObject
@@ -34,8 +30,9 @@ import type {
   SourceRecord,
   VenueRecord
 } from "../types";
-import { SupabaseImageRepository } from "./image-repository";
+import { createSupabaseAdminClient } from "../supabase-admin-client";
 import { SupabaseArtistRepository } from "./artist-repository";
+import { SupabaseImageRepository } from "./image-repository";
 import {
   SupabaseOperationsRepository,
   type VenueCacheEntry
@@ -310,29 +307,6 @@ function determineCanonicalOwner(
       .slice()
       .sort((left, right) => right.priority - left.priority)[0] ??
     null
-  );
-}
-
-function requireEnv(name: string): string {
-  const value = process.env[name];
-
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-
-  return value;
-}
-
-function createSupabaseAdminClient(): SupabaseClient {
-  return createClient(
-    requireEnv("SUPABASE_URL"),
-    requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    }
   );
 }
 

@@ -28,6 +28,7 @@ function createGig(overrides: Partial<GigCardRecord> = {}): GigCardRecord {
     image_height: 900,
     image_version: null,
     ticket_url: "https://tickets.example.com/alt",
+    tixel_url: null,
     source_url: "https://www.williamstreetbird.com/events/alt",
     source_name: "The Bird",
     venue_slug: "the-bird",
@@ -106,6 +107,25 @@ describe("GigDetailContent", () => {
     expect(html).toContain("<p>Milk Bar,</p>");
     expect(html).toContain("Buy tickets");
     expect(html).toContain("Listing @ Milk Bar");
+  });
+
+  it("renders a verified Tixel link between ticket and venue actions", () => {
+    const html = renderGigDetail(
+      createGig({
+        tixel_url:
+          "https://tixel.com/au/music-tickets/2026/04/23/alt-thursdays-the-bird-perth"
+      })
+    );
+
+    expect(html).toContain("Tickets @ tixel");
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain('rel="noreferrer"');
+    expect(html.indexOf("Buy tickets")).toBeLessThan(
+      html.indexOf("Tickets @ tixel")
+    );
+    expect(html.indexOf("Tickets @ tixel")).toBeLessThan(
+      html.indexOf("Listing @ The Bird")
+    );
   });
 
   it("renders The Bird placeholder for image-less Bird gigs", () => {

@@ -21,7 +21,7 @@ Users should be able to:
 ## Current Architecture
 
 - `apps/web` is the public Next.js site. It reads curated gig data from Supabase and never scrapes during page requests.
-- `apps/scraper` fetches source data, normalizes it, deduplicates gigs, mirrors image assets, and writes canonical records into Supabase.
+- `apps/scraper` fetches source data, normalizes it, deduplicates gigs, enriches existing gigs with verified secondary ticket links, mirrors image assets, and writes canonical records into Supabase.
 - `packages/shared` holds shared normalization contracts and helpers used by both sides.
 
 ## Data Model Direction
@@ -150,6 +150,7 @@ Not built yet:
 - The hosted refresh workflow:
   - runs preflight image cleanup for old mirrored images
   - scrapes source data into hosted Supabase, excluding `ticketmaster-au` and `moshtix-wa`
+  - enriches existing public gigs with verified Tixel event links as best effort
   - backfills mirrored images as best effort
   - runs post-mirror image cleanup
   - audits the hosted `gig_cards` public view that feeds the homepage and records audit history in Supabase
@@ -221,6 +222,12 @@ pnpm verify
    pnpm scrape
    ```
 
+   Add verified Tixel links to existing gigs without importing Tixel events:
+
+   ```bash
+   pnpm enrich:tixel
+   ```
+
    To profile selected adapters without writing to Supabase, set the normal
    `SCRAPER_SOURCE_SLUGS` filter and run:
 
@@ -231,7 +238,8 @@ pnpm verify
    Scrape performance can be tuned with
    `SCRAPER_SOURCE_FETCH_CONCURRENCY` (default `2`),
    `ELLINGTON_DETAIL_CONCURRENCY` (default `8`), and
-   `IMAGE_MIRROR_CONCURRENCY` (default `2`). Set
+   `IMAGE_MIRROR_CONCURRENCY` (default `2`). Tixel detail verification uses
+   `TIXEL_ENRICHMENT_CONCURRENCY` (default `4`). Set
    `ELLINGTON_DETAIL_CACHE_DISABLED=1` to restore uncached Ellington detail
    requests, or `SCRAPER_PROFILE=1` to emit one redacted metrics line per
    source.

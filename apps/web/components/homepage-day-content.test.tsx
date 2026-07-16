@@ -57,6 +57,7 @@ function createGig(
     image_height: null,
     image_version: null,
     ticket_url: "https://tickets.example.com",
+    tixel_url: null,
     source_url: "https://source.example.com/gig-1",
     source_name: "The Bird",
     venue_slug: "the-bird",
