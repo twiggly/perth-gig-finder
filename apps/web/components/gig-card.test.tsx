@@ -218,6 +218,24 @@ describe("GigCard", () => {
     );
   });
 
+  it("renders the Eventbrite ticket label when the card is expanded", () => {
+    const ticketUrl =
+      "https://www.eventbrite.com.au/e/karnivool-in-verses-australian-tour-tickets-123";
+    const html = renderToStaticMarkup(
+      <MantineProvider defaultColorScheme="dark" theme={theme}>
+        <GigCard
+          gig={createGig({ ticket_url: ticketUrl })}
+          isOpen
+          onClose={() => {}}
+          onToggle={() => {}}
+        />
+      </MantineProvider>
+    );
+
+    expect(html).toContain("Tickets @ eventbrite");
+    expect(html).toContain(`href="${ticketUrl}"`);
+  });
+
   it("keeps a Tixel-only card actionable", () => {
     const html = renderToStaticMarkup(
       <MantineProvider defaultColorScheme="dark" theme={theme}>

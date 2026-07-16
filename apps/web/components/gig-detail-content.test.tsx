@@ -128,6 +128,15 @@ describe("GigDetailContent", () => {
     );
   });
 
+  it("renders the Eventbrite ticket label and direct URL", () => {
+    const ticketUrl =
+      "https://www.eventbrite.com.au/e/karnivool-in-verses-australian-tour-tickets-123";
+    const html = renderGigDetail(createGig({ ticket_url: ticketUrl }));
+
+    expect(html).toContain("Tickets @ eventbrite");
+    expect(html).toContain(`href="${ticketUrl}"`);
+  });
+
   it("renders The Bird placeholder for image-less Bird gigs", () => {
     const html = renderGigDetail(
       createGig({

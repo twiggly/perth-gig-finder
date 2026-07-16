@@ -61,6 +61,18 @@ describe("getGigActions", () => {
     ["https://events.humanitix.com/class-of-orb-reunion", "Tickets @ humanitix"],
     ["https://premier.ticketek.com.au/Shows/Show.aspx?sh=SHOW26", "Tickets @ ticketek"],
     ["https://www.ticketmaster.com.au/event/show", "Tickets @ ticketmaster"],
+    [
+      "https://www.eventbrite.com.au/e/karnivool-tickets-123",
+      "Tickets @ eventbrite"
+    ],
+    [
+      "https://events.eventbrite.com/e/perth-concert-tickets-456",
+      "Tickets @ eventbrite"
+    ],
+    [
+      "https://www.eventbrite.co/e/global-concert-tickets-789",
+      "Tickets @ eventbrite"
+    ],
     ["https://tickets.avclive.com.au/outlet/event/show", "Tickets @ oztix"],
     ["https://tickets.393murray.com.au/outlet/event/show", "Tickets @ oztix"],
     [
@@ -85,7 +97,8 @@ describe("getGigActions", () => {
 
   it.each([
     "https://tickets.example.com/show",
-    "https://www.ellingtonjazz.com.au/tc-events/show"
+    "https://www.ellingtonjazz.com.au/tc-events/show",
+    "https://eventbrite.com.au.example.com/e/lookalike-event"
   ])(
     "falls back to a generic buy label for %s",
     (ticketUrl) => {
