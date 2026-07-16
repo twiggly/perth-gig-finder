@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import {
   Combobox,
   Text,
@@ -8,6 +8,27 @@ import {
 } from "@mantine/core";
 
 import type { SearchSuggestion } from "@/lib/search-suggestion-types";
+
+const MOBILE_SEARCH_KEYBOARD_MEDIA_QUERY =
+  "(hover: none) and (pointer: coarse)";
+
+type SearchKeyboardTarget = Pick<HTMLInputElement, "blur">;
+type SearchMatchMedia = (
+  query: string
+) => Pick<MediaQueryList, "matches">;
+
+export function dismissMobileSearchKeyboard(
+  input: SearchKeyboardTarget | null,
+  matchMedia: SearchMatchMedia | null | undefined =
+    typeof window === "undefined" ? undefined : window.matchMedia.bind(window)
+) {
+  if (!input || !matchMedia?.(MOBILE_SEARCH_KEYBOARD_MEDIA_QUERY).matches) {
+    return false;
+  }
+
+  input.blur();
+  return true;
+}
 
 interface SearchFilterFormProps {
   dropdownOffset?: number;
@@ -157,6 +178,7 @@ export function SearchFilterForm({
   searchInput,
   suggestions
 }: SearchFilterFormProps) {
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const combobox = useCombobox({
     opened: isOpen,
     onDropdownClose: () => {
@@ -195,11 +217,21 @@ export function SearchFilterForm({
 
     if (selectedSuggestion) {
       onSelectSuggestion(selectedSuggestion);
+      dismissMobileSearchKeyboard(searchInputRef.current);
     }
   }
 
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    onSubmit(event);
+    dismissMobileSearchKeyboard(searchInputRef.current);
+  }
+
   return (
-    <form className="filter-toolbar__search" onSubmit={onSubmit} ref={formRef}>
+    <form
+      className="filter-toolbar__search"
+      onSubmit={handleSubmit}
+      ref={formRef}
+    >
       <Combobox
         dropdownPadding={0}
         hideDetached={false}
@@ -228,6 +260,7 @@ export function SearchFilterForm({
             onChange={handleInputChange}
             onFocus={onFocus}
             placeholder="Search for events"
+            ref={searchInputRef}
             type="search"
             unstyled
             value={searchInput}
