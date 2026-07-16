@@ -18,6 +18,23 @@ export interface TixelMatchPlan {
   matchesByGigId: Map<string, string>;
 }
 
+function getVenueMatchKey(value: string): string {
+  return slugifyVenueName(value).replace(/^the-/, "");
+}
+
+function isPerformerTitleMatch(
+  gig: TixelEnrichmentGig,
+  title: string
+): boolean {
+  const titleKey = normalizeTitleForMatch(title);
+
+  return gig.artistNames.some(
+    (artistName) =>
+      artistName.trim().length > 0 &&
+      normalizeTitleForMatch(artistName) === titleKey
+  );
+}
+
 function getTixelEventMatchConfidence(
   gig: TixelEnrichmentGig,
   event: TixelEventDetail
@@ -29,6 +46,7 @@ function getTixelEventMatchConfidence(
   const exactTitle =
     normalizeTitleForMatch(gig.title) === normalizeTitleForMatch(event.title);
   const canonicalTitle = areCanonicalTitlesCompatible(gig.title, event.title);
+  const performerTitle = isPerformerTitleMatch(gig, event.title);
   const equivalentVenue = haveEquivalentVenues(gig, event);
   const equivalentTime = haveEquivalentStartTimes(gig, event);
 
@@ -38,7 +56,8 @@ function getTixelEventMatchConfidence(
 
   if (
     (exactTitle && equivalentTime) ||
-    (canonicalTitle && equivalentVenue && equivalentTime)
+    (canonicalTitle && equivalentVenue && equivalentTime) ||
+    (performerTitle && equivalentVenue && equivalentTime)
   ) {
     return 2;
   }
@@ -48,12 +67,12 @@ function getTixelEventMatchConfidence(
 
 function haveEquivalentVenues(
   gig: TixelEnrichmentGig,
-  event: TixelEventDetail
+  event: Pick<TixelEventDetail, "venueName">
 ): boolean {
-  const eventVenueSlug = slugifyVenueName(event.venueName);
+  const eventVenueKey = getVenueMatchKey(event.venueName);
   return (
-    eventVenueSlug === gig.venueSlug ||
-    eventVenueSlug === slugifyVenueName(gig.venueName)
+    eventVenueKey === getVenueMatchKey(gig.venueSlug) ||
+    eventVenueKey === getVenueMatchKey(gig.venueName)
   );
 }
 
@@ -82,7 +101,9 @@ export function isPlausibleTixelDiscoveryCard(
     (gig) =>
       getPerthDateKey(gig.startsAt) === card.dateKey &&
       (normalizeTitleForMatch(gig.title) === normalizeTitleForMatch(card.title) ||
-        areCanonicalTitlesCompatible(gig.title, card.title))
+        areCanonicalTitlesCompatible(gig.title, card.title) ||
+        (isPerformerTitleMatch(gig, card.title) &&
+          haveEquivalentVenues(gig, card)))
   );
 }
 
