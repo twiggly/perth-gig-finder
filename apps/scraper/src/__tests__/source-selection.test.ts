@@ -47,7 +47,8 @@ describe("resolveSourcesToRun", () => {
       "the-ellington",
       "the-bird",
       "oztix-wa",
-      "ticketek-wa"
+      "ticketek-wa",
+      "eventbrite-perth-music"
     ]);
   });
 

@@ -20,6 +20,7 @@ export interface TicketekSearchListing {
 
 export interface ParsedTicketekSearchPage {
   listings: TicketekSearchListing[];
+  unclassifiedListings: TicketekSearchListing[];
   failedCount: number;
   totalPages: number;
 }
@@ -31,6 +32,9 @@ export interface TicketekSearchApiResponse {
     totalCount?: number | null;
   } | null;
   events?: TicketekSearchApiEvent[] | null;
+  facets?: {
+    categories?: Record<string, number> | null;
+  } | null;
 }
 
 export interface TicketekSearchApiEvent {

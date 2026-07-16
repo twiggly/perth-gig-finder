@@ -2,6 +2,7 @@ import * as cheerio from "cheerio";
 
 import {
   buildGigChecksum,
+  normalizeTitleForMatch,
   normalizeVenueAddress,
   normalizeVenueName,
   normalizeVenueSuburb,
@@ -119,6 +120,19 @@ const NON_MUSIC_KEYWORDS = [
   "disney on ice"
 ];
 
+const STRUCTURED_MUSIC_CATEGORY_ROOTS = new Set([
+  "classical music",
+  "contemporary music"
+]);
+
+const STRUCTURED_NON_MUSIC_CATEGORY_ROOTS = new Set([
+  "children/family events",
+  "dance",
+  "musical theatre",
+  "sport",
+  "theatre"
+]);
+
 const EXCLUDED_TITLE_KEYWORDS = [
   "waitlist",
   "gift voucher",
@@ -146,6 +160,15 @@ const MONTH_LOOKUP = new Map<string, string>([
 const TICKETEK_DATE_PATTERN =
   /(?:mon|tue|wed|thu|fri|sat|sun)\s+(\d{1,2})\s+([a-z]{3})\s+(\d{4})/i;
 export type { ParsedTicketekSearchPage } from "./types";
+
+export type TicketekMusicClassification = "music" | "non-music" | "unknown";
+
+export interface TicketekStructuredMusicVerificationResult {
+  acceptedListings: TicketekSearchListing[];
+  rejectedCount: number;
+  ambiguousCount: number;
+  failedCount: number;
+}
 
 class SkipTicketekListingError extends Error {}
 
@@ -565,6 +588,205 @@ function buildTicketekVenue(locationText: string): NormalizedVenue {
   };
 }
 
+function extractTicketekCategoryFacets(response: TicketekSearchApiResponse): string[] {
+  const categories = response.facets?.categories;
+
+  if (!categories || typeof categories !== "object" || Array.isArray(categories)) {
+    return [];
+  }
+
+  return Object.entries(categories)
+    .filter(
+      (entry): entry is [string, number] =>
+        normalizeWhitespace(entry[0]).length > 0 &&
+        typeof entry[1] === "number" &&
+        Number.isFinite(entry[1]) &&
+        entry[1] > 0
+    )
+    .map(([label]) => normalizeWhitespace(label));
+}
+
+export function classifyTicketekStructuredMusicCategories(
+  categoryFacets: readonly string[]
+): TicketekMusicClassification {
+  const normalizedFacets = categoryFacets.map((label) =>
+    normalizeWhitespace(label).toLowerCase()
+  );
+  const hasNonMusicCategory = normalizedFacets.some((label) => {
+    const segments = label.split(">").map((segment) => segment.trim());
+    const root = segments[0] ?? "";
+
+    return (
+      STRUCTURED_NON_MUSIC_CATEGORY_ROOTS.has(root) ||
+      segments.some((segment) => segment.includes("comedy"))
+    );
+  });
+
+  if (hasNonMusicCategory) {
+    return "non-music";
+  }
+
+  const hasMusicCategory = normalizedFacets.some((label) => {
+    const root = label.split(">")[0]?.trim() ?? "";
+    return STRUCTURED_MUSIC_CATEGORY_ROOTS.has(root);
+  });
+
+  return hasMusicCategory ? "music" : "unknown";
+}
+
+export function verifyTicketekListingWithStructuredResponse(
+  listing: TicketekSearchListing,
+  response: TicketekSearchApiResponse
+): {
+  status: "accepted" | "rejected" | "ambiguous";
+  categoryFacets: string[];
+} {
+  const events = Array.isArray(response.events) ? response.events : [];
+  const normalizedTitle = normalizeTitleForMatch(listing.title);
+  const titleEvents = events.filter(
+    (event) => normalizeTitleForMatch(event.title ?? "") === normalizedTitle
+  );
+  const hasIncompleteShowCode = events.some(
+    (event) => !normalizeWhitespace(event.show?.showCode ?? "")
+  );
+  const responseShowCodes = new Set(
+    events
+      .map((event) => normalizeWhitespace(event.show?.showCode ?? "").toUpperCase())
+      .filter(Boolean)
+  );
+  const expectedShowCode = listing.externalId.split(":", 1)[0]?.toUpperCase() ?? "";
+  const expectedDateKey =
+    extractDateKey(listing.dateText) ?? listing.startsAt.slice(0, 10);
+  const expectedVenueSlug = buildTicketekVenue(listing.locationText).slug;
+  const matchingEvents = titleEvents.filter((event) => {
+    const eventDateKey = normalizeWhitespace(event.dateTimeLocalized ?? "").slice(0, 10);
+    const eventVenueSlug = buildTicketekVenueSlug(event.venue?.name ?? "");
+    const eventState = normalizeWhitespace(event.venue?.state ?? "").toUpperCase();
+    const eventShowCode = normalizeWhitespace(event.show?.showCode ?? "").toUpperCase();
+
+    return (
+      eventShowCode === expectedShowCode &&
+      eventDateKey === expectedDateKey &&
+      eventVenueSlug === expectedVenueSlug &&
+      eventState === "WA"
+    );
+  });
+  const categoryFacets = extractTicketekCategoryFacets(response);
+
+  if (
+    !expectedShowCode ||
+    response.paging?.hasMore === true ||
+    hasIncompleteShowCode ||
+    titleEvents.length === 0 ||
+    responseShowCodes.size !== 1 ||
+    !responseShowCodes.has(expectedShowCode) ||
+    matchingEvents.length === 0
+  ) {
+    return { status: "ambiguous", categoryFacets };
+  }
+
+  const categoryClassification =
+    classifyTicketekStructuredMusicCategories(categoryFacets);
+
+  if (categoryClassification === "non-music") {
+    return { status: "rejected", categoryFacets };
+  }
+
+  if (categoryClassification !== "music") {
+    return { status: "ambiguous", categoryFacets };
+  }
+
+  return { status: "accepted", categoryFacets };
+}
+
+export async function runTicketekStructuredMusicVerificationBatch(input: {
+  listings: TicketekSearchListing[];
+  exactTimeLookup: Map<string, string | null>;
+  fetchImpl: typeof fetch;
+  titleQueryCache: Set<string>;
+}): Promise<TicketekStructuredMusicVerificationResult> {
+  const listingsByTitle = new Map<
+    string,
+    { query: string; listings: TicketekSearchListing[] }
+  >();
+
+  for (const listing of input.listings) {
+    const titleKey = normalizeTitleForMatch(listing.title);
+    const existing = listingsByTitle.get(titleKey);
+
+    if (existing) {
+      existing.listings.push(listing);
+    } else {
+      listingsByTitle.set(titleKey, { query: listing.title, listings: [listing] });
+    }
+  }
+
+  const titleGroups = [...listingsByTitle.values()];
+  const result: TicketekStructuredMusicVerificationResult = {
+    acceptedListings: [],
+    rejectedCount: 0,
+    ambiguousCount: 0,
+    failedCount: 0
+  };
+
+  for (
+    let groupIndex = 0;
+    groupIndex < titleGroups.length;
+    groupIndex += TITLE_SEARCH_CONCURRENCY
+  ) {
+    const groupResults = await Promise.all(
+      titleGroups.slice(groupIndex, groupIndex + TITLE_SEARCH_CONCURRENCY).map(async (group) => {
+        input.titleQueryCache.add(group.query);
+
+        try {
+          const response = await fetchTicketekSearchApiPage(group.query, input.fetchImpl);
+          return { group, response };
+        } catch {
+          return { group, response: null };
+        }
+      })
+    );
+
+    for (const { group, response } of groupResults) {
+      if (!response) {
+        result.failedCount += group.listings.length;
+        continue;
+      }
+
+      for (const listing of group.listings) {
+        const verification = verifyTicketekListingWithStructuredResponse(listing, response);
+
+        if (verification.status === "rejected") {
+          result.rejectedCount += 1;
+          continue;
+        }
+
+        if (verification.status === "ambiguous") {
+          result.ambiguousCount += 1;
+          continue;
+        }
+
+        mergeTicketekSearchApiResponseIntoExactTimeLookup(input.exactTimeLookup, response);
+        result.acceptedListings.push(
+          enrichTicketekListingWithExactTime(
+            {
+              ...listing,
+              rawPayload: {
+                ...listing.rawPayload,
+                musicClassification: "structured-api",
+                musicCategoryFacets: verification.categoryFacets
+              }
+            },
+            input.exactTimeLookup
+          )
+        );
+      }
+    }
+  }
+
+  return result;
+}
+
 function inferStatus(text: string): GigStatus {
   const haystack = text.toLowerCase();
 
@@ -601,12 +823,12 @@ function looksLikePerthMetroLocation(locationText: string): boolean {
   return PERTH_METRO_TOKENS.some((token) => haystack.includes(token));
 }
 
-function looksLikeMusicListing(input: {
+export function classifyTicketekMusicListing(input: {
   title: string;
   subtitle: string | null;
   summary: string | null;
   locationText: string;
-}): boolean {
+}): TicketekMusicClassification {
   const eventText = normalizeWhitespace(
     [input.title, input.subtitle, input.summary].filter(Boolean).join(" ")
   ).toLowerCase();
@@ -615,18 +837,22 @@ function looksLikeMusicListing(input: {
   ).toLowerCase();
 
   if (EXCLUDED_TITLE_KEYWORDS.some((keyword) => eventText.includes(keyword))) {
-    return false;
+    return "non-music";
   }
 
   if (NON_MUSIC_KEYWORDS.some((keyword) => eventText.includes(keyword))) {
-    return false;
+    return "non-music";
   }
 
   if (MUSIC_INCLUDE_KEYWORDS.some((keyword) => haystack.includes(keyword))) {
-    return true;
+    return "music";
   }
 
-  return MUSIC_VENUE_TOKENS.some((keyword) => haystack.includes(keyword));
+  if (MUSIC_VENUE_TOKENS.some((keyword) => haystack.includes(keyword))) {
+    return "music";
+  }
+
+  return "unknown";
 }
 
 function parseListingFromRow(
@@ -639,7 +865,10 @@ function parseListingFromRow(
     sharedImageUrl: string | null;
     moduleLevelButtonUrl: string | null;
   }
-): TicketekSearchListing {
+): {
+  classification: TicketekMusicClassification;
+  listing: TicketekSearchListing;
+} {
   const rowButtonHref =
     row.find(".resultBuyNow a").attr("href") ?? context.moduleLevelButtonUrl;
   const ticketUrl = normalizeEventUrl(rowButtonHref);
@@ -655,40 +884,39 @@ function parseListingFromRow(
     throw new SkipTicketekListingError("Ticketek listing is outside Perth metro");
   }
 
-  if (
-    !looksLikeMusicListing({
-      title: context.title,
-      subtitle: context.subtitle,
-      summary,
-      locationText
-    })
-  ) {
-    throw new SkipTicketekListingError("Ticketek listing does not look like a live music event");
-  }
+  const classification = classifyTicketekMusicListing({
+    title: context.title,
+    subtitle: context.subtitle,
+    summary,
+    locationText
+  });
 
   const externalId = extractExternalId(ticketUrl);
 
   return {
-    externalId,
-    title: context.title,
-    subtitle: context.subtitle,
-    summary,
-    sourceUrl: ticketUrl,
-    ticketUrl,
-    imageUrl: context.sharedImageUrl,
-    locationText,
-    dateText,
-    startsAt: buildStartsAtFromDateText(dateText),
-    startsAtPrecision: "date",
-    rawPayload: {
-      query: context.query,
+    classification,
+    listing: {
+      externalId,
       title: context.title,
       subtitle: context.subtitle,
       summary,
+      sourceUrl: ticketUrl,
+      ticketUrl,
+      imageUrl: context.sharedImageUrl,
       locationText,
       dateText,
-      ticketUrl,
-      imageUrl: context.sharedImageUrl
+      startsAt: buildStartsAtFromDateText(dateText),
+      startsAtPrecision: "date",
+      rawPayload: {
+        query: context.query,
+        title: context.title,
+        subtitle: context.subtitle,
+        summary,
+        locationText,
+        dateText,
+        ticketUrl,
+        imageUrl: context.sharedImageUrl
+      }
     }
   };
 }
@@ -701,6 +929,7 @@ export function parseTicketekSearchPage(
   const totalPages = parseTotalPages($);
   let failedCount = 0;
   const listings: TicketekSearchListing[] = [];
+  const unclassifiedListings: TicketekSearchListing[] = [];
 
   $(".resultModule").each((_index, element) => {
     try {
@@ -724,7 +953,7 @@ export function parseTicketekSearchPage(
 
       eventRows.each((_rowIndex, rowElement) => {
         try {
-          const listing = parseListingFromRow($(rowElement), {
+          const { classification, listing } = parseListingFromRow($(rowElement), {
             $,
             query,
             title,
@@ -732,7 +961,12 @@ export function parseTicketekSearchPage(
             sharedImageUrl,
             moduleLevelButtonUrl
           });
-          listings.push(listing);
+
+          if (classification === "music") {
+            listings.push(listing);
+          } else if (classification === "unknown") {
+            unclassifiedListings.push(listing);
+          }
         } catch (error) {
           if (!(error instanceof SkipTicketekListingError)) {
             failedCount += 1;
@@ -746,7 +980,7 @@ export function parseTicketekSearchPage(
     }
   });
 
-  return { listings, failedCount, totalPages };
+  return { listings, unclassifiedListings, failedCount, totalPages };
 }
 
 export function normalizeTicketekListing(listing: TicketekSearchListing): NormalizedGig {

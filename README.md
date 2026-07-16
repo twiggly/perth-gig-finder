@@ -122,6 +122,7 @@ Not built yet:
   - `Moshtix WA` filtered down to Perth-metro music gigs
   - `Ticketek WA` filtered down to Perth-metro live music results
   - `Ticketmaster AU` filtered down to direct Perth music listings
+  - `Eventbrite Perth Music` filtered down to strict Perth live music and DJ events
 - The homepage supports search, venue chips, day-by-day navigation, mirrored gig images, and mobile/trackpad-friendly browsing.
 - Active future gigs have crawlable `/gigs/[slug]` detail pages with canonical metadata, Event JSON-LD, and links from homepage cards.
 - SEO discovery endpoints are live through `/robots.txt` and `/sitemap.xml`.
