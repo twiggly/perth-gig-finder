@@ -11,6 +11,10 @@ const NINA_URL =
   "https://tixel.com/au/music-tickets/2026/07/18/ninajirachi-the-rechabite-perth";
 const OTHER_URL =
   "https://tixel.com/au/music-tickets/2026/07/19/unrelated-event";
+const KARNIVOOL_FIRST_URL =
+  "https://tixel.com/au/music-tickets/2026/07/18/karnivool-the-ice-cream-factory-";
+const KARNIVOOL_SECOND_URL =
+  "https://tixel.com/au/music-tickets/2026/07/19/karnivool-the-ice-cream-factory-";
 
 class MemoryTixelStore implements TixelEnrichmentStore {
   readonly appliedChanges: TixelUrlChange[][] = [];
@@ -31,6 +35,7 @@ function createGig(
   overrides: Partial<TixelEnrichmentGig> = {}
 ): TixelEnrichmentGig {
   return {
+    artistNames: ["Ninajirachi"],
     id,
     startsAt: "2026-07-18T12:00:00.000Z",
     title: "Ninajirachi",
@@ -150,6 +155,95 @@ describe("Tixel enrichment", () => {
       [{ gigId: "ninajirachi", tixelUrl: NINA_URL }]
     ]);
     expect(fetchHtml).not.toHaveBeenCalledWith(OTHER_URL);
+  });
+
+  it("matches performer-only Tixel titles to separate tour dates", async () => {
+    const store = new MemoryTixelStore([
+      createGig("karnivool-first", {
+        artistNames: ["Karnivool", "TesseracT", "Car Bomb"],
+        startsAt: "2026-07-18T10:00:00.000Z",
+        title: "Karnivool ‘In Verses’ Australian Tour",
+        venueName: "Ice Cream Factory",
+        venueSlug: "ice-cream-factory"
+      }),
+      createGig("karnivool-second", {
+        artistNames: ["Karnivool", "TesseracT", "Car Bomb"],
+        startsAt: "2026-07-19T10:00:00.000Z",
+        title: "Karnivool ‘In Verses’ Australian Tour *2ND SHOW*",
+        venueName: "Ice Cream Factory",
+        venueSlug: "ice-cream-factory"
+      })
+    ]);
+    const fetchHtml = vi.fn(async (url: string) => {
+      if (url.endsWith("music-tickets")) {
+        return {
+          html:
+            discoveryHtml({
+              eventUrl: KARNIVOOL_FIRST_URL,
+              title: "Karnivool",
+              venue: "The Ice Cream Factory"
+            }) +
+            discoveryHtml({
+              eventUrl: KARNIVOOL_SECOND_URL,
+              title: "Karnivool",
+              venue: "The Ice Cream Factory"
+            }),
+          status: "ok" as const,
+          url
+        };
+      }
+
+      if (url === KARNIVOOL_FIRST_URL) {
+        return {
+          html: eventHtml({
+            eventUrl: KARNIVOOL_FIRST_URL,
+            startsAt: "2026-07-18T18:00:00+08:00",
+            title: "Karnivool",
+            venue: "The Ice Cream Factory"
+          }),
+          status: "ok" as const,
+          url
+        };
+      }
+
+      if (url === KARNIVOOL_SECOND_URL) {
+        return {
+          html: eventHtml({
+            eventUrl: KARNIVOOL_SECOND_URL,
+            startsAt: "2026-07-19T18:00:00+08:00",
+            title: "Karnivool",
+            venue: "The Ice Cream Factory"
+          }),
+          status: "ok" as const,
+          url
+        };
+      }
+
+      throw new Error(`Unexpected test URL: ${url}`);
+    });
+
+    await expect(
+      enrichTixelLinks(store, {
+        detailConcurrency: 1,
+        fetchHtml,
+        now: new Date("2026-07-16T00:00:00.000Z")
+      })
+    ).resolves.toEqual({
+      ambiguous: 0,
+      cleared: 0,
+      discovered: 2,
+      failed: 0,
+      matched: 2,
+      unchanged: 0,
+      updated: 2,
+      verified: 2
+    });
+    expect(store.appliedChanges).toEqual([
+      [
+        { gigId: "karnivool-first", tixelUrl: KARNIVOOL_FIRST_URL },
+        { gigId: "karnivool-second", tixelUrl: KARNIVOOL_SECOND_URL }
+      ]
+    ]);
   });
 
   it("aborts without writes when discovery pagination is incomplete", async () => {

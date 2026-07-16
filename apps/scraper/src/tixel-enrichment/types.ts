@@ -1,4 +1,5 @@
 export interface TixelEnrichmentGig {
+  artistNames: string[];
   id: string;
   startsAt: string;
   title: string;

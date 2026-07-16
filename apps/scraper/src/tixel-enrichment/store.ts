@@ -10,9 +10,10 @@ import type {
 
 const PAGE_SIZE = 1_000;
 const TIXEL_GIG_SELECT =
-  "id, title, starts_at, venue_name, venue_slug, tixel_url";
+  "id, title, starts_at, artist_names, venue_name, venue_slug, tixel_url";
 
 interface TixelGigRow {
+  artist_names: string[] | null;
   id: string;
   starts_at: string;
   title: string;
@@ -53,6 +54,7 @@ export class SupabaseTixelEnrichmentStore implements TixelEnrichmentStore {
     }
 
     return rows.map((row) => ({
+      artistNames: row.artist_names ?? [],
       id: row.id,
       startsAt: row.starts_at,
       title: row.title,

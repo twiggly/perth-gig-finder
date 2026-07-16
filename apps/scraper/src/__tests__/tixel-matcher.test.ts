@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isPlausibleTixelDiscoveryCard,
   isTixelEventMatch,
   matchTixelEvents
 } from "../tixel-enrichment/matcher";
@@ -14,6 +15,7 @@ function createGig(
   overrides: Partial<TixelEnrichmentGig> = {}
 ): TixelEnrichmentGig {
   return {
+    artistNames: ["Ninajirachi"],
     id,
     startsAt: "2026-07-18T12:00:00.000Z",
     title: "Ninajirachi",
@@ -73,6 +75,66 @@ describe("Tixel event matching", () => {
     ).toBe(true);
   });
 
+  it("matches a shortened performer title with venue and time corroboration", () => {
+    const gig = createGig("karnivool", {
+      artistNames: ["Karnivool", "TesseracT", "Car Bomb"],
+      startsAt: "2026-07-18T10:00:00.000Z",
+      title: "Karnivool ‘In Verses’ Australian Tour",
+      venueName: "Ice Cream Factory",
+      venueSlug: "ice-cream-factory"
+    });
+    const event = createEvent("karnivool-the-ice-cream-factory-", {
+      startsAt: "2026-07-18T10:00:00.000Z",
+      title: "Karnivool",
+      venueName: "The Ice Cream Factory"
+    });
+
+    expect(
+      isPlausibleTixelDiscoveryCard(
+        {
+          dateKey: event.dateKey,
+          title: event.title,
+          url: event.url,
+          venueName: event.venueName
+        },
+        [gig]
+      )
+    ).toBe(true);
+    expect(isTixelEventMatch(gig, event)).toBe(true);
+  });
+
+  it("requires full corroboration for shortened performer titles", () => {
+    const gig = createGig("karnivool", {
+      artistNames: ["Karnivool", "TesseracT", "Car Bomb"],
+      startsAt: "2026-07-18T10:00:00.000Z",
+      title: "Karnivool ‘In Verses’ Australian Tour",
+      venueName: "Ice Cream Factory",
+      venueSlug: "ice-cream-factory"
+    });
+    const event = createEvent("karnivool-the-ice-cream-factory-", {
+      startsAt: "2026-07-18T10:00:00.000Z",
+      title: "Karnivool",
+      venueName: "The Ice Cream Factory"
+    });
+
+    expect(
+      isTixelEventMatch(gig, { ...event, dateKey: "2026-07-19" })
+    ).toBe(false);
+    expect(
+      isTixelEventMatch(gig, {
+        ...event,
+        startsAt: "2026-07-18T10:16:00.000Z"
+      })
+    ).toBe(false);
+    expect(
+      isTixelEventMatch(gig, { ...event, venueName: "Different Venue" })
+    ).toBe(false);
+    expect(isTixelEventMatch({ ...gig, artistNames: [] }, event)).toBe(false);
+    expect(
+      isTixelEventMatch(gig, { ...event, title: "Different Artist" })
+    ).toBe(false);
+  });
+
   it("rejects different dates and weak canonical matches without corroboration", () => {
     expect(
       isTixelEventMatch(
@@ -129,6 +191,63 @@ describe("Tixel one-to-one planning", () => {
       ["late", lateEvent.url]
     ]);
     expect(plan.ambiguousEventUrls.size).toBe(0);
+  });
+
+  it("keeps shortened performer titles separated across tour dates", () => {
+    const firstGig = createGig("first", {
+      artistNames: ["Karnivool"],
+      startsAt: "2026-07-18T10:00:00.000Z",
+      title: "Karnivool ‘In Verses’ Australian Tour",
+      venueName: "Ice Cream Factory",
+      venueSlug: "ice-cream-factory"
+    });
+    const secondGig = createGig("second", {
+      artistNames: ["Karnivool"],
+      startsAt: "2026-07-19T10:00:00.000Z",
+      title: "Karnivool ‘In Verses’ Australian Tour *2ND SHOW*",
+      venueName: "Ice Cream Factory",
+      venueSlug: "ice-cream-factory"
+    });
+    const firstEvent = createEvent("karnivool-the-ice-cream-factory-", {
+      startsAt: "2026-07-18T10:00:00.000Z",
+      title: "Karnivool",
+      venueName: "The Ice Cream Factory"
+    });
+    const secondEvent = createEvent("karnivool-the-ice-cream-factory-", {
+      dateKey: "2026-07-19",
+      startsAt: "2026-07-19T10:00:00.000Z",
+      title: "Karnivool",
+      url: "https://tixel.com/au/music-tickets/2026/07/19/karnivool-the-ice-cream-factory-",
+      venueName: "The Ice Cream Factory"
+    });
+    const plan = matchTixelEvents(
+      [firstGig, secondGig],
+      [firstEvent, secondEvent]
+    );
+
+    expect([...plan.matchesByGigId]).toEqual([
+      ["first", firstEvent.url],
+      ["second", secondEvent.url]
+    ]);
+    expect(plan.ambiguousEventUrls.size).toBe(0);
+  });
+
+  it("keeps duplicate performer-backed sessions ambiguous", () => {
+    const gig = createGig("first", {
+      artistNames: ["Karnivool"],
+      title: "Karnivool ‘In Verses’ Australian Tour",
+      venueName: "Ice Cream Factory",
+      venueSlug: "ice-cream-factory"
+    });
+    const duplicate = { ...gig, id: "duplicate" };
+    const event = createEvent("karnivool-the-ice-cream-factory-", {
+      title: "Karnivool",
+      venueName: "The Ice Cream Factory"
+    });
+    const plan = matchTixelEvents([gig, duplicate], [event]);
+
+    expect(plan.matchesByGigId.size).toBe(0);
+    expect(plan.ambiguousEventUrls).toEqual(new Set([event.url]));
   });
 
   it("does not assign two Tixel sessions to one gig", () => {
