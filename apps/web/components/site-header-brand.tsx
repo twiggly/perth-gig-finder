@@ -3,7 +3,15 @@ import React from "react";
 
 import { SiteHeaderBrandLink } from "./site-header-brand-link";
 
-export function SiteHeaderBrand() {
+export function SiteHeaderBrand({
+  asHeading = true
+}: {
+  asHeading?: boolean;
+}) {
+  const titleText = (
+    <span className="site-header__title-text">Gig Radar</span>
+  );
+
   return (
     <SiteHeaderBrandLink>
       <Image
@@ -15,9 +23,11 @@ export function SiteHeaderBrand() {
         unoptimized
         width={196}
       />
-      <span className="site-header__title">
-        <span className="site-header__title-text">Gig Radar</span>
-      </span>
+      {asHeading ? (
+        <h1 className="site-header__title">{titleText}</h1>
+      ) : (
+        <span className="site-header__title">{titleText}</span>
+      )}
     </SiteHeaderBrandLink>
   );
 }

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 
 import { GigDiscoveryList } from "@/components/gig-discovery-list";
 import { PublicPageHeader } from "@/components/public-page-header";
+import { PublicPageShell } from "@/components/public-page-shell";
 import { listActiveGigsForDateKeys } from "@/lib/gigs";
 import { getWeekendShortcutDateKeys } from "@/lib/homepage-dates";
 import { buildPublicPageMetadata } from "@/lib/seo";
@@ -30,7 +31,7 @@ export default async function ThisWeekendPage() {
   const { gigs, now } = await loadWeekendGigs();
 
   return (
-    <main className="page-shell discovery-page">
+    <PublicPageShell>
       <PublicPageHeader
         breadcrumbs={[
           { href: "/", label: "Home" },
@@ -48,6 +49,6 @@ export default async function ThisWeekendPage() {
           <p>No gigs are listed for this weekend yet.</p>
         </section>
       )}
-    </main>
+    </PublicPageShell>
   );
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { GigDetailContent } from "@/components/gig-detail-content";
-import { Breadcrumbs } from "@/components/breadcrumbs";
+import { BreadcrumbStructuredData } from "@/components/breadcrumbs";
 import { SiteHeader } from "@/components/site-header";
 import { getCachedGigBySlug } from "@/lib/gig-detail-cache";
 import {
@@ -56,8 +56,12 @@ export default async function GigDetailPage({ params }: GigDetailPageProps) {
 
   return (
     <main className="page-shell">
-      <SiteHeader actions="public-menu" className="site-header-shell--detail" />
-      <Breadcrumbs
+      <SiteHeader
+        actions="public-menu"
+        brandAsHeading={false}
+        className="site-header-shell--detail"
+      />
+      <BreadcrumbStructuredData
         currentPath={detailPath}
         id={`gig-breadcrumbs-${gig.slug}`}
         items={[

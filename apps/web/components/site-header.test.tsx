@@ -30,13 +30,18 @@ describe("SiteHeader", () => {
     expect(html).toContain("Gig Radar");
     expect(html).toContain("site-header__eyebrow");
     expect(html).toContain('aria-label="Perth and Boorloo Live Music"');
+    expect(html.match(/<h1/g)).toHaveLength(1);
     expect(html).not.toContain("Toggle color scheme");
     expect(html).not.toContain("Open account information");
   });
 
   it("renders public menu actions when requested", () => {
     const html = renderWithMantine(
-      <SiteHeader actions="public-menu" className="site-header-shell--detail" />
+      <SiteHeader
+        actions="public-menu"
+        brandAsHeading={false}
+        className="site-header-shell--detail"
+      />
     );
 
     expect(html).toContain("site-header-shell--detail");
@@ -48,6 +53,7 @@ describe("SiteHeader", () => {
     expect(html).toContain('aria-label="Open account menu"');
     expect(html).toContain("site-header__menu-button");
     expect(html).toContain("site-header__menu-overlay");
+    expect(html).not.toContain("<h1");
     expect(html).not.toContain("Open account information");
     expect(html).not.toContain("site-header__filter-toggle");
   });

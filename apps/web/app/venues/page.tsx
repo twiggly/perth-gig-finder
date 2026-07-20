@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { PublicPageHeader } from "@/components/public-page-header";
+import { PublicPageShell } from "@/components/public-page-shell";
 import { buildPublicPageMetadata } from "@/lib/seo";
 import { listDiscoveryVenues } from "@/lib/venues";
 
@@ -17,7 +18,7 @@ export default async function VenuesPage() {
   const venues = await listDiscoveryVenues();
 
   return (
-    <main className="page-shell discovery-page">
+    <PublicPageShell>
       <PublicPageHeader
         breadcrumbs={[
           { href: "/", label: "Home" },
@@ -44,6 +45,6 @@ export default async function VenuesPage() {
           <p>No venue listings are available right now.</p>
         </section>
       )}
-    </main>
+    </PublicPageShell>
   );
 }

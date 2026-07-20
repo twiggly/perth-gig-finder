@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 
 import { GigDiscoveryList } from "@/components/gig-discovery-list";
 import { PublicPageHeader } from "@/components/public-page-header";
+import { PublicPageShell } from "@/components/public-page-shell";
 import {
   buildGigMonthPath,
   formatPerthMonth,
@@ -77,7 +78,7 @@ export default async function GigMonthPage({ params }: GigMonthPageProps) {
   const nextMonth = shiftPerthMonth(page, 1);
 
   return (
-    <main className="page-shell discovery-page">
+    <PublicPageShell>
       <PublicPageHeader
         breadcrumbs={[
           { href: "/", label: "Home" },
@@ -104,6 +105,6 @@ export default async function GigMonthPage({ params }: GigMonthPageProps) {
           <p>No gigs are listed for this month.</p>
         </section>
       )}
-    </main>
+    </PublicPageShell>
   );
 }

@@ -90,10 +90,6 @@ async function ConfiguredHomepage({
           selectedVenues={selectedVenues}
         />
       </div>
-      <section className="homepage-intro">
-        <h1>Live Music in Perth (Boorloo)</h1>
-        <p>Discover upcoming live music events across Perth (Boorloo).</p>
-      </section>
       {availableDays.length === 0 ||
       !activeDateKey ||
       !activeDay ||

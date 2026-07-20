@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 
 import { GigDiscoveryList } from "@/components/gig-discovery-list";
 import { PublicPageHeader } from "@/components/public-page-header";
+import { PublicPageShell } from "@/components/public-page-shell";
 import { listActiveGigsForDateKeys } from "@/lib/gigs";
 import { getPerthDateKey } from "@/lib/homepage-dates";
 import { buildPublicPageMetadata } from "@/lib/seo";
@@ -30,7 +31,7 @@ export default async function TonightPage() {
   const { gigs, now } = await loadTonightGigs();
 
   return (
-    <main className="page-shell discovery-page">
+    <PublicPageShell>
       <PublicPageHeader
         breadcrumbs={[
           { href: "/", label: "Home" },
@@ -48,6 +49,6 @@ export default async function TonightPage() {
           <p>No more gigs are listed for tonight.</p>
         </section>
       )}
-    </main>
+    </PublicPageShell>
   );
 }

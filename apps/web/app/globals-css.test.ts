@@ -72,6 +72,18 @@ describe("global CSS compatibility", () => {
     );
   });
 
+  it("keeps established homepage and gig-detail surfaces visually unchanged", () => {
+    const venueLinkRule = getRuleBody(".gig-detail__venue-link");
+
+    expect(globalCss).not.toContain(".homepage-intro {");
+    expect(globalCss).not.toContain(".gig-detail__status {");
+    expect(globalCss).not.toContain(".gig-detail__summary {");
+    expect(venueLinkRule).toContain("color: inherit;");
+    expect(venueLinkRule).toContain("font: inherit;");
+    expect(venueLinkRule).toContain("text-decoration: none;");
+    expect(globalCss).not.toContain(".gig-detail__venue-link:hover");
+  });
+
   it("uses the venue popover surface for the calendar", () => {
     const calendarRule = getRuleBody(".day-calendar");
     const venuePopoverRule = getRuleBody(".venue-menu__popover");

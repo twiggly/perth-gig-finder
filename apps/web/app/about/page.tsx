@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { PublicPageHeader } from "@/components/public-page-header";
+import { PublicPageShell } from "@/components/public-page-shell";
 import { buildPublicPageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildPublicPageMetadata({
@@ -12,7 +13,7 @@ export const metadata: Metadata = buildPublicPageMetadata({
 
 export default function AboutPage() {
   return (
-    <main className="page-shell discovery-page">
+    <PublicPageShell>
       <PublicPageHeader
         breadcrumbs={[
           { href: "/", label: "Home" },
@@ -49,6 +50,6 @@ export default function AboutPage() {
           </p>
         </section>
       </div>
-    </main>
+    </PublicPageShell>
   );
 }
