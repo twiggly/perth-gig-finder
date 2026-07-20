@@ -27,7 +27,7 @@ function createClickEvent(
 }
 
 describe("SiteHeaderBrand", () => {
-  it("renders the Gig Radar brand without claiming the page heading", () => {
+  it("renders the Gig Radar brand as the page heading by default", () => {
     const html = renderToStaticMarkup(<SiteHeaderBrand />);
 
     expect(html).toContain('<a class="site-header__brand-link" href="/">');
@@ -40,6 +40,14 @@ describe("SiteHeaderBrand", () => {
     expect(html).toContain('alt=""');
     expect(html).toContain('<link rel="preload" as="image" href="/logo.svg"');
     expect(html).toContain("site-header__title-text");
+    expect(html).toContain('<h1 class="site-header__title">');
+  });
+
+  it("can render without claiming the page heading", () => {
+    const html = renderToStaticMarkup(<SiteHeaderBrand asHeading={false} />);
+
+    expect(html).toContain('<span class="site-header__title">');
+    expect(html).toContain("Gig Radar");
     expect(html).not.toContain("<h1");
   });
 

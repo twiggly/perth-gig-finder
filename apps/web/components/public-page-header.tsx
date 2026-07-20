@@ -19,7 +19,11 @@ export function PublicPageHeader({
 }) {
   return (
     <>
-      <SiteHeader actions="public-menu" className="site-header-shell--detail" />
+      <SiteHeader
+        actions="public-menu"
+        brandAsHeading={false}
+        className="site-header-shell--detail"
+      />
       {breadcrumbs ? (
         <Breadcrumbs
           currentPath={currentPath}

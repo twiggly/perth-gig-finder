@@ -89,7 +89,8 @@ describe("GigDetailContent", () => {
     expect(html).not.toContain("q=75");
     expect(html).toContain("Buy tickets");
     expect(html).toContain("Listing @ The Bird");
-    expect(html).toContain("gig-detail__summary");
+    expect(html).not.toContain("gig-detail__summary");
+    expect(html).not.toContain("gig-detail__status");
     expect(html.match(/<h1/g)).toHaveLength(1);
   });
 
@@ -166,7 +167,9 @@ describe("GigDetailContent", () => {
       })
     );
 
-    expect(html).toContain("The Bird, Northbridge");
+    expect(html).toContain(
+      'href="/venues/the-bird">The Bird</a>, Northbridge'
+    );
   });
 
   it("removes a leading premise label from display addresses", () => {
@@ -224,7 +227,7 @@ describe("GigDetailContent", () => {
     expect(html).not.toContain("181 William Street");
   });
 
-  it("shows past status and suppresses purchase actions after the event", () => {
+  it("suppresses past purchase actions without changing the panel layout", () => {
     const html = renderGigDetail(
       createGig({
         tixel_url:
@@ -233,16 +236,16 @@ describe("GigDetailContent", () => {
       new Date("2026-04-24T00:00:00.000Z")
     );
 
-    expect(html).toContain("Past event");
+    expect(html).not.toContain("gig-detail__status");
     expect(html).not.toContain("Buy tickets");
     expect(html).not.toContain("Tickets @ tixel");
     expect(html).toContain("Listing @ The Bird");
   });
 
-  it("shows cancelled status and suppresses purchase actions before the date", () => {
+  it("suppresses cancelled purchase actions without changing the panel layout", () => {
     const html = renderGigDetail(createGig({ status: "cancelled" }));
 
-    expect(html).toContain("Cancelled");
+    expect(html).not.toContain("gig-detail__status");
     expect(html).not.toContain("Buy tickets");
     expect(html).toContain("Listing @ The Bird");
   });

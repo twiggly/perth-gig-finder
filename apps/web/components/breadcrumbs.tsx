@@ -26,13 +26,27 @@ export function Breadcrumbs({
           ))}
         </ol>
       </nav>
-      <script
-        dangerouslySetInnerHTML={{
-          __html: buildBreadcrumbStructuredDataJson(items, currentPath)
-        }}
-        id={id}
-        type="application/ld+json"
-      />
+      <BreadcrumbStructuredData currentPath={currentPath} id={id} items={items} />
     </>
+  );
+}
+
+export function BreadcrumbStructuredData({
+  currentPath,
+  id,
+  items
+}: {
+  currentPath: string;
+  id: string;
+  items: BreadcrumbItem[];
+}) {
+  return (
+    <script
+      dangerouslySetInnerHTML={{
+        __html: buildBreadcrumbStructuredDataJson(items, currentPath)
+      }}
+      id={id}
+      type="application/ld+json"
+    />
   );
 }

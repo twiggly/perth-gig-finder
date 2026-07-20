@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { GigDiscoveryList } from "@/components/gig-discovery-list";
 import { PublicPageHeader } from "@/components/public-page-header";
+import { PublicPageShell } from "@/components/public-page-shell";
 import { listUpcomingDiscoveryGigs } from "@/lib/gigs";
 import { buildPublicPageMetadata } from "@/lib/seo";
 
@@ -17,7 +18,7 @@ export default async function GigsIndexPage() {
   const gigs = await listUpcomingDiscoveryGigs();
 
   return (
-    <main className="page-shell discovery-page">
+    <PublicPageShell>
       <PublicPageHeader
         breadcrumbs={[
           { href: "/", label: "Home" },
@@ -35,6 +36,6 @@ export default async function GigsIndexPage() {
           <p>No upcoming gigs are listed right now.</p>
         </section>
       )}
-    </main>
+    </PublicPageShell>
   );
 }

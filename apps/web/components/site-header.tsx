@@ -6,10 +6,15 @@ import { SiteHeaderPublicActions } from "@/components/site-header-public-actions
 
 interface SiteHeaderProps {
   actions?: "public-menu";
+  brandAsHeading?: boolean;
   className?: string;
 }
 
-export function SiteHeader({ actions, className }: SiteHeaderProps) {
+export function SiteHeader({
+  actions,
+  brandAsHeading = true,
+  className
+}: SiteHeaderProps) {
   const rootClassName = ["site-header-shell", className]
     .filter(Boolean)
     .join(" ");
@@ -18,7 +23,7 @@ export function SiteHeader({ actions, className }: SiteHeaderProps) {
     <div className={rootClassName}>
       <header className="site-header">
         <SiteHeaderEyebrow />
-        <SiteHeaderBrand />
+        <SiteHeaderBrand asHeading={brandAsHeading} />
       </header>
       {actions === "public-menu" ? <SiteHeaderPublicActions /> : null}
     </div>

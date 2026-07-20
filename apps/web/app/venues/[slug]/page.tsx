@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { GigDiscoveryList } from "@/components/gig-discovery-list";
 import { PublicPageHeader } from "@/components/public-page-header";
+import { PublicPageShell } from "@/components/public-page-shell";
 import { listGigsForVenue } from "@/lib/gigs";
 import { buildPublicPageMetadata } from "@/lib/seo";
 import { getVenueBySlug } from "@/lib/venues";
@@ -62,7 +63,7 @@ export default async function VenuePage({ params }: VenuePageProps) {
     .join(", ");
 
   return (
-    <main className="page-shell discovery-page">
+    <PublicPageShell>
       <PublicPageHeader
         breadcrumbs={[
           { href: "/", label: "Home" },
@@ -89,6 +90,6 @@ export default async function VenuePage({ params }: VenuePageProps) {
           <p>No events are available in the three-month archive window.</p>
         </section>
       )}
-    </main>
+    </PublicPageShell>
   );
 }

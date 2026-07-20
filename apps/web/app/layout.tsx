@@ -3,7 +3,6 @@ import { mantineHtmlProps } from "@mantine/core";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import Script from "next/script";
-import { SiteFooter } from "@/components/site-footer";
 
 import "@mantine/core/styles.layer.css";
 import "./globals.css";
@@ -99,10 +98,7 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <AppProviders>
-          {children}
-          <SiteFooter />
-        </AppProviders>
+        <AppProviders>{children}</AppProviders>
         <Analytics />
         <SpeedInsights />
       </body>
