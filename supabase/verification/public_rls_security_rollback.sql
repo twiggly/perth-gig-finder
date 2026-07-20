@@ -4,6 +4,7 @@
 
 alter view public.gig_cards reset (security_invoker);
 alter view public.homepage_gig_dates reset (security_invoker);
+alter view public.seo_sitemap_gigs reset (security_invoker);
 
 drop policy if exists "public read public gigs" on public.gigs;
 drop policy if exists "public read public gig venues" on public.venues;
@@ -34,7 +35,8 @@ grant all on
   public.source_gigs,
   public.audit_runs,
   public.gig_cards,
-  public.homepage_gig_dates
+  public.homepage_gig_dates,
+  public.seo_sitemap_gigs
 to anon, authenticated;
 
 grant usage on schema public to anon, authenticated;

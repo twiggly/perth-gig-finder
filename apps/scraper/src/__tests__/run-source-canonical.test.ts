@@ -259,6 +259,58 @@ describe("executeSourceRun canonical matching", () => {
     });
   });
 
+  it("preserves the first public slug when canonical gig facts change", async () => {
+    const store = new MemoryGigStore();
+    let gig = createGigForSource({
+      externalId: "stable-url-event",
+      sourceSlug: "oztix-wa",
+      sourceUrl: "https://tickets.oztix.com.au/outlet/event/stable-url-event",
+      startsAt: "2026-08-01T11:00:00.000Z",
+      status: "active",
+      title: "Original Event Title",
+      venueName: "Milk Bar"
+    });
+    const source: SourceAdapter = {
+      baseUrl: "https://www.oztix.com.au/",
+      isPublicListingSource: true,
+      name: "Oztix WA",
+      priority: 10,
+      slug: "oztix-wa",
+      async fetchListings() {
+        return { failedCount: 0, gigs: [gig] };
+      }
+    };
+
+    await executeSourceRun(store, source);
+    const initialSlug = [...store.gigs.values()][0]?.slug;
+
+    gig = createGigForSource({
+      externalId: "stable-url-event",
+      sourceSlug: "oztix-wa",
+      sourceUrl: "https://tickets.oztix.com.au/outlet/event/stable-url-event",
+      startsAt: "2026-08-08T11:00:00.000Z",
+      status: "postponed",
+      title: "Updated Event Title",
+      venueName: "The Bird"
+    });
+    await executeSourceRun(store, source);
+
+    expect(initialSlug).toBeTruthy();
+    expect([...store.gigs.values()][0]).toMatchObject({
+      slug: initialSlug,
+      startsAt: "2026-08-08T11:00:00.000Z",
+      status: "postponed",
+      title: "Updated Event Title"
+    });
+
+    store.saveGigCalls = 0;
+    store.upsertSourceGigCalls = 0;
+    await executeSourceRun(store, source);
+
+    expect(store.saveGigCalls).toBe(0);
+    expect(store.upsertSourceGigCalls).toBe(0);
+  });
+
   it("keeps canonical fields stable when an equal-priority source matches later", async () => {
     const store = new MemoryGigStore();
     const oztixSource: SourceAdapter = {

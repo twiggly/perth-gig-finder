@@ -103,12 +103,12 @@ Use the App Router from the start.
 Live public routes:
 
 - `/`
-- `/gigs/[slug]` (live for active future gigs)
-
-Not built yet:
-
-- `/gigs` index
-- venue detail pages
+- `/gigs` upcoming event index
+- `/gigs/YYYY/MM` monthly archives
+- `/gigs/[slug]` event details for upcoming gigs and the three-month archive
+- `/tonight` and `/this-weekend`
+- `/venues` and `/venues/[slug]`
+- `/about`
 
 ## MVP Status
 
@@ -124,14 +124,15 @@ Not built yet:
   - `Ticketmaster AU` filtered down to direct Perth music listings
   - `Eventbrite Perth Music` filtered down to strict Perth live music and DJ events
 - The homepage supports search, venue chips, day-by-day navigation, mirrored gig images, and mobile/trackpad-friendly browsing.
-- Active future gigs have crawlable `/gigs/[slug]` detail pages with canonical metadata, Event JSON-LD, and links from homepage cards.
-- SEO discovery endpoints are live through `/robots.txt` and `/sitemap.xml`.
+- Event pages preserve their original public slug, remain available for three months, and expose fact-based metadata, Event JSON-LD where valid, breadcrumbs, and lifecycle status.
+- Server-rendered gig, month, venue, tonight, and weekend pages provide crawlable internal links beyond the interactive homepage.
+- SEO discovery endpoints are live through `/robots.txt` and a last-modified `/sitemap.xml`.
 - Mirrored source images are stored in Supabase Storage and preferred over third-party hotlinks.
 - Production runs on Vercel, and Git-connected preview deployments are enabled for this repository.
 
 ## Current Limitations
 
-- The public site is still homepage-first; venue pages are not built yet.
+- Artist pages are deferred until artist identity and slug quality have been audited.
 - Scraping is still manual in local development, but hosted Supabase refreshes now run on a schedule through GitHub Actions.
 - The preview server still uses a local wrapper because mobile Safari was caching stale preview assets aggressively, but it now builds in an isolated temp workspace instead of sharing Next build output with the main checkout.
 
@@ -161,6 +162,17 @@ Not built yet:
 - For manual checks, run `pnpm audit:gigs -- --url <deployment-url> --vercel` for Vercel-protected deployments.
 - Vercel functions for the web app are configured for Sydney through `apps/web/vercel.json`.
 - Unfiltered homepage date/day data is cached server-side for five minutes. Filtered searches and venue-filtered paths may use dynamic data paths, and recent scrape results can lag by the cache interval in unfiltered responses.
+
+## SEO Operations
+
+After deploying SEO or public-route changes:
+
+1. Verify the `gigradar.com.au` domain property in Google Search Console and submit `https://gigradar.com.au/sitemap.xml`.
+2. Record indexed pages, Event enhancements, Core Web Vitals, and non-branded search queries as the baseline.
+3. Inspect representative homepage, event, month, weekend, and venue URLs, then validate one complete event with Google's Rich Results Test.
+4. Compare indexed URLs, valid Event items, non-branded impressions, clicks, and Core Web Vitals after 14 and 28 days.
+
+Filtered homepage URLs remain crawlable but emit `noindex,follow`; do not add them to `robots.txt` because crawlers must see that directive.
 
 ## Local Development
 

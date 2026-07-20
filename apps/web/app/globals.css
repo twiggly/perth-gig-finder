@@ -130,6 +130,295 @@ code {
   padding: 2.2rem 0 calc(6rem + env(safe-area-inset-bottom));
 }
 
+.homepage-intro {
+  margin: 0 0 1.15rem;
+}
+
+.homepage-intro h1,
+.homepage-intro p {
+  margin: 0;
+}
+
+.homepage-intro h1 {
+  font-family: var(--font-display), sans-serif;
+  font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.homepage-intro p {
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.site-footer {
+  display: grid;
+  width: min(1120px, calc(100% - 2rem));
+  margin: -3.5rem auto 0;
+  padding: 1.4rem 0 calc(2rem + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--row-separator);
+  color: var(--muted);
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.86rem;
+}
+
+.site-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem 1.15rem;
+}
+
+.site-footer a {
+  color: var(--text);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.site-footer a:hover,
+.site-footer a:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.site-footer p {
+  margin: 0.7rem 0 0;
+}
+
+.breadcrumbs {
+  margin: -0.25rem 0 1rem;
+  color: var(--muted);
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.82rem;
+}
+
+.breadcrumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.breadcrumbs li + li::before {
+  margin-right: 0.35rem;
+  color: var(--faint-text);
+  content: "/";
+}
+
+.breadcrumbs a {
+  text-decoration: none;
+}
+
+.breadcrumbs a:hover,
+.breadcrumbs a:focus-visible {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.discovery-page {
+  display: grid;
+  gap: 1.15rem;
+}
+
+.discovery-page .site-header-shell--detail {
+  margin-bottom: 0;
+}
+
+.discovery-page .breadcrumbs {
+  margin: -0.35rem 0 0;
+}
+
+.discovery-page__intro {
+  width: min(100%, 48rem);
+}
+
+.discovery-page__intro > p,
+.discovery-page__intro h1 {
+  margin: 0;
+}
+
+.discovery-page__intro > p:first-child:not(:last-child) {
+  margin-bottom: 0.35rem;
+  color: var(--accent);
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.discovery-page__intro h1 {
+  font-family: var(--font-display), sans-serif;
+  font-size: clamp(2rem, 5vw, 4rem);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.discovery-page__intro h1 + p {
+  margin-top: 0.65rem;
+  color: var(--muted);
+  font-size: clamp(1rem, 1.5vw, 1.12rem);
+  line-height: 1.5;
+}
+
+.month-navigation {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-block: 1px solid var(--row-separator);
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.month-navigation a {
+  text-decoration: none;
+}
+
+.month-navigation a:hover,
+.month-navigation a:focus-visible {
+  color: var(--accent);
+}
+
+.discovery-gig-groups {
+  display: grid;
+  gap: 1.4rem;
+}
+
+.discovery-gig-group h2 {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-display), sans-serif;
+  font-size: clamp(1.25rem, 2.5vw, 1.75rem);
+  letter-spacing: -0.035em;
+}
+
+.discovery-gig-list,
+.venue-directory {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.discovery-gig-list li + li,
+.venue-directory li + li {
+  border-top: 1px solid var(--row-separator);
+}
+
+.discovery-gig-card {
+  display: grid;
+  grid-template-columns: minmax(5rem, auto) minmax(0, 1fr);
+  gap: 0.2rem 1rem;
+  padding: 0.85rem 0;
+}
+
+.discovery-gig-card > * {
+  grid-column: 2;
+  margin: 0;
+}
+
+.discovery-gig-card__time {
+  grid-row: 1 / span 4;
+  grid-column: 1;
+  color: var(--accent);
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.discovery-gig-card h3 {
+  font-family: var(--font-display), sans-serif;
+  font-size: clamp(1.05rem, 2vw, 1.35rem);
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+}
+
+.discovery-gig-card a {
+  text-decoration: none;
+}
+
+.discovery-gig-card a:hover,
+.discovery-gig-card a:focus-visible {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.discovery-gig-card p:not(.discovery-gig-card__time) {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.discovery-gig-card__status {
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.venue-directory {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 1.25rem;
+}
+
+.venue-directory a {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.9rem 0;
+  text-decoration: none;
+}
+
+.venue-directory strong {
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.05rem;
+}
+
+.venue-directory span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.venue-directory a:hover strong,
+.venue-directory a:focus-visible strong {
+  color: var(--accent);
+}
+
+.venue-facts,
+.about-content {
+  width: min(100%, 48rem);
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.venue-facts p,
+.about-content p {
+  margin: 0;
+}
+
+.venue-facts a {
+  display: inline-block;
+  margin-top: 0.45rem;
+  color: var(--text);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 650;
+}
+
+.about-content {
+  display: grid;
+  gap: 1.35rem;
+}
+
+.about-content h2 {
+  margin: 0 0 0.35rem;
+  color: var(--text);
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.2rem;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -2674,6 +2963,26 @@ body[data-filter-dropdown-open="true"] .date-pills {
   line-height: 1.35;
 }
 
+.gig-detail__status {
+  justify-self: start;
+  margin: 0;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid var(--faint-border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.76rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.gig-detail__status--cancelled,
+.gig-detail__status--postponed {
+  border-color: var(--control-focus-border);
+  color: var(--accent);
+}
+
 .gig-detail__venue {
   display: inline-flex;
   gap: 0.25rem;
@@ -2697,6 +3006,26 @@ body[data-filter-dropdown-open="true"] .date-pills {
   margin: 0;
 }
 
+.gig-detail__venue-link {
+  font-weight: 650;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 0.18em;
+  transition: text-decoration-color 160ms ease;
+}
+
+.gig-detail__venue-link:hover,
+.gig-detail__venue-link:focus-visible {
+  text-decoration-color: currentColor;
+}
+
+.gig-detail__summary {
+  max-width: 48rem;
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .gig-detail__actions {
   display: flex;
   flex-wrap: wrap;
@@ -2712,6 +3041,14 @@ body[data-filter-dropdown-open="true"] .date-pills {
   .page-shell {
     width: min(100% - 1rem, 42rem);
     padding-top: 1.3rem;
+  }
+
+  .site-footer {
+    width: min(100% - 1rem, 42rem);
+  }
+
+  .venue-directory {
+    grid-template-columns: 1fr;
   }
 
   .top-panel {

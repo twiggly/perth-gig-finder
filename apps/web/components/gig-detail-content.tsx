@@ -1,16 +1,21 @@
 import React from "react";
 import Image from "next/image";
+import Link from "next/link";
 
 import { GigDetailBackLink } from "@/components/gig-detail-back-link";
 import { GigDetailShareButton } from "@/components/gig-detail-share-button";
-import { getGigActions } from "@/lib/gig-actions";
+import { getGigDetailActions } from "@/lib/gig-actions";
+import {
+  getGigDisplayState,
+  getGigDisplayStateLabel
+} from "@/lib/gig-archive";
 import { formatGigCardArtists } from "@/lib/gig-card-artists";
 import { buildGigDetailFallbackHref } from "@/lib/gig-detail-return";
 import {
   getRenderableGigImage,
   type GigCardRecord
 } from "@/lib/gigs";
-import { formatPerthDateTime } from "@/lib/gig-seo";
+import { buildGigFactSummary, formatPerthDateTime } from "@/lib/gig-seo";
 
 const GIG_DETAIL_IMAGE_SIZES = "(max-width: 720px) 93vw, 14rem";
 const GIG_DETAIL_IMAGE_QUALITY = 72;
@@ -95,15 +100,33 @@ function VenueLine({ gig }: { gig: GigCardRecord }) {
     <div className="gig-detail__venue">
       <VenueMapIcon />
       <div className="gig-detail__venue-text">
-        <p>{venueLine}</p>
+        <p>
+          <Link
+            className="gig-detail__venue-link"
+            href={`/venues/${encodeURIComponent(gig.venue_slug)}`}
+          >
+            {gig.venue_name}
+          </Link>
+          {venueLine.startsWith(gig.venue_name)
+            ? venueLine.slice(gig.venue_name.length)
+            : ","}
+        </p>
         {addressLine ? <p>{addressLine}</p> : null}
       </div>
     </div>
   );
 }
 
-export function GigDetailContent({ gig }: { gig: GigCardRecord }) {
-  const actions = getGigActions(gig);
+export function GigDetailContent({
+  gig,
+  now = new Date()
+}: {
+  gig: GigCardRecord;
+  now?: Date;
+}) {
+  const actions = getGigDetailActions(gig, now);
+  const displayState = getGigDisplayState(gig, now);
+  const statusLabel = getGigDisplayStateLabel(displayState);
   const artistLine = formatGigCardArtists(gig.title, gig.artist_names);
   const image = getRenderableGigImage(gig);
   const fallbackHref = buildGigDetailFallbackHref(gig.starts_at);
@@ -137,10 +160,18 @@ export function GigDetailContent({ gig }: { gig: GigCardRecord }) {
             {formatPerthDateTime(gig.starts_at)}
           </p>
           <h1 className="gig-detail__title">{gig.title}</h1>
+          {statusLabel ? (
+            <p className={`gig-detail__status gig-detail__status--${displayState}`}>
+              {statusLabel}
+            </p>
+          ) : null}
           {artistLine ? (
             <p className="gig-detail__artists">{artistLine}</p>
           ) : null}
           <VenueLine gig={gig} />
+          <p className="gig-detail__summary">
+            {buildGigFactSummary(gig, now)}
+          </p>
           {actions.length > 0 ? (
             <nav aria-label={`${gig.title} links`} className="gig-detail__actions">
               {actions.map((action) => (

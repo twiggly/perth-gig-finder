@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 import { HomepageDayBrowser } from "@/components/homepage-day-browser";
 import { HomepageTopPanelControls } from "@/components/homepage-top-panel-controls";
 import { SiteHeader } from "@/components/site-header";
@@ -8,12 +10,25 @@ import {
   listHomepageGigsForDate
 } from "@/lib/homepage-gigs-cache";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import { shouldNoIndexHomepage } from "@/lib/seo";
 import { listSelectedVenues } from "@/lib/venues";
 
 export const revalidate = 300;
 
 interface HomePageProps {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export async function generateMetadata({
+  searchParams
+}: HomePageProps): Promise<Metadata> {
+  const params = (await searchParams) ?? {};
+  const hasFacetedParams = shouldNoIndexHomepage(params);
+
+  return {
+    alternates: { canonical: "/" },
+    robots: hasFacetedParams ? { follow: true, index: false } : undefined
+  };
 }
 
 export default async function HomePage({ searchParams }: HomePageProps) {
@@ -75,6 +90,10 @@ async function ConfiguredHomepage({
           selectedVenues={selectedVenues}
         />
       </div>
+      <section className="homepage-intro">
+        <h1>Live Music in Perth (Boorloo)</h1>
+        <p>Discover upcoming live music events across Perth (Boorloo).</p>
+      </section>
       {availableDays.length === 0 ||
       !activeDateKey ||
       !activeDay ||

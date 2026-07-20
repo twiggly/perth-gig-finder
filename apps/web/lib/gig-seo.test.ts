@@ -4,6 +4,7 @@ import type { GigCardRecord } from "./gigs";
 import {
   buildGigEventStructuredData,
   buildGigEventStructuredDataJson,
+  buildGigFactSummary,
   buildGigMetadata,
   buildGigMetadataDescription,
   formatPerthIsoWithOffset
@@ -11,7 +12,6 @@ import {
 import {
   buildGigDetailPath,
   buildGigDetailUrl,
-  SITE_LOGO_URL,
   SITE_URL
 } from "./seo";
 
@@ -112,15 +112,18 @@ describe("gig SEO helpers", () => {
   });
 
   it("builds Event JSON-LD with address, performers, image, end date, and ticket offer", () => {
+    const now = new Date("2026-04-01T00:00:00.000Z");
     const event = buildGigEventStructuredData(
       createGig({
         ends_at: "2026-04-23T13:00:00.000Z"
-      })
+      }),
+      now
     );
 
     expect(event).toMatchObject({
       "@context": "https://schema.org",
-      "@type": "Event",
+      "@id": `${SITE_URL}/gigs/alt-thursdays#event`,
+      "@type": "MusicEvent",
       endDate: "2026-04-23T21:00:00+08:00",
       eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
       eventStatus: "https://schema.org/EventScheduled",
@@ -138,7 +141,6 @@ describe("gig SEO helpers", () => {
       },
       offers: {
         "@type": "Offer",
-        availability: "https://schema.org/InStock",
         url: "https://tickets.example.com/alt"
       },
       performer: [
@@ -152,11 +154,13 @@ describe("gig SEO helpers", () => {
         }
       ],
       startDate: "2026-04-23T18:30:00+08:00",
+      mainEntityOfPage: `${SITE_URL}/gigs/alt-thursdays`,
       url: `${SITE_URL}/gigs/alt-thursdays`
     });
+    expect(event?.offers).not.toHaveProperty("availability");
   });
 
-  it("uses the site logo and omits optional offer data when gig fields are unavailable", () => {
+  it("omits placeholder images and optional offer data when fields are unavailable", () => {
     const event = buildGigEventStructuredData(
       createGig({
         artist_names: [],
@@ -169,14 +173,12 @@ describe("gig SEO helpers", () => {
       })
     );
 
-    expect(event).toMatchObject({
-      image: [SITE_LOGO_URL]
-    });
+    expect(event).not.toHaveProperty("image");
     expect(event).not.toHaveProperty("offers");
     expect(event).not.toHaveProperty("performer");
   });
 
-  it("uses The Bird placeholder for image-less Bird gig structured data", () => {
+  it("does not publish The Bird placeholder as an event poster", () => {
     const event = buildGigEventStructuredData(
       createGig({
         image_height: null,
@@ -186,9 +188,24 @@ describe("gig SEO helpers", () => {
       })
     );
 
-    expect(event).toMatchObject({
-      image: [`${SITE_URL}/venue-placeholders/the-bird.png`]
-    });
+    expect(event).not.toHaveProperty("image");
+  });
+
+  it("skips Event rich-result markup without a detailed venue address", () => {
+    const gig = createGig({ venue_address: null });
+
+    expect(buildGigEventStructuredData(gig)).toBeNull();
+    expect(buildGigEventStructuredDataJson(gig)).toBeNull();
+  });
+
+  it("describes lifecycle status using facts and suppresses past offers", () => {
+    const gig = createGig();
+    const now = new Date("2026-04-24T00:00:00.000Z");
+
+    expect(buildGigFactSummary(gig, now)).toContain(
+      "Past event. ALT//THURSDAYS took place on"
+    );
+    expect(buildGigEventStructuredData(gig, now)).not.toHaveProperty("offers");
   });
 
   it("serializes gig Event JSON-LD safely for scraper-controlled strings", () => {

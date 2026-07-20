@@ -33,11 +33,27 @@ begin
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public'
     and c.relkind = 'v'
-    and c.relname in ('gig_cards', 'homepage_gig_dates')
+    and c.relname in ('gig_cards', 'homepage_gig_dates', 'seo_sitemap_gigs')
     and not (coalesce(c.reloptions, array[]::text[]) @> array['security_invoker=true']);
 
   if finding_count <> 0 then
     raise exception 'Expected security_invoker=true on public views, found % non-compliant view(s).', finding_count;
+  end if;
+
+  select count(*)
+  into finding_count
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name = 'seo_sitemap_gigs'
+    and column_name in ('slug', 'starts_at', 'status', 'last_modified');
+
+  if finding_count <> 4 or (
+    select count(*)
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'seo_sitemap_gigs'
+  ) <> 4 then
+    raise exception 'Expected seo_sitemap_gigs to expose only four approved columns.';
   end if;
 
   select count(*)
@@ -54,7 +70,8 @@ begin
       'sources',
       'venues',
       'gig_cards',
-      'homepage_gig_dates'
+      'homepage_gig_dates',
+      'seo_sitemap_gigs'
     )
     and grantee in ('anon', 'authenticated')
     and privilege_type in ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER');
@@ -137,6 +154,7 @@ begin
 
   execute 'select id, slug, title, starts_at, artist_names, venue_slug, venue_name, status, tixel_url from public.gig_cards limit 1';
   execute 'select id, title, starts_at, artist_names, venue_slug, venue_name, status from public.homepage_gig_dates limit 1';
+  execute 'select slug, starts_at, status, last_modified from public.seo_sitemap_gigs limit 1';
   execute 'select slug, name, suburb from public.venues limit 1';
 
   begin

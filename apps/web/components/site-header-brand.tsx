@@ -15,9 +15,9 @@ export function SiteHeaderBrand() {
         unoptimized
         width={196}
       />
-      <h1 className="site-header__title">
+      <span className="site-header__title">
         <span className="site-header__title-text">Gig Radar</span>
-      </h1>
+      </span>
     </SiteHeaderBrandLink>
   );
 }

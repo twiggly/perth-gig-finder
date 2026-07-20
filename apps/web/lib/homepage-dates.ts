@@ -180,7 +180,7 @@ function getWeekendShortcutStartDate(now: Date): Date {
   );
 }
 
-function getWeekendShortcutDateKeys(now: Date): string[] {
+export function getWeekendShortcutDateKeys(now: Date): string[] {
   const weekendStartDate = getWeekendShortcutStartDate(now);
 
   return [0, 1, 2].map((offset) => getPerthDateKey(addDays(weekendStartDate, offset)));
