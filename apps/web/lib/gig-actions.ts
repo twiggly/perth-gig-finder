@@ -1,10 +1,11 @@
 import { normalizeAbsoluteHttpUrl } from "@perth-gig-finder/shared/url";
 
 import type { GigCardRecord } from "./gigs";
+import { getGigDisplayState } from "./gig-archive";
 
 export interface GigAction {
   href: string;
-  key: "tickets" | "tixel" | "venue";
+  key: "source" | "tickets" | "tixel" | "venue";
   label: string;
 }
 
@@ -174,4 +175,26 @@ export function getGigActions(gig: GigActionFields): GigAction[] {
   }
 
   return actions;
+}
+
+export function getGigDetailActions(
+  gig: GigCardRecord,
+  now = new Date()
+): GigAction[] {
+  const actions = getGigActions(gig);
+
+  if (getGigDisplayState(gig, now) === "active") {
+    return actions;
+  }
+
+  const venueActions = actions.filter((action) => action.key === "venue");
+
+  if (venueActions.length > 0) {
+    return venueActions;
+  }
+
+  const sourceUrl = normalizeAbsoluteHttpUrl(gig.source_url);
+  return sourceUrl
+    ? [{ href: sourceUrl, key: "source", label: "Original listing" }]
+    : [];
 }

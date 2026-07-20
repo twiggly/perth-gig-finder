@@ -387,14 +387,7 @@ export class MemoryGigStore implements GigStore {
       return null;
     }
 
-    const expectedSlug = buildGigSlug({
-      venueSlug: input.gig.venue.slug,
-      startsAt: input.gig.startsAt,
-      title: input.gig.title
-    });
-
     if (
-      existingGig.slug !== expectedSlug ||
       existingGig.venueId !== input.venueId ||
       existingGig.title !== input.gig.title ||
       existingGig.startsAt !== input.gig.startsAt ||
@@ -484,11 +477,7 @@ export class MemoryGigStore implements GigStore {
         input.gig.sourceUrl;
       const updated = {
         ...existing,
-        slug: buildGigSlug({
-          venueSlug: input.gig.venue.slug,
-          startsAt,
-          title
-        }),
+        slug: existing.slug,
         venueId: input.venueId,
         startsAt,
         startsAtPrecision,

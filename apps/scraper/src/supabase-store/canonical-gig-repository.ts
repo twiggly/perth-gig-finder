@@ -1153,11 +1153,8 @@ export class SupabaseGigStore implements GigStore {
       input.gig.status,
       canReplaceCanonical
     );
-    const slug = buildGigSlug({
-      venueSlug: input.gig.venue.slug,
-      startsAt,
-      title
-    });
+    // A canonical gig URL is permanent once published, even if its facts change.
+    const slug = existingGig.slug;
 
     return {
       existingGig,

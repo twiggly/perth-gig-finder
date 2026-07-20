@@ -2,14 +2,17 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { GigDetailContent } from "@/components/gig-detail-content";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { SiteHeader } from "@/components/site-header";
-import { getGigBySlug } from "@/lib/gigs";
+import { getCachedGigBySlug } from "@/lib/gig-detail-cache";
 import {
   buildGigEventStructuredDataJson,
   buildGigMetadata
 } from "@/lib/gig-seo";
 
-export const dynamic = "force-dynamic";
+import { buildGigDetailPath } from "@/lib/seo";
+
+export const revalidate = 300;
 
 interface GigDetailPageProps {
   params: Promise<{
@@ -20,7 +23,7 @@ interface GigDetailPageProps {
 async function getGigFromParams(params: GigDetailPageProps["params"]) {
   const { slug } = await params;
 
-  return getGigBySlug(slug);
+  return getCachedGigBySlug(slug);
 }
 
 export async function generateMetadata({
@@ -48,15 +51,29 @@ export default async function GigDetailPage({ params }: GigDetailPageProps) {
     notFound();
   }
 
+  const detailPath = buildGigDetailPath(gig.slug);
+  const structuredDataJson = buildGigEventStructuredDataJson(gig);
+
   return (
     <main className="page-shell">
       <SiteHeader actions="public-menu" className="site-header-shell--detail" />
-      <GigDetailContent gig={gig} />
-      <script
-        dangerouslySetInnerHTML={{ __html: buildGigEventStructuredDataJson(gig) }}
-        id={`gig-structured-data-${gig.slug}`}
-        type="application/ld+json"
+      <Breadcrumbs
+        currentPath={detailPath}
+        id={`gig-breadcrumbs-${gig.slug}`}
+        items={[
+          { href: "/", label: "Home" },
+          { href: "/gigs", label: "All gigs" },
+          { label: gig.title }
+        ]}
       />
+      <GigDetailContent gig={gig} />
+      {structuredDataJson ? (
+        <script
+          dangerouslySetInnerHTML={{ __html: structuredDataJson }}
+          id={`gig-structured-data-${gig.slug}`}
+          type="application/ld+json"
+        />
+      ) : null}
     </main>
   );
 }

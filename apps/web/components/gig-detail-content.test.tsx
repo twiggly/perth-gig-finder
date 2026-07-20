@@ -41,12 +41,15 @@ function createGig(overrides: Partial<GigCardRecord> = {}): GigCardRecord {
   };
 }
 
-function renderGigDetail(gig: GigCardRecord): string {
+function renderGigDetail(
+  gig: GigCardRecord,
+  now = new Date("2026-04-01T00:00:00.000Z")
+): string {
   return renderToStaticMarkup(
     <ImageConfigContext.Provider
       value={{ ...imageConfigDefault, qualities: [72] }}
     >
-      <GigDetailContent gig={gig} />
+      <GigDetailContent gig={gig} now={now} />
     </ImageConfigContext.Provider>
   );
 }
@@ -76,7 +79,7 @@ describe("GigDetailContent", () => {
     expect(html).toContain("ALT//THURSDAYS");
     expect(html).toContain("Melanija | Esper");
     expect(html).toContain("gig-detail__venue-icon");
-    expect(html).toContain("<p>The Bird,</p>");
+    expect(html).toContain('href="/venues/the-bird">The Bird</a>,</p>');
     expect(html).toContain("181 William Street, Northbridge WA 6003");
     expect(html).toContain("gig-detail__image");
     expect(html).toContain("https%3A%2F%2Fimages.example.com%2Falt.jpg");
@@ -86,6 +89,8 @@ describe("GigDetailContent", () => {
     expect(html).not.toContain("q=75");
     expect(html).toContain("Buy tickets");
     expect(html).toContain("Listing @ The Bird");
+    expect(html).toContain("gig-detail__summary");
+    expect(html.match(/<h1/g)).toHaveLength(1);
   });
 
   it("renders no-poster gigs in the no-media panel variant", () => {
@@ -104,7 +109,7 @@ describe("GigDetailContent", () => {
     expect(html).not.toContain("Gig Radar listing");
     expect(html).toContain("ALT//THURSDAYS");
     expect(html).toContain("gig-detail__venue-icon");
-    expect(html).toContain("<p>Milk Bar,</p>");
+    expect(html).toContain('href="/venues/milk-bar">Milk Bar</a>,</p>');
     expect(html).toContain("Buy tickets");
     expect(html).toContain("Listing @ Milk Bar");
   });
@@ -174,7 +179,9 @@ describe("GigDetailContent", () => {
       })
     );
 
-    expect(html).toContain("<p>Four5Nine Bar @ Rosemount,</p>");
+    expect(html).toContain(
+      'href="/venues/four5nine-bar-rosemount">Four5Nine Bar @ Rosemount</a>,</p>'
+    );
     expect(html).toContain("<p>459 Fitzgerald St, North Perth</p>");
     expect(html).not.toContain("Rosemount Hotel, 459 Fitzgerald St");
   });
@@ -189,8 +196,9 @@ describe("GigDetailContent", () => {
       })
     );
 
-    expect(html).toContain("<p>20 Thorogood St, Burswood WA 6100</p>");
-    expect(html).not.toContain("<p>20 Thorogood St,</p>");
+    expect(html).toContain(
+      'href="/venues/20-thorogood-st">20 Thorogood St</a>, Burswood WA 6100</p>'
+    );
     expect(html).not.toContain("Australia");
   });
 
@@ -214,5 +222,28 @@ describe("GigDetailContent", () => {
     expect(html).not.toContain("gig-detail__artists");
     expect(html).not.toContain("gig-detail__actions");
     expect(html).not.toContain("181 William Street");
+  });
+
+  it("shows past status and suppresses purchase actions after the event", () => {
+    const html = renderGigDetail(
+      createGig({
+        tixel_url:
+          "https://tixel.com/au/music-tickets/2026/04/23/alt-thursdays-the-bird-perth"
+      }),
+      new Date("2026-04-24T00:00:00.000Z")
+    );
+
+    expect(html).toContain("Past event");
+    expect(html).not.toContain("Buy tickets");
+    expect(html).not.toContain("Tickets @ tixel");
+    expect(html).toContain("Listing @ The Bird");
+  });
+
+  it("shows cancelled status and suppresses purchase actions before the date", () => {
+    const html = renderGigDetail(createGig({ status: "cancelled" }));
+
+    expect(html).toContain("Cancelled");
+    expect(html).not.toContain("Buy tickets");
+    expect(html).toContain("Listing @ The Bird");
   });
 });

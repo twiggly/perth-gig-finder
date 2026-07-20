@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { getGigActions } from "./gig-actions";
+import type { GigCardRecord } from "./gigs";
+import { getGigActions, getGigDetailActions } from "./gig-actions";
 
 type GigActionInput = Parameters<typeof getGigActions>[0];
 
@@ -323,5 +324,77 @@ describe("getGigActions Tixel links", () => {
     expect(
       getGigActions(createGigActionInput({ tixel_url: tixelUrl }))
     ).toEqual([]);
+  });
+});
+
+describe("getGigDetailActions", () => {
+  function createDetailGig(
+    overrides: Partial<GigCardRecord> = {}
+  ): GigCardRecord {
+    return {
+      artist_names: [],
+      ends_at: null,
+      id: "gig-1",
+      image_height: null,
+      image_path: null,
+      image_version: null,
+      image_width: null,
+      slug: "example-gig",
+      source_image_url: null,
+      source_name: "Source",
+      source_url: "https://source.example.com/gig",
+      starts_at: "2026-08-01T12:00:00.000Z",
+      status: "active",
+      ticket_url: "https://tickets.example.com/gig",
+      tixel_url:
+        "https://tixel.com/au/music-tickets/2026/08/01/example-gig-perth",
+      title: "Example gig",
+      venue_address: null,
+      venue_name: "Test Venue",
+      venue_slug: "test-venue",
+      venue_suburb: "Perth",
+      venue_website_url: "https://venue.example.com",
+      ...overrides
+    };
+  }
+
+  it("retains purchase actions for an active future event", () => {
+    expect(
+      getGigDetailActions(
+        createDetailGig(),
+        new Date("2026-07-20T00:00:00.000Z")
+      ).map((action) => action.key)
+    ).toEqual(["tickets", "tixel", "venue"]);
+  });
+
+  it.each([
+    ["past", { starts_at: "2026-07-01T12:00:00.000Z" }],
+    ["cancelled", { status: "cancelled" as const }],
+    ["postponed", { status: "postponed" as const }]
+  ])("keeps only the venue listing for %s events", (_label, overrides) => {
+    expect(
+      getGigDetailActions(
+        createDetailGig(overrides),
+        new Date("2026-07-20T00:00:00.000Z")
+      ).map((action) => action.key)
+    ).toEqual(["venue"]);
+  });
+
+  it("keeps the original source for archived events without a venue link", () => {
+    expect(
+      getGigDetailActions(
+        createDetailGig({
+          starts_at: "2026-07-01T12:00:00.000Z",
+          venue_website_url: null
+        }),
+        new Date("2026-07-20T00:00:00.000Z")
+      )
+    ).toEqual([
+      {
+        href: "https://source.example.com/gig",
+        key: "source",
+        label: "Original listing"
+      }
+    ]);
   });
 });

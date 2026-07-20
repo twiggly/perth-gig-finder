@@ -2,9 +2,11 @@ import type { GigStatus } from "@perth-gig-finder/shared";
 import { isContentAddressedGigImagePath } from "@perth-gig-finder/shared/image-path";
 
 import { matchesGigQuery, type HomepageFilters } from "./homepage-filters";
+import { getGigArchiveLowerBound, getPerthMonthBounds } from "./gig-archive";
 import {
   formatDateHeading,
   getHomepageLowerBound,
+  getPerthDateKey,
   getPerthDayBounds,
   groupItemsByPerthDate,
   type DateGroup,
@@ -37,7 +39,11 @@ export interface GigCardRecord {
 }
 
 export interface GigSitemapRecord {
+  last_modified: string;
   slug: string;
+  starts_at: string;
+  status: GigStatus;
+  venue_slug: string;
 }
 
 export interface HomepageDateAvailabilityRecord {
@@ -80,6 +86,8 @@ const THE_BIRD_PLACEHOLDER_IMAGE: RenderableGigImage = {
 
 const GIG_CARD_SELECT =
   "id, slug, title, starts_at, ends_at, artist_names, image_path, source_image_url, image_width, image_height, image_version, ticket_url, tixel_url, source_url, source_name, venue_slug, venue_name, venue_suburb, venue_address, venue_website_url, status";
+
+const SITEMAP_PAGE_SIZE = 1_000;
 
 function normalizeGigCard(
   gig: GigCardRecord & { artist_names: string[] | null }
@@ -248,12 +256,11 @@ export async function getGigBySlug(slug: string): Promise<GigCardRecord | null> 
   }
 
   const client = createSupabaseServerClient();
-  const lowerBound = getHomepageLowerBound(new Date());
+  const lowerBound = getGigArchiveLowerBound(new Date());
   const { data, error } = await client
     .from("gig_cards")
     .select(GIG_CARD_SELECT)
     .eq("slug", trimmedSlug)
-    .eq("status", "active")
     .gte("starts_at", lowerBound.toISOString())
     .maybeSingle();
 
@@ -268,23 +275,181 @@ export async function getGigBySlug(slug: string): Promise<GigCardRecord | null> 
     : null;
 }
 
-export async function listGigSitemapEntries(): Promise<GigSitemapRecord[]> {
+async function listGigCardsInRange({
+  end,
+  start,
+  status,
+  venueSlug
+}: {
+  end?: Date;
+  start: Date;
+  status?: GigStatus;
+  venueSlug?: string;
+}): Promise<GigCardRecord[]> {
   const client = createSupabaseServerClient();
-  const lowerBound = getHomepageLowerBound(new Date());
-  const { data, error } = await client
+  let query = client
     .from("gig_cards")
-    .select("slug")
-    .eq("status", "active")
-    .gte("starts_at", lowerBound.toISOString())
+    .select(GIG_CARD_SELECT)
+    .gte("starts_at", start.toISOString())
     .order("starts_at", { ascending: true });
+
+  if (end) {
+    query = query.lt("starts_at", end.toISOString());
+  }
+
+  if (status) {
+    query = query.eq("status", status);
+  }
+
+  if (venueSlug) {
+    query = query.eq("venue_slug", venueSlug);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as GigSitemapRecord[]).filter((gig) =>
-    Boolean(gig.slug)
+  return ((data ?? []) as Array<
+    GigCardRecord & { artist_names: string[] | null }
+  >).map(normalizeGigCard);
+}
+
+export function listUpcomingDiscoveryGigs(
+  now = new Date()
+): Promise<GigCardRecord[]> {
+  return listGigCardsInRange({
+    start: getHomepageLowerBound(now),
+    status: "active"
+  });
+}
+
+export function listGigsForMonth(
+  year: number,
+  month: number,
+  now = new Date()
+): Promise<GigCardRecord[]> {
+  const bounds = getPerthMonthBounds(year, month);
+
+  if (!bounds) {
+    return Promise.resolve([]);
+  }
+
+  const archiveLowerBound = getGigArchiveLowerBound(now);
+  const start =
+    bounds.start > archiveLowerBound ? bounds.start : archiveLowerBound;
+
+  if (start >= bounds.end) {
+    return Promise.resolve([]);
+  }
+
+  return listGigCardsInRange({ end: bounds.end, start });
+}
+
+export async function listActiveGigsForDateKeys(
+  dateKeys: string[],
+  now = new Date()
+): Promise<GigCardRecord[]> {
+  const validBounds = dateKeys
+    .map((dateKey) => ({ dateKey, bounds: getPerthDayBounds(dateKey) }))
+    .filter(
+      (
+        entry
+      ): entry is { dateKey: string; bounds: { end: Date; start: Date } } =>
+        Boolean(entry.bounds)
+    );
+
+  if (validBounds.length === 0) {
+    return [];
+  }
+
+  const first = validBounds[0];
+  const last = validBounds[validBounds.length - 1];
+
+  if (!first || !last) {
+    return [];
+  }
+
+  const start = first.bounds.start > now ? first.bounds.start : now;
+  const gigs = await listGigCardsInRange({
+    end: last.bounds.end,
+    start,
+    status: "active"
+  });
+  const allowedDateKeys = new Set(validBounds.map((entry) => entry.dateKey));
+
+  return gigs.filter((gig) =>
+    allowedDateKeys.has(getPerthDateKey(gig.starts_at))
   );
+}
+
+export function listGigsForVenue(
+  venueSlug: string,
+  now = new Date()
+): Promise<GigCardRecord[]> {
+  return listGigCardsInRange({
+    start: getGigArchiveLowerBound(now),
+    venueSlug
+  });
+}
+
+export async function listGigSitemapEntries(): Promise<GigSitemapRecord[]> {
+  const client = createSupabaseServerClient();
+  const lowerBound = getGigArchiveLowerBound(new Date()).toISOString();
+  const sitemapRows: Omit<GigSitemapRecord, "venue_slug">[] = [];
+  const venueSlugsByGigSlug = new Map<string, string>();
+
+  for (let from = 0; ; from += SITEMAP_PAGE_SIZE) {
+    const to = from + SITEMAP_PAGE_SIZE - 1;
+    const [sitemapResult, venueResult] = await Promise.all([
+      client
+        .from("seo_sitemap_gigs")
+        .select("slug, starts_at, status, last_modified")
+        .gte("starts_at", lowerBound)
+        .order("starts_at", { ascending: true })
+        .order("slug", { ascending: true })
+        .range(from, to),
+      client
+        .from("gig_cards")
+        .select("slug, venue_slug")
+        .gte("starts_at", lowerBound)
+        .order("starts_at", { ascending: true })
+        .order("slug", { ascending: true })
+        .range(from, to)
+    ]);
+
+    if (sitemapResult.error) {
+      throw new Error(sitemapResult.error.message);
+    }
+
+    if (venueResult.error) {
+      throw new Error(venueResult.error.message);
+    }
+
+    const page = (sitemapResult.data ?? []) as Omit<
+      GigSitemapRecord,
+      "venue_slug"
+    >[];
+    sitemapRows.push(...page);
+
+    for (const row of (venueResult.data ?? []) as Array<{
+      slug: string;
+      venue_slug: string;
+    }>) {
+      venueSlugsByGigSlug.set(row.slug, row.venue_slug);
+    }
+
+    if (page.length < SITEMAP_PAGE_SIZE) {
+      break;
+    }
+  }
+
+  return sitemapRows.flatMap((gig) => {
+    const venueSlug = venueSlugsByGigSlug.get(gig.slug);
+
+    return gig.slug && venueSlug ? [{ ...gig, venue_slug: venueSlug }] : [];
+  });
 }
 
 function encodeStoragePath(path: string): string {

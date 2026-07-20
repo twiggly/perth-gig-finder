@@ -103,23 +103,7 @@ Goals:
 
 ## Later
 
-### 7. Build Venue Pages
-
-Build `/venues/[slug]` after scraper quality makes venue data more reliable.
-
-Desired outcome:
-- venue pages become a real browse surface, not just filter targets
-
-### 8. Improve Event SEO Metadata And Images
-
-Now that `/gigs/[slug]` pages are live, improve their search-preview quality without cluttering the visible listing page.
-
-Good candidates:
-- stronger poster image eligibility for rich results
-- better fact-based metadata fallbacks
-- structured-data validation against real hosted pages
-
-### 9. Saved Alerts / Notifications
+### 7. Saved Alerts / Notifications
 
 Worth doing after scraper coverage and canonical data quality are stronger.
 
